@@ -35,6 +35,7 @@
 		"test:workspace": "node tools/workspace-consumer.ts"
 	},
 	"devDependencies": {
+		"@types/node": "24.13.3",
 		"@zdreamer/forge-ts-service": "0.1.1"
 	}
 }
