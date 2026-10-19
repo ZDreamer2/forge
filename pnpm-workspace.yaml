@@ -1,0 +1,9 @@
+# Independent application installation, not a member of the hosting workspace.
+packages: []
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - "@zdreamer/forge-ts-service"
+onlyBuiltDependencies: []
+allowBuilds:
+  "@swc/core": true
+storeDir: .cache/pnpm
