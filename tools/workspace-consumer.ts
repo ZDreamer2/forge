@@ -33,8 +33,15 @@ try {
 		consumer,
 	);
 	const installed = join(consumer, "node_modules/@zdreamer/forge");
-	assert.equal(JSON.parse(readFileSync(join(installed, "package.json"), "utf8")).version, "0.1.0");
-	assert.ok(packed[0].files.every((file: { path: string }) => /^(dist\/|package.json$|README.md$)/.test(file.path)));
+	const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+	const installedManifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
+	assert.equal(installedManifest.name, manifest.name);
+	assert.equal(installedManifest.version, manifest.version);
+	assert.equal(installedManifest.license, "MIT");
+	assert.match(readFileSync(join(installed, "LICENSE"), "utf8"), /MIT License/);
+	assert.ok(
+		packed[0].files.every((file: { path: string }) => /^(dist\/|package.json$|README.md$|LICENSE$)/.test(file.path)),
+	);
 	const policy = join(consumer, "workspace.ts");
 	writeFileSync(
 		policy,

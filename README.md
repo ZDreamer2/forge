@@ -1,9 +1,13 @@
 # @zdreamer/forge
 
-Unpublished prototype of the Forge workspace application: a policy-loading
-diagnostic, not a server or UI. Intended executable: `forge`; public authoring
-types: `@zdreamer/forge/workspace`. Licensing remains to be selected before
-publication (`UNLICENSED` locally).
+Provisional prototype of the Forge workspace application: a policy-loading
+diagnostic, not a server or review UI. Executable: `forge`; public authoring
+types: `@zdreamer/forge/workspace`. Licensed under [MIT](LICENSE).
+
+The `0.x` policy contract is provisional. Breaking authoring or semantic changes
+use a minor release with migration notes; exact-pin the application and use its
+own policy types from the same installation. No separate policy-version field or
+compatibility layer is provided. See [release operations](https://github.com/ZDreamer2/forge/blob/master/docs/releasing.md).
 
 ## Develop
 
@@ -27,7 +31,11 @@ optional `workspace.ts` argument also checks a consuming project's policy.
 
 ## Workspace authoring contract (provisional)
 
-After a release, projects can exact-pin Forge as a local development dependency:
+Projects can exact-pin Forge as a local development dependency:
+
+```sh
+pnpm add --save-dev --save-exact @zdreamer/forge@0.1.0
+```
 
 ```ts
 import type { WorkspacePolicy } from '@zdreamer/forge/workspace';
@@ -59,5 +67,5 @@ guidance; membership does not imply verification.
 
 Policy modules are trusted executable code, not sandboxed; installation does not
 load them. Types do not validate callback results at runtime. See
-[architecture](docs/architecture.md) for loading limits and repository resolution,
+[architecture](https://github.com/ZDreamer2/forge/blob/master/docs/architecture.md) for loading limits and repository resolution,
 which the diagnostic does not invoke.

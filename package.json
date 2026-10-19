@@ -2,7 +2,13 @@
 	"name": "@zdreamer/forge",
 	"version": "0.1.0",
 	"description": "Forge workspace application and typed workspace policy contract",
-	"license": "UNLICENSED",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ZDreamer2/forge.git"
+	},
+	"homepage": "https://github.com/ZDreamer2/forge#readme",
+	"bugs": "https://github.com/ZDreamer2/forge/issues",
 	"type": "module",
 	"publishConfig": {
 		"access": "public"
