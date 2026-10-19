@@ -1,6 +1,8 @@
 name: Publish
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       version:
@@ -22,22 +24,68 @@ concurrency:
 
 jobs:
   guard:
-    name: Require master
+    name: Plan release on master
     runs-on: ubuntu-24.04
     timeout-minutes: 2
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      run: ${{ steps.plan.outputs.run }}
+      publish: ${{ steps.plan.outputs.publish }}
     steps:
       - run: test "$GITHUB_REF" = refs/heads/master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Check manifest and registry version
+        id: plan
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+          PUBLISH_REQUESTED: ${{ inputs.publish }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+          assert.equal(manifest.name, '@zdreamer/forge');
+          assert.equal(typeof manifest.version, 'string');
+          assert.ok(manifest.version && !/[\r\n]/.test(manifest.version));
+          const automatic = process.env.GITHUB_EVENT_NAME === 'push';
+          assert.ok(automatic || process.env.GITHUB_EVENT_NAME === 'workflow_dispatch');
+          let publish = process.env.PUBLISH_REQUESTED === 'true';
+          let run = true;
+          if (automatic) {
+            const response = await fetch('https://registry.npmjs.org/' + encodeURIComponent(manifest.name), {
+              signal: AbortSignal.timeout(30000),
+              headers: { 'Cache-Control': 'no-cache' },
+            });
+            assert.equal(response.status, 200, 'Registry lookup failed; refusing automatic publication');
+            const registry = await response.json();
+            assert.equal(registry.name, manifest.name);
+            assert.ok(registry.versions && typeof registry.versions === 'object' && !Array.isArray(registry.versions));
+            publish = !Object.hasOwn(registry.versions, manifest.version);
+            run = publish;
+          } else {
+            assert.equal(manifest.version, process.env.EXPECTED_VERSION, 'Requested version differs from package.json');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${manifest.version}\nrun=${run}\npublish=${publish}\n`);
+          console.log(run ? `Verify ${manifest.name}@${manifest.version}; publish=${publish}` : `${manifest.name}@${manifest.version} already exists; skipping release`);
+          JS
 
   verify:
     name: Verify release source
     needs: guard
+    if: ${{ needs.guard.outputs.run == 'true' }}
     uses: ./.github/workflows/ci.yml
     with:
-      expected-version: ${{ inputs.version }}
+      expected-version: ${{ needs.guard.outputs.version }}
 
   publish:
     name: Dry-run or publish verified artifact
-    needs: verify
+    needs: [guard, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -60,7 +108,7 @@ jobs:
           path: ${{ runner.temp }}/npm-package
       - name: Validate artifact identity and integrity
         env:
-          EXPECTED_VERSION: ${{ inputs.version }}
+          EXPECTED_VERSION: ${{ needs.guard.outputs.version }}
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
@@ -78,7 +126,7 @@ jobs:
       - name: Dry-run npm publication
         run: npm publish "$RUNNER_TEMP"/npm-package/*.tgz --dry-run --ignore-scripts --access public --registry=https://registry.npmjs.org/
       # No npm token or environment secret: npm discovers this job's GitHub OIDC identity.
-      # Only this step changes the registry, and only after an explicit manual opt-in.
+      # Pushes publish only unpublished manifest versions after the shared CI gate.
       - name: Publish with provenance through npm trusted publishing
-        if: ${{ inputs.publish }}
+        if: ${{ needs.guard.outputs.publish == 'true' }}
         run: npm publish "$RUNNER_TEMP"/npm-package/*.tgz --ignore-scripts --access public --provenance --registry=https://registry.npmjs.org/

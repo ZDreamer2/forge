@@ -18,9 +18,16 @@ the frozen pinned toolchain, runs type/lint/graph/tests and a clean tarball cons
 (which builds explicitly), then packs the checked source. The tarball and
 `pack.json` are retained as `npm-package-<commit SHA>` for 14 days.
 
-`publish.yml` requires `master` and an exact version input. It invokes that same
-CI gate, downloads its own run's artifact, verifies package name/version/SHA-512,
-and dry-runs publication. Only an explicit `publish=true` dispatch publishes.
+`publish.yml` runs on pushes to `master`. It reads `package.json` and checks the
+public registry: existing versions skip release; an unpublished version invokes
+the same CI gate, downloads its own run's artifact, verifies package
+name/version/SHA-512, dry-runs and publishes with provenance. Registry/network or
+malformed-response errors fail closed. Ordinary commits still run `ci.yml`, but
+release nothing unless the manifest version is unpublished. No version is bumped
+automatically; merging/pushing a version bump authorizes its release.
+
+Manual dispatch on `master` remains available with an exact version input and
+`publish=false` by default; only `publish=true` publishes in manual mode.
 Publication attempts are serialized without cancellation. No automatic tags or
 GitHub Releases are created.
 
@@ -76,14 +83,15 @@ GitHub environment is used. See <https://docs.npmjs.com/trusted-publishers/>.
 
 For each subsequent release:
 
-1. Update the exact package version and release notes; check, review and push to
-   `master`. During `0.x`, breaking policy changes require a minor version and
-   migration notes plus consumer type/routing checks.
-2. Dispatch Publish on `master` with that version and `publish=false`.
-3. After success, explicit approval and publisher setup, dispatch with
-   `publish=true`.
-4. Verify registry metadata, tarball integrity, trusted-publishing provenance and
-   a fresh registry consumer. A dry-run proves neither npm authorization nor OIDC.
+1. Update the exact package version and release notes; check and review before
+   pushing/merging to `master`: that push automatically releases an unpublished
+   version after verification. During `0.x`, breaking policy changes require a
+   minor version and migration notes plus consumer type/routing checks.
+2. Watch the Publish workflow. If checks fail, fix the source and push again with
+   the same unpublished version; no additional version bump is needed.
+3. Verify registry metadata, tarball integrity, trusted-publishing provenance and
+   a fresh registry consumer. Manual dry-runs remain available, but cannot pause
+   or replace automatic publication of a version bump on `master`.
 
 Never overwrite/remove a published version. If npm reports an existing version
 or returns a temporary 404 after an accepted publication, inspect registry/run

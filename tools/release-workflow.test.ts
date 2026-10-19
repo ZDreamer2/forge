@@ -1,0 +1,82 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const workflow = readFileSync(join(root, ".github/workflows/publish.yml"), "utf8");
+const block = workflow.match(/node --input-type=module <<'JS'\n([\s\S]*?)\n {10}JS/);
+assert.ok(block, "Release guard must remain executable without dependencies");
+const guard = block[1]?.replace(/^ {10}/gm, "");
+assert.ok(guard);
+
+const cases = [
+	{ name: "push skips an existing version", event: "push", versions: { "1.2.3": {} }, run: false, publish: false },
+	{ name: "push publishes a new version", event: "push", versions: {}, run: true, publish: true },
+	{ name: "registry 404 fails closed", event: "push", status: 404, fails: true },
+	{ name: "registry 500 fails closed", event: "push", status: 500, fails: true },
+	{ name: "registry timeout fails closed", event: "push", networkError: true, fails: true },
+	{ name: "malformed registry fails closed", event: "push", fails: true },
+	{ name: "wrong registry package fails closed", event: "push", wrongName: true, versions: {}, fails: true },
+	{ name: "manual dry-run needs no registry", event: "workflow_dispatch", run: true, publish: false },
+	{
+		name: "manual publish needs explicit opt-in",
+		event: "workflow_dispatch",
+		requested: true,
+		run: true,
+		publish: true,
+	},
+	{ name: "manual version mismatch fails", event: "workflow_dispatch", version: "9.9.9", fails: true },
+	{ name: "unexpected event fails", event: "pull_request", fails: true },
+];
+
+for (const scenario of cases) {
+	test(scenario.name, () => {
+		const directory = mkdtempSync(join(tmpdir(), "release-guard-"));
+		try {
+			writeFileSync(join(directory, "package.json"), JSON.stringify({ name: manifest.name, version: "1.2.3" }));
+			const output = join(directory, "output");
+			writeFileSync(output, "");
+			const registry = { name: scenario.wrongName ? "wrong-package" : manifest.name, versions: scenario.versions };
+			const fetch =
+				scenario.event !== "push" || scenario.networkError
+					? "globalThis.fetch = async () => { throw new Error('Registry unavailable'); };"
+					: `globalThis.fetch = async () => ({ status: ${scenario.status ?? 200}, json: async () => (${JSON.stringify(registry)}) });`;
+			const result = spawnSync(process.execPath, ["--input-type=module", "-e", `${fetch}\n${guard}`], {
+				cwd: directory,
+				env: {
+					GITHUB_EVENT_NAME: scenario.event,
+					EXPECTED_VERSION: scenario.version ?? "1.2.3",
+					PUBLISH_REQUESTED: String(scenario.requested ?? false),
+					GITHUB_OUTPUT: output,
+				},
+				encoding: "utf8",
+			});
+			if (scenario.fails) {
+				assert.notEqual(result.status, 0);
+				assert.equal(readFileSync(output, "utf8"), "");
+			} else {
+				assert.equal(result.status, 0, result.stderr);
+				assert.equal(readFileSync(output, "utf8"), `version=1.2.3\nrun=${scenario.run}\npublish=${scenario.publish}\n`);
+			}
+		} finally {
+			rmSync(directory, { recursive: true, force: true });
+		}
+	});
+}
+
+test("workflow wires automatic releases through verification and preserves manual dry-runs", () => {
+	const branch = manifest.name === "@zdreamer/forge" ? "master" : "main";
+	assert.ok(workflow.includes(`push:\n    branches: [${branch}]`));
+	assert.ok(workflow.includes(`test "$GITHUB_REF" = refs/heads/${branch}`));
+	assert.match(workflow, /if: \$\{\{ needs\.guard\.outputs\.run == 'true' \}\}/);
+	assert.match(workflow, /expected-version: \$\{\{ needs\.guard\.outputs\.version \}\}/);
+	assert.ok(workflow.includes("needs: [guard, verify]"));
+	assert.match(workflow, /if: \$\{\{ needs\.guard\.outputs\.publish == 'true' \}\}/);
+	assert.ok(workflow.includes("default: false"));
+	assert.ok(workflow.includes("--provenance"));
+});
