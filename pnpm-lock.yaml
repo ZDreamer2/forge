@@ -8,12 +8,24 @@ importers:
 
   .:
     devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.7
+        version: 2.5.7
+      '@swc/core':
+        specifier: 1.16.1
+        version: 1.16.1
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
       '@zdreamer/forge-ts-service':
         specifier: 0.1.1
         version: 0.1.1(@biomejs/biome@2.5.7)(@swc/core@1.16.1)(@types/node@24.13.3)(dependency-cruiser@18.2.0)(typescript@7.0.2)
+      dependency-cruiser:
+        specifier: 18.2.0
+        version: 18.2.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
 
 packages:
 

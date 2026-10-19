@@ -35,7 +35,11 @@
 		"test:workspace": "node tools/workspace-consumer.ts"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "2.5.7",
+		"@swc/core": "1.16.1",
 		"@types/node": "24.13.3",
-		"@zdreamer/forge-ts-service": "0.1.1"
+		"@zdreamer/forge-ts-service": "0.1.1",
+		"dependency-cruiser": "18.2.0",
+		"typescript": "7.0.2"
 	}
 }
