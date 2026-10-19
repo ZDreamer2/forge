@@ -22,11 +22,27 @@ const cases = [
 	{ name: "registry timeout fails closed", event: "push", networkError: true, fails: true },
 	{ name: "malformed registry fails closed", event: "push", fails: true },
 	{ name: "wrong registry package fails closed", event: "push", wrongName: true, versions: {}, fails: true },
-	{ name: "manual dry-run needs no registry", event: "workflow_dispatch", run: true, publish: false },
+	{ name: "manual dry-run of a new version", event: "workflow_dispatch", versions: {}, run: true, publish: false },
+	{
+		name: "manual existing-version verification",
+		event: "workflow_dispatch",
+		versions: { "1.2.3": {} },
+		run: true,
+		publish: false,
+	},
+	{ name: "manual registry failure stops verification", event: "workflow_dispatch", networkError: true, fails: true },
+	{
+		name: "manual republishing is rejected",
+		event: "workflow_dispatch",
+		versions: { "1.2.3": {} },
+		requested: true,
+		fails: true,
+	},
 	{
 		name: "manual publish needs explicit opt-in",
 		event: "workflow_dispatch",
 		requested: true,
+		versions: {},
 		run: true,
 		publish: true,
 	},
@@ -42,10 +58,9 @@ for (const scenario of cases) {
 			const output = join(directory, "output");
 			writeFileSync(output, "");
 			const registry = { name: scenario.wrongName ? "wrong-package" : manifest.name, versions: scenario.versions };
-			const fetch =
-				scenario.event !== "push" || scenario.networkError
-					? "globalThis.fetch = async () => { throw new Error('Registry unavailable'); };"
-					: `globalThis.fetch = async () => ({ status: ${scenario.status ?? 200}, json: async () => (${JSON.stringify(registry)}) });`;
+			const fetch = scenario.networkError
+				? "globalThis.fetch = async () => { throw new Error('Registry unavailable'); };"
+				: `globalThis.fetch = async () => ({ status: ${scenario.status ?? 200}, json: async () => (${JSON.stringify(registry)}) });`;
 			const result = spawnSync(process.execPath, ["--input-type=module", "-e", `${fetch}\n${guard}`], {
 				cwd: directory,
 				env: {
@@ -61,7 +76,10 @@ for (const scenario of cases) {
 				assert.equal(readFileSync(output, "utf8"), "");
 			} else {
 				assert.equal(result.status, 0, result.stderr);
-				assert.equal(readFileSync(output, "utf8"), `version=1.2.3\nrun=${scenario.run}\npublish=${scenario.publish}\n`);
+				assert.equal(
+					readFileSync(output, "utf8"),
+					`version=1.2.3\nrun=${scenario.run}\npublish=${scenario.publish}\nunpublished=${!Object.hasOwn(scenario.versions ?? {}, "1.2.3")}\n`,
+				);
 			}
 		} finally {
 			rmSync(directory, { recursive: true, force: true });
@@ -77,6 +95,7 @@ test("workflow wires automatic releases through verification and preserves manua
 	assert.match(workflow, /expected-version: \$\{\{ needs\.guard\.outputs\.version \}\}/);
 	assert.ok(workflow.includes("needs: [guard, verify]"));
 	assert.match(workflow, /if: \$\{\{ needs\.guard\.outputs\.publish == 'true' \}\}/);
+	assert.match(workflow, /if: \$\{\{ needs\.guard\.outputs\.unpublished == 'true' \}\}/);
 	assert.ok(workflow.includes("default: false"));
 	assert.ok(workflow.includes("--provenance"));
 });

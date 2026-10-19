@@ -27,7 +27,10 @@ release nothing unless the manifest version is unpublished. No version is bumped
 automatically; merging/pushing a version bump authorizes its release.
 
 Manual dispatch on `master` remains available with an exact version input and
-`publish=false` by default; only `publish=true` publishes in manual mode.
+`publish=false` by default; only `publish=true` publishes in manual mode. A manual
+run for an existing version verifies/builds the source and validates the artifact,
+but skips npm's dry-run because npm rejects even dry-run republishing. An explicit
+manual attempt to publish an existing version is rejected by the guard.
 Publication attempts are serialized without cancellation. No automatic tags or
 GitHub Releases are created.
 
