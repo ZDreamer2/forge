@@ -34,7 +34,7 @@ optional `workspace.ts` argument also checks a consuming project's policy.
 Projects can exact-pin Forge as a local development dependency:
 
 ```sh
-pnpm add --save-dev --save-exact @zdreamer/forge@0.1.0
+pnpm add --save-dev --save-exact @zdreamer/forge@0.1.1
 ```
 
 ```ts

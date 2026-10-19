@@ -1,5 +1,11 @@
 # Release operations
 
+## Release notes
+
+- `0.1.1`: validates GitHub Actions trusted publishing and provenance. No runtime,
+  policy-contract or toolchain changes from bootstrap `0.1.0`.
+- `0.1.0`: initial MIT policy-contract/diagnostic prototype.
+
 ## Release boundary
 
 This public MIT package is a provisional policy-contract/diagnostic prototype,
