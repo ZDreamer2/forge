@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -57,7 +57,7 @@ test("inherited zone and local component restrictions reject actual imports", ()
 			},
 		);
 		assert.notEqual(result.status, 0);
-		assert.match(result.stdout, /no-component-edges/);
+		assert.match(result.stdout, /listed-component-edges-only/);
 		assert.match(result.stdout, /app/);
 	} finally {
 		rmSync(temporary, { recursive: true, force: true });
@@ -81,4 +81,52 @@ test("real graph preserves the public type re-export", () => {
 			(dependency: { resolved: string }) => dependency.resolved === "src/components/workspace-policy/index.ts",
 		),
 	);
+});
+
+test("HTTP libraries and component edges follow the architecture map", () => {
+	const temporary = mkdtempSync(join(tmpdir(), "forge-http-graph-"));
+	try {
+		symlinkSync(join(root, "node_modules"), join(temporary, "node_modules"), "dir");
+		const files: Record<string, string> = {
+			"src/components/workspace-policy/index.ts": "export type Value = string;",
+			"src/components/workspace-api/index.ts": "export type { Value } from '../workspace-policy/index.ts';",
+			"src/components/workspace-api/internal/routes.ts": "import { Hono } from 'hono'; export const app = new Hono();",
+			"src/lib/loopback-access/internal/guard.ts":
+				"import type { MiddlewareHandler } from 'hono'; export type Guard = MiddlewareHandler;",
+			"src/app/http.ts": "import { Hono } from 'hono'; export const app = new Hono();",
+			"src/app/listener.ts": "import { serve } from '@hono/node-server'; export const listen = serve;",
+		};
+		function write(path: string, contents: string) {
+			mkdirSync(dirname(join(temporary, path)), { recursive: true });
+			writeFileSync(join(temporary, path), contents);
+		}
+		for (const [path, contents] of Object.entries(files)) write(path, contents);
+		function cruise() {
+			return spawnSync(
+				join(root, "node_modules/.bin/depcruise"),
+				["--config", join(root, ".dependency-cruiser.mjs"), "src/**/*.ts"],
+				{ cwd: temporary, encoding: "utf8" },
+			);
+		}
+		const valid = cruise();
+		assert.equal(valid.status, 0, valid.stdout + valid.stderr);
+		write(
+			"src/components/workspace-policy/internal/invalid.ts",
+			"import '../../workspace-api/index.ts'; import { Hono } from 'hono'; export const app = new Hono();",
+		);
+		write("src/app/invalid.ts", "import { serve } from '@hono/node-server'; export const listen = serve;");
+		write("src/components/workspace-api/internal/invalid.ts", "import '../../unlisted/index.ts';");
+		write("src/components/unlisted/index.ts", "export type Value = string;");
+		const invalid = cruise();
+		assert.notEqual(invalid.status, 0);
+		for (const rule of [
+			"listed-component-edges-only",
+			"workspace-api-component-edges",
+			"hono-confinement",
+			"node-adapter-confinement",
+		])
+			assert.ok(invalid.stdout.includes(rule), invalid.stdout + invalid.stderr);
+	} finally {
+		rmSync(temporary, { recursive: true, force: true });
+	}
 });

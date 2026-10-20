@@ -41,5 +41,9 @@
 		"@zdreamer/forge-ts-service": "0.1.1",
 		"dependency-cruiser": "18.2.0",
 		"typescript": "7.0.2"
+	},
+	"dependencies": {
+		"@hono/node-server": "2.1.4",
+		"hono": "4.13.13"
 	}
 }

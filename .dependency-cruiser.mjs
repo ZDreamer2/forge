@@ -5,16 +5,40 @@ export default {
 	forbidden: [
 		...base.forbidden,
 		{
-			name: "no-component-edges",
+			name: "listed-component-edges-only",
 			severity: "error",
-			from: { path: "^src/components/([^/]+)/" },
+			from: { path: "^src/components/([^/]+)/", pathNot: "^src/components/workspace-api/" },
 			to: { path: "^src/components/", pathNot: "^src/components/$1/" },
 		},
 		{
-			name: "no-third-party-runtime",
+			name: "workspace-api-component-edges",
+			severity: "error",
+			from: { path: "^src/components/workspace-api/" },
+			to: { path: "^src/components/", pathNot: "^src/components/(workspace-api|workspace-policy)/" },
+		},
+		{
+			name: "hono-confinement",
+			severity: "error",
+			from: {
+				path: "^src/",
+				pathNot: "^src/(app/http(?:\\.test)?\\.ts|components/workspace-api/|lib/loopback-access/)",
+			},
+			to: { path: "(^|/)hono/" },
+		},
+		{
+			name: "node-adapter-confinement",
+			severity: "error",
+			from: { path: "^src/", pathNot: "^src/app/listener(?:\\.test)?\\.ts$" },
+			to: { path: "(^|/)@hono/node-server/" },
+		},
+		{
+			name: "no-unlisted-third-party-runtime",
 			severity: "error",
 			from: { path: "^src/" },
-			to: { dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer"] },
+			to: {
+				dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer"],
+				pathNot: "(^|/)(hono|@hono/node-server)/",
+			},
 		},
 	],
 };

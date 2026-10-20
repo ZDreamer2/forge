@@ -1,23 +1,24 @@
 #!/usr/bin/env node
 import { inspect } from "./app/inspect.ts";
+import { start } from "./app/startup.ts";
 
-const [command, modulePath, repo, path, from, ...extra] = process.argv.slice(2);
-if (command === "--help" || command === undefined) {
-	console.log("forge inspect-workspace <workspace.ts> <repository> <path> [previous-path]");
-} else if (
-	command !== "inspect-workspace" ||
-	modulePath === undefined ||
-	repo === undefined ||
-	path === undefined ||
-	extra.length > 0
-) {
-	console.error("Usage: forge inspect-workspace <workspace.ts> <repository> <path> [previous-path]");
-	process.exitCode = 1;
-} else {
-	try {
+const usage =
+	"forge serve --workspace <path>\nforge inspect-workspace <workspace.ts> <repository> <path> [previous-path]";
+const [command, ...args] = process.argv.slice(2);
+try {
+	if (command === "--help" || command === undefined) {
+		console.log(usage);
+	} else if (command === "serve" && args.length === 2 && args[0] === "--workspace" && args[1] !== "") {
+		const server = await start({ workspace: args[1] as string, cwd: process.cwd(), env: process.env });
+		console.log(server.address);
+	} else if (command === "inspect-workspace" && (args.length === 3 || args.length === 4)) {
+		const [modulePath, repo, path, from] = args as [string, string, string, string | undefined];
 		console.log(JSON.stringify(await inspect(modulePath, repo, path, from)));
-	} catch (error) {
-		console.error(error instanceof Error ? error.message : String(error));
+	} else {
+		console.error(`Usage: ${usage}`);
 		process.exitCode = 1;
 	}
+} catch (error) {
+	console.error(error instanceof Error ? error.message : String(error));
+	process.exitCode = 1;
 }

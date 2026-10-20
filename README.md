@@ -1,8 +1,10 @@
 # @zdreamer/forge
 
-Provisional prototype of the Forge workspace application: a policy-loading
-diagnostic, not a server or review UI. Executable: `forge`; public authoring
-types: `@zdreamer/forge/workspace`. Licensed under [MIT](LICENSE).
+Provisional Forge workspace application. The unreleased source supports a
+foreground read-only identity server and the policy-loading diagnostic. Registry
+release `0.1.1` supplies the diagnostic and policy types; it does not contain the
+server. Executable: `forge`; public authoring types: `@zdreamer/forge/workspace`.
+Licensed under [MIT](LICENSE).
 
 The `0.x` policy contract is provisional. Breaking authoring or semantic changes
 use a minor release with migration notes; exact-pin the application and use its
@@ -28,6 +30,48 @@ a hosting checkout can override the store during installation.
 `test:workspace` checks public types and the installed executable through an
 isolated tarball consumer, without publishing or running install scripts. An
 optional `workspace.ts` argument also checks a consuming project's policy.
+
+## Run the source server
+
+After building, run from this repository:
+
+```sh
+node dist/main.js serve --workspace /absolute/path/to/checkout
+```
+
+The CLI form is `forge serve --workspace <path>` once a server-capable release
+is installed. Relative workspace paths resolve against the invocation directory;
+the selected directory is canonicalized as the authoritative checkout.
+
+Startup loads exactly `<guidance-folder>/workspace.ts`. The default folder is
+`docs/forge/workspace` inside the selected checkout. A nonempty process
+`ZD_AI_FORGE_WORKSPACE_GUIDE` selects a different folder, relative to that checkout
+or absolute; `.env` cannot set this override. Invalid explicit choices fail
+without ancestor search or fallback. The standalone server requires the trusted
+TypeScript module, not the Python workflow's `on-plan.md`, `on-diff-route` or
+`config.yaml` entries. External trusted guidance folders are allowed.
+
+Set `ZD_AI_FORGE_PORT` in the process environment or selected checkout's `.env`.
+A nonempty process value takes precedence, including invalid values; an empty
+process value falls back to `.env`. Ports use one to five ASCII decimal digits
+and range from 1024 through 65535. There is no default, allocation or occupied-port
+fallback. The narrow `.env` syntax supports whole-line comments, optional
+`export`, whitespace and surrounding quotes; last assignment wins and malformed
+lines are ignored. It performs no interpolation, multiline or escape expansion;
+only the port setting is imported. A missing `.env` is allowed, while unreadable
+or invalid-encoding files fail startup.
+
+The foreground process prints `http://127.0.0.1:<port>` after listener readiness.
+`GET /api/workspace` returns the workspace root and declared available/missing
+repositories in declaration order. Invalid existing repositories, Git/access
+failures and policy/configuration errors refuse startup. Requests require that
+exact Host and, when present, Origin; CLI requests may omit Origin. Restart to
+reload configuration, policy and repository identity. Stop with SIGINT or
+SIGTERM; shutdown closes the listener and releases the port.
+
+This source serves identity only: `/` and `/api/changes` return not found. It has
+no browser page or change list yet. Startup executes trusted policy code; HTTP
+identity requests do not stage, commit or modify the checkout.
 
 ## Workspace authoring contract (provisional)
 
