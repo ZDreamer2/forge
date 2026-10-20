@@ -89,7 +89,9 @@ test("HTTP libraries and component edges follow the architecture map", () => {
 		symlinkSync(join(root, "node_modules"), join(temporary, "node_modules"), "dir");
 		const files: Record<string, string> = {
 			"src/components/workspace-policy/index.ts": "export type Value = string;",
-			"src/components/workspace-api/index.ts": "export type { Value } from '../workspace-policy/index.ts';",
+			"src/components/workspace-changes/index.ts": "export type { Value } from '../workspace-policy/index.ts';",
+			"src/components/workspace-api/index.ts":
+				"export type { Value } from '../workspace-policy/index.ts'; export type { Value as Change } from '../workspace-changes/index.ts';",
 			"src/components/workspace-api/internal/routes.ts": "import { Hono } from 'hono'; export const app = new Hono();",
 			"src/lib/loopback-access/internal/guard.ts":
 				"import type { MiddlewareHandler } from 'hono'; export type Guard = MiddlewareHandler;",
@@ -117,11 +119,16 @@ test("HTTP libraries and component edges follow the architecture map", () => {
 		write("src/app/invalid.ts", "import { serve } from '@hono/node-server'; export const listen = serve;");
 		write("src/components/workspace-api/internal/invalid.ts", "import '../../unlisted/index.ts';");
 		write("src/components/unlisted/index.ts", "export type Value = string;");
+		write(
+			"src/components/workspace-changes/internal/invalid.ts",
+			"import '../../workspace-api/index.ts'; import '../../unlisted/index.ts';",
+		);
 		const invalid = cruise();
 		assert.notEqual(invalid.status, 0);
 		for (const rule of [
 			"listed-component-edges-only",
 			"workspace-api-component-edges",
+			"workspace-changes-component-edges",
 			"hono-confinement",
 			"node-adapter-confinement",
 		])

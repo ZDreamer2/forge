@@ -7,14 +7,20 @@ export default {
 		{
 			name: "listed-component-edges-only",
 			severity: "error",
-			from: { path: "^src/components/([^/]+)/", pathNot: "^src/components/workspace-api/" },
+			from: { path: "^src/components/([^/]+)/", pathNot: "^src/components/(workspace-api|workspace-changes)/" },
 			to: { path: "^src/components/", pathNot: "^src/components/$1/" },
 		},
 		{
 			name: "workspace-api-component-edges",
 			severity: "error",
 			from: { path: "^src/components/workspace-api/" },
-			to: { path: "^src/components/", pathNot: "^src/components/(workspace-api|workspace-policy)/" },
+			to: { path: "^src/components/", pathNot: "^src/components/(workspace-api|workspace-policy|workspace-changes)/" },
+		},
+		{
+			name: "workspace-changes-component-edges",
+			severity: "error",
+			from: { path: "^src/components/workspace-changes/" },
+			to: { path: "^src/components/", pathNot: "^src/components/(workspace-changes|workspace-policy)/" },
 		},
 		{
 			name: "hono-confinement",

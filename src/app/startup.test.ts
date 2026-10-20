@@ -79,6 +79,84 @@ export default {
 	assert.deepEqual(signalListeners(), previous);
 });
 
+test("socket requests collect fresh changes with startup routing and fail safely after repository loss", async (t) => {
+	const input = await fixture(t);
+	const nested = join(input.root, "nested");
+	execFileSync("git", ["init", "-q", nested]);
+	const log = join(input.directory, ".git/imports.txt");
+	await writeFile(
+		input.policyPath,
+		`import { appendFileSync } from 'node:fs';
+appendFileSync(${JSON.stringify(log)}, 'loaded\\n');
+export default {
+ repositories: [{path:'nested'}, {path:'absent'}, {path:'.'}],
+ label: 'startup-policy',
+ codebasesForChange(change) { return [{id: this.label, guidance: 'guidance/' + change.repo}]; }
+};`,
+	);
+	await writeFile(join(input.root, ".gitignore"), "docs/\nnested/\nabsent/\n");
+	await writeFile(join(input.root, "tracked.txt"), "baseline\n");
+	await writeFile(join(nested, "child.txt"), "baseline\n");
+	for (const directory of [input.directory, nested]) {
+		execFileSync("git", ["-C", directory, "add", "."]);
+		execFileSync("git", [
+			"-C",
+			directory,
+			"-c",
+			"user.name=Fixture",
+			"-c",
+			"user.email=fixture@example.com",
+			"commit",
+			"-qm",
+			"baseline",
+		]);
+	}
+	await writeFile(join(input.root, "tracked.txt"), "first\n");
+	await writeFile(join(nested, "child.txt"), "child\n");
+	const indexes = await Promise.all(
+		[input.directory, nested].map((directory) => readFile(join(directory, ".git/index"))),
+	);
+	const status = execFileSync("git", ["-C", input.directory, "status", "--porcelain=v1"]);
+	const server = await start(input.options);
+	t.after(server.close);
+	const identity = { workspace: { root: await realpath(input.root) }, repositories: server.snapshot.repositories };
+	const expectedChange = (repo: string, path: string, addedLines: number) => ({
+		repo,
+		path,
+		kind: "modified",
+		binary: false,
+		addedLines,
+		removedLines: 1,
+		codebases: [{ id: "startup-policy", guidance: `guidance/${repo}` }],
+	});
+	assert.deepEqual(await (await fetch(`${server.address}/api/changes`)).json(), {
+		changes: [expectedChange("nested", "nested/child.txt", 1), expectedChange(".", "tracked.txt", 1)],
+	});
+	await writeFile(join(input.root, "tracked.txt"), "second\nextra\n");
+	await writeFile(input.policyPath, "throw new Error('Must not reload policy');");
+	execFileSync("git", ["init", "-q", join(input.root, "absent")]);
+	await writeFile(join(input.root, "absent/ignored.txt"), "not a startup participant\n");
+	assert.deepEqual(await (await fetch(`${server.address}/api/changes`)).json(), {
+		changes: [expectedChange("nested", "nested/child.txt", 1), expectedChange(".", "tracked.txt", 2)],
+	});
+	assert.equal(await readFile(log, "utf8"), "loaded\n");
+	assert.deepEqual(await (await fetch(`${server.address}/api/workspace`)).json(), identity);
+	assert.deepEqual(
+		await Promise.all([input.directory, nested].map((directory) => readFile(join(directory, ".git/index")))),
+		indexes,
+	);
+	await rm(join(nested, ".git"), { recursive: true });
+	const failed = await fetch(`${server.address}/api/changes`);
+	assert.equal(failed.status, 500);
+	assert.deepEqual(await failed.json(), { error: { code: "internal_error", message: "Internal server error" } });
+	assert.deepEqual(await (await fetch(`${server.address}/api/workspace`)).json(), identity);
+	await server.close();
+	assert.deepEqual(await readFile(join(input.directory, ".git/index")), indexes[0]);
+	assert.equal(await readFile(join(input.root, "tracked.txt"), "utf8"), "second\nextra\n");
+	assert.equal(await readFile(join(nested, "child.txt"), "utf8"), "child\n");
+	assert.deepEqual(execFileSync("git", ["-C", input.directory, "status", "--porcelain=v1"]), status);
+});
+
 test("termination signals dispose the listener and remove both owned signal handlers", async (t) => {
 	for (const signal of ["SIGINT", "SIGTERM"] as const) {
 		const input = await fixture(t);

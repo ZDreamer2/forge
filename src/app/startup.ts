@@ -1,3 +1,4 @@
+import { createWorkspaceChanges } from "../components/workspace-changes/index.ts";
 import { loadWorkspacePolicy, resolveRepositories } from "../components/workspace-policy/index.ts";
 import { loadConfig } from "./config.ts";
 import { createHttpApp } from "./http.ts";
@@ -14,7 +15,13 @@ export async function start(options: Options) {
 	const policy = await loadWorkspacePolicy(config.policyPath);
 	const repositories = await resolveRepositories(config.root, policy.repositories);
 	const snapshot = Object.freeze({ root: config.root, policy, repositories });
-	const app = createHttpApp({ ...snapshot, port: config.port });
+	const changes = createWorkspaceChanges({
+		root: config.root,
+		repositories,
+		codebasesForChange: (change) => policy.codebasesForChange(change),
+		env: options.env,
+	});
+	const app = createHttpApp({ ...snapshot, collectChanges: changes.collect, port: config.port });
 	const listener = await createListener({ fetch: app.fetch, port: config.port });
 	let disposal: Promise<void> | undefined;
 	function close(): Promise<void> {

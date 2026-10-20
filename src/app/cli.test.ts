@@ -104,14 +104,30 @@ test("CLI validates serve arguments and preserves diagnostic JSON", async () => 
 	}
 });
 
-test("CLI uses selected .env, serves read-only identity and releases port on signals", async () => {
+test("CLI uses selected .env, serves fresh read-only changes and releases port on signals", async () => {
 	const { root } = await fixture();
 	try {
+		await writeFile(join(root, ".gitignore"), ".env\n");
 		await writeFile(join(root, "tracked"), "original\n");
+		execFileSync("git", ["-C", root, "add", "."]);
+		execFileSync("git", [
+			"-C",
+			root,
+			"-c",
+			"user.name=Fixture",
+			"-c",
+			"user.email=fixture@example.com",
+			"commit",
+			"-qm",
+			"baseline",
+		]);
+		await writeFile(join(root, "tracked"), "staged\n");
 		execFileSync("git", ["-C", root, "add", "tracked"]);
+		await writeFile(join(root, "tracked"), "first\n");
 		const index = await readFile(join(root, ".git/index"));
 		const status = execFileSync("git", ["-C", root, "status", "--porcelain=v1"]);
 		for (const signal of ["SIGINT", "SIGTERM"] as const) {
+			await writeFile(join(root, "tracked"), "first\n");
 			const reservation = await reservePort();
 			await reservation.close();
 			await writeFile(join(root, ".env"), `ZD_AI_FORGE_PORT=${reservation.port}\n`);
@@ -128,6 +144,23 @@ test("CLI uses selected .env, serves read-only identity and releases port on sig
 						{ path: "absent", status: "missing" },
 					],
 				});
+				const address = process.stdout().trim();
+				const change = (addedLines: number) => ({
+					repo: ".",
+					path: "tracked",
+					kind: "modified",
+					binary: false,
+					addedLines,
+					removedLines: 1,
+					codebases: [],
+				});
+				assert.deepEqual(await (await fetch(`${address}/api/changes`)).json(), { changes: [change(1)] });
+				await writeFile(join(root, "tracked"), "second\nextra\n");
+				assert.deepEqual(await (await fetch(`${address}/api/changes`)).json(), { changes: [change(2)] });
+				assert.equal((await fetch(`${address}/api/changes`, { headers: { origin: "http://foreign" } })).status, 403);
+				const unsupported = await fetch(`${address}/api/changes`, { method: "OPTIONS" });
+				assert.equal(unsupported.status, 405);
+				assert.equal(unsupported.headers.get("allow"), "GET, HEAD");
 				process.child.kill(signal);
 				assert.deepEqual(await bounded(process.exited), { code: 0, signal: null });
 				const probe = createServer();
@@ -139,12 +172,8 @@ test("CLI uses selected .env, serves read-only identity and releases port on sig
 			}
 		}
 		assert.deepEqual(await readFile(join(root, ".git/index")), index);
-		assert.equal(await readFile(join(root, "tracked"), "utf8"), "original\n");
-		// .env is the only fixture change made after taking the status snapshot.
-		assert.equal(
-			execFileSync("git", ["-C", root, "status", "--porcelain=v1"]).toString().replace("?? .env\n", ""),
-			status.toString(),
-		);
+		assert.equal(await readFile(join(root, "tracked"), "utf8"), "second\nextra\n");
+		assert.deepEqual(execFileSync("git", ["-C", root, "status", "--porcelain=v1"]), status);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

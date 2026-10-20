@@ -75,7 +75,8 @@ test("real adapter preserves Host and Origin restrictions including spoofed forw
 	let port = 0;
 	const listener = await createListener({
 		port: 0,
-		fetch: (incoming) => createHttpApp({ root: "/selected", repositories: [], port }).fetch(incoming),
+		fetch: (incoming) =>
+			createHttpApp({ root: "/selected", repositories: [], port, collectChanges: async () => [] }).fetch(incoming),
 	});
 	port = Number(new URL(listener.address).port);
 	try {

@@ -1,7 +1,7 @@
 # @zdreamer/forge
 
 Provisional Forge workspace application. The unreleased source supports a
-foreground read-only identity server and the policy-loading diagnostic. Registry
+foreground read-only workspace server and the policy-loading diagnostic. Registry
 release `0.1.1` supplies the diagnostic and policy types; it does not contain the
 server. Executable: `forge`; public authoring types: `@zdreamer/forge/workspace`.
 Licensed under [MIT](LICENSE).
@@ -69,9 +69,31 @@ exact Host and, when present, Origin; CLI requests may omit Origin. Restart to
 reload configuration, policy and repository identity. Stop with SIGINT or
 SIGTERM; shutdown closes the listener and releases the port.
 
-This source serves identity only: `/` and `/api/changes` return not found. It has
-no browser page or change list yet. Startup executes trusted policy code; HTTP
-identity requests do not stage, commit or modify the checkout.
+`GET /api/changes` returns `{ changes: [...] }`: net HEAD-to-current-working-copy
+changes, including non-ignored untracked files, independently of staging. Entries
+carry repository ID, workspace-relative path, kind, optional rename/copy `from`,
+binary status, added/removed line counts and concrete codebase memberships. Binary
+counts are `null`; text metadata-only changes retain zero counts.
+
+Collection reads fresh working content on each request using the startup policy
+and participating repositories. Missing-at-startup repositories remain excluded;
+loss of an available repository, Git/read failures or invalid/throwing routing
+results fail the entire request. Paths stay inside the selected workspace even
+when its main Git root extends above it. Nested repositories are distinct;
+undeclared clones and Git internals are excluded. Temporary comparison state leaves
+source files, indexes and objects unchanged. Startup executes trusted policy code.
+
+For a direct check while the server runs, replace the example address with the
+address printed by the server:
+
+```sh
+FORGE_ADDRESS=http://127.0.0.1:12345
+curl "$FORGE_ADDRESS/api/workspace"
+curl "$FORGE_ADDRESS/api/changes"
+```
+
+`/` still returns not found; this source has no browser page yet. Registry `0.1.1`
+remains the diagnostic-only release.
 
 ## Workspace authoring contract (provisional)
 
@@ -110,6 +132,7 @@ exist, and includes both rename/copy sides. Several concrete codebases can share
 guidance; membership does not imply verification.
 
 Policy modules are trusted executable code, not sandboxed; installation does not
-load them. Types do not validate callback results at runtime. See
+load them. The changes collector validates callback results at runtime; the diagnostic
+uses the authored types without that validation. See
 [architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md) for loading limits and repository resolution,
 which the diagnostic does not invoke.

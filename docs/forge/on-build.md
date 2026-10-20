@@ -9,13 +9,19 @@ diagnostic without embedding private rules into this public repository.
 
 Server changes require the colocated app/CLI checks as well as unit checks. They
 exercise real temporary Git repositories, sockets and spawned CLI processes:
-configuration precedence, identity, Host/Origin enforcement, occupied-port
-failure and bounded SIGINT/SIGTERM shutdown. Identity requests and shutdown leave
-working files and Git indexes unchanged. The aggregate gate includes these
-checks; a browser smoke test becomes relevant when a page is introduced.
+configuration precedence, identity, fresh HEAD/current changes and routing,
+Host/Origin enforcement, repository-loss failures, occupied-port failure and bounded
+SIGINT/SIGTERM shutdown. Collector fixtures cover staging reversals, boundary
+filtering, binary and metadata-only changes, and source Git state preservation.
+Requests and shutdown leave working files and Git indexes unchanged. The aggregate
+gate includes these checks; a browser smoke test becomes relevant when a page is
+introduced.
 
 For a direct source check, build and use the [source server
 instructions](../../README.md#run-the-source-server), then request
-`/api/workspace` with the configured loopback authority. The source currently
-implements identity only; registry `0.1.1` remains the diagnostic release. Retain
-tarball/public-type verification and release-workflow checks when extending it.
+`/api/workspace` and `/api/changes` with the configured loopback authority. Each
+changes request collects fresh content using startup policy/repository participation;
+missing-at-startup checkouts remain skipped and available-checkout failures are
+explicit errors. The source has no browser page; registry `0.1.1` remains the
+diagnostic release. Retain tarball/public-type verification and release-workflow
+checks when extending it.
