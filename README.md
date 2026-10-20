@@ -7,7 +7,7 @@ types: `@zdreamer/forge/workspace`. Licensed under [MIT](LICENSE).
 The `0.x` policy contract is provisional. Breaking authoring or semantic changes
 use a minor release with migration notes; exact-pin the application and use its
 own policy types from the same installation. No separate policy-version field or
-compatibility layer is provided. See [release operations](https://github.com/ZDreamer2/forge/blob/master/docs/releasing.md).
+compatibility layer is provided. See [release operations](https://github.com/ZDreamer2/forge/blob/main/docs/releasing.md).
 
 ## Develop
 
@@ -67,5 +67,5 @@ guidance; membership does not imply verification.
 
 Policy modules are trusted executable code, not sandboxed; installation does not
 load them. Types do not validate callback results at runtime. See
-[architecture](https://github.com/ZDreamer2/forge/blob/master/docs/architecture.md) for loading limits and repository resolution,
+[architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md) for loading limits and repository resolution,
 which the diagnostic does not invoke.

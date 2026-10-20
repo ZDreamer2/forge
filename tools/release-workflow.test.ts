@@ -88,9 +88,10 @@ for (const scenario of cases) {
 }
 
 test("workflow wires automatic releases through verification and preserves manual dry-runs", () => {
-	const branch = manifest.name === "@zdreamer/forge" ? "master" : "main";
-	assert.ok(workflow.includes(`push:\n    branches: [${branch}]`));
-	assert.ok(workflow.includes(`test "$GITHUB_REF" = refs/heads/${branch}`));
+	assert.ok(workflow.includes("push:\n    branches: [main]"));
+	assert.ok(workflow.includes('test "$GITHUB_REF" = refs/heads/main'));
+	const ci = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+	assert.ok(ci.includes("push:\n    branches: [main]"));
 	assert.match(workflow, /if: \$\{\{ needs\.guard\.outputs\.run == 'true' \}\}/);
 	assert.match(workflow, /expected-version: \$\{\{ needs\.guard\.outputs\.version \}\}/);
 	assert.ok(workflow.includes("needs: [guard, verify]"));

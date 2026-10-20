@@ -2,7 +2,7 @@ name: Publish
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   guard:
-    name: Plan release on master
+    name: Plan release on main
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     outputs:
@@ -33,7 +33,7 @@ jobs:
       publish: ${{ steps.plan.outputs.publish }}
       unpublished: ${{ steps.plan.outputs.unpublished }}
     steps:
-      - run: test "$GITHUB_REF" = refs/heads/master
+      - run: test "$GITHUB_REF" = refs/heads/main
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
