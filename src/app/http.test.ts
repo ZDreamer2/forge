@@ -6,6 +6,7 @@ test("HTTP page and API operations have consistent routing failures", async () =
 	let collections = 0;
 	const app = createHttpApp({
 		root: "/selected",
+		name: "Selected",
 		repositories: [],
 		port: 43210,
 		collectChanges: async () => {
@@ -16,7 +17,7 @@ test("HTTP page and API operations have consistent routing failures", async () =
 	const headers = { host: "127.0.0.1:43210" };
 	const response = await app.request("/api/workspace", { headers });
 	assert.equal(response.status, 200);
-	assert.deepEqual(await response.json(), { workspace: { root: "/selected" }, repositories: [] });
+	assert.deepEqual(await response.json(), { workspace: { root: "/selected", name: "Selected" }, repositories: [] });
 	assert.equal(response.headers.get("access-control-allow-origin"), null);
 	for (const path of ["/workspace", "/changes", "/api/unknown"]) {
 		for (const method of ["GET", "OPTIONS"]) {
@@ -61,6 +62,7 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 	const reported: Error[] = [];
 	const app = createHttpApp({
 		root: "/selected",
+		name: "Selected",
 		repositories: [],
 		port: 43210,
 		collectChanges: async () => {

@@ -5,13 +5,16 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { request } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
+const manifest = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8")) as {
+	version: string;
+};
 const main = fileURLToPath(new URL("../main.ts", import.meta.url));
 async function fixture() {
-	const root = await mkdtemp(join(tmpdir(), "forge-cli-"));
+	const root = await mkdtemp(join(tmpdir(), "forge-cli-'\"$-"));
 	execFileSync("git", ["init", "-q", root]);
 	await mkdir(join(root, "docs/forge/workspace"), { recursive: true });
 	const policy = join(root, "docs/forge/workspace/workspace.ts");
@@ -131,21 +134,27 @@ test("CLI uses selected .env, serves fresh read-only changes and releases port o
 			await writeFile(join(root, "tracked"), "first\n");
 			const reservation = await reservePort();
 			await reservation.close();
-			await writeFile(join(root, ".env"), `ZD_AI_FORGE_PORT=${reservation.port}\n`);
-			const process = run(["serve", "--workspace", root]);
+			await writeFile(
+				join(root, ".env"),
+				`ZD_AI_FORGE_PORT=${reservation.port}\nPRIVATE_TOKEN=must-not-appear-in-startup\n`,
+			);
+			const process = run(["serve", "--workspace", root], { PRIVATE_TOKEN: "must-not-appear-in-startup" });
 			try {
 				await ready(process);
-				assert.equal(process.stdout().trim(), `http://127.0.0.1:${reservation.port}`);
-				const response = await fetch(`${process.stdout().trim()}/api/workspace`);
+				const address = `http://127.0.0.1:${reservation.port}`;
+				assert.equal(
+					process.stdout(),
+					`Forge @zdreamer/forge ${manifest.version}\nExecutable: ${JSON.stringify(main)}\nWorkspace: ${JSON.stringify(root)}\n${address}\n`,
+				);
+				const response = await fetch(`${address}/api/workspace`);
 				assert.equal(response.status, 200);
 				assert.deepEqual(await response.json(), {
-					workspace: { root },
+					workspace: { root, name: basename(root) },
 					repositories: [
 						{ path: ".", status: "available", gitRoot: root },
 						{ path: "absent", status: "missing" },
 					],
 				});
-				const address = process.stdout().trim();
 				const page = await fetch(address);
 				assert.equal(page.status, 200);
 				assert.match(await page.text(), /<script>/);
@@ -245,7 +254,8 @@ test("CLI shares active GET/HEAD work and shutdown reaps a TERM-resistant Git ch
 	let pid: number | undefined;
 	try {
 		await ready(server);
-		const address = server.stdout().trim();
+		const address = server.stdout().trim().split("\n").at(-1);
+		assert.ok(address);
 		const firstClient = new AbortController();
 		const first = fetch(`${address}/api/changes`, { signal: firstClient.signal }).catch(() => undefined);
 		for (let attempt = 0; attempt < 100; attempt++) {

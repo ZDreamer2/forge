@@ -61,17 +61,22 @@ lines are ignored. It performs no interpolation, multiline or escape expansion;
 only the port setting is imported. A missing `.env` is allowed, while unreadable
 or invalid-encoding files fail startup.
 
-The foreground process prints `http://127.0.0.1:<port>` after listener readiness.
+After listener readiness, the foreground process prints its package version,
+JSON-quoted executable and authoritative workspace paths, then
+`http://127.0.0.1:<port>` on its own line. It prints no environment values.
+The `inspect-workspace` diagnostic retains its JSON-only stdout contract.
 Open that address to see workspace/repository identity and current changed files,
 including Git-reported rename sources and concrete
-codebase memberships. Paths and guidance are displayed as text. The page shows
-loading, empty and error states; Refresh retries failed requests and clears the
+codebase memberships. Workspace names, paths and guidance are displayed literally
+as text. The browser title uses `🛠️ <workspace name>` from server identity;
+it starts as `Forge` and returns to `Forge` when the identity request fails.
+The page shows loading, empty and error states; Refresh retries failed requests and clears the
 previous change list while loading. Successful workspace identity is retained
 when a request fails. Refresh reads current changes but does not reload startup
 policy or repository participation. There is no polling.
 
-`GET /api/workspace` returns the workspace root and declared available/missing
-repositories in declaration order. Invalid existing repositories, Git/access
+`GET /api/workspace` returns the workspace root, resolved display name and declared
+available/missing repositories in declaration order. Invalid existing repositories, Git/access
 failures and policy/configuration errors refuse startup. Requests require that
 exact Host and, when present, Origin; CLI requests may omit Origin. Restart to
 reload configuration, policy and repository identity. Stop with SIGINT or
@@ -139,6 +144,24 @@ export default {
   repositories: [{ path: '.' }, { path: 'tools/optional-checkout' }],
   codebasesForChange: () => [{ id: 'application', guidance: 'docs/code' }],
 } satisfies WorkspacePolicy;
+```
+
+The unreleased source also accepts optional `displayName` policy metadata. An
+explicit value must be a nonempty string and is preserved exactly, without
+trimming or HTML interpretation. The server resolves an omitted name to the
+canonical workspace root's basename, or the root itself if it has no basename,
+and returns it as `workspace.name` in identity. Restart to reload the name.
+Registry `0.1.1` does not declare this field in its authoring types. To retain
+metadata while typechecking against that exact pin, use a structurally checked
+variable:
+
+```ts
+const policy = {
+  displayName: 'Example workspace',
+  repositories: [{ path: '.' }],
+  codebasesForChange: () => [],
+};
+export default policy satisfies WorkspacePolicy;
 ```
 
 Module lookup follows the workspace file's ancestors, not the executable's

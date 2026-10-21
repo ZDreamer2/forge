@@ -7,6 +7,7 @@ import {
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
+	realpathSync,
 	renameSync,
 	rmSync,
 	writeFileSync,
@@ -152,12 +153,16 @@ async function installedServer(executable: string, cwd: string, workspace: strin
 			]),
 			"Installed server readiness",
 		);
-		assert.equal(stdout.trim(), `http://127.0.0.1:${port}`);
+		const manifest = JSON.parse(readFileSync(join(dirname(realpathSync(executable)), "../package.json"), "utf8"));
+		assert.equal(
+			stdout,
+			`Forge @zdreamer/forge ${manifest.version}\nExecutable: ${JSON.stringify(realpathSync(executable))}\nWorkspace: ${JSON.stringify(workspace)}\nhttp://127.0.0.1:${port}\n`,
+		);
 	} catch (error) {
 		await stop("SIGKILL").catch(() => {});
 		throw error;
 	}
-	return { address: stdout.trim(), stop, stderr: () => stderr };
+	return { address: `http://127.0.0.1:${port}`, stop, stderr: () => stderr };
 }
 
 async function verifyServer(executable: string, consumer: string) {
@@ -171,6 +176,7 @@ async function verifyServer(executable: string, consumer: string) {
 	writeFileSync(
 		join(workspace, "docs/forge/workspace/workspace.ts"),
 		`export default {
+  displayName: 'Fixture <workspace> & "name"',
   repositories: [{path: '.'}, {path: 'nested'}, {path: 'not-cloned'}],
   codebasesForChange: (change) => change.path === 'outside.txt' ? [] : [{id: 'fixture<code>', guidance: 'docs/<guidance>'}],
 };\n`,
@@ -199,7 +205,7 @@ async function verifyServer(executable: string, consumer: string) {
 			const identity = await request("/api/workspace");
 			assert.equal(identity.status, 200);
 			assert.deepEqual(await identity.json(), {
-				workspace: { root: workspace },
+				workspace: { root: workspace, name: 'Fixture <workspace> & "name"' },
 				repositories: [
 					{ path: ".", status: "available", gitRoot: workspace },
 					{ path: "nested", status: "available", gitRoot: join(workspace, "nested") },
@@ -340,7 +346,10 @@ const kinds: WorkspaceChange['kind'][] = ['added', 'modified', 'deleted', 'renam
 kinds.push('copied');
 // @ts-expect-error mode/type transitions use modified.
 kinds.push('type_changed');
+// @ts-expect-error an explicit display name must be a string.
+export const invalidName: WorkspacePolicy['displayName'] = 123;
 export default {
+  displayName: 'Example workspace',
   repositories: [{ path: '.' }, { path: 'not-cloned' }],
   codebasesForChange: () => [{ id: 'example', guidance: 'docs/code' }],
 } satisfies WorkspacePolicy;
@@ -353,6 +362,7 @@ export default {
 				strict: true,
 				noEmit: true,
 				target: "ES2024",
+				lib: ["ES2024"],
 				module: "NodeNext",
 				types: [],
 			},

@@ -78,6 +78,7 @@ test("real adapter preserves Host and Origin restrictions including spoofed forw
 		fetch: (incoming) =>
 			createHttpApp({
 				root: "/selected",
+				name: "Selected",
 				repositories: [],
 				port,
 				collectChanges: async () => ({ codebases: {}, changes: [] }),

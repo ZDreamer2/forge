@@ -40,8 +40,12 @@ is confined to `app/listener.ts`.
 ## Startup snapshot and lifecycle
 
 Loading executes trusted project code through Node's module cache. The loader
-validates the default export's routing function and unique normalized repository
-paths, not callback results. There is no sandbox or hot reload.
+validates the default export's routing function, unique normalized repository
+paths and optional nonempty string `displayName`, not callback results. Startup
+resolves an omitted name from the canonical workspace root's basename, falling
+back to the root itself, and includes it in the identity snapshot. The browser
+uses that name literally for the document title; the tools emoji is UI
+presentation. There is no sandbox or hot reload.
 
 `resolveRepositories` probes only declared locations and returns
 `available`/`missing` results. Existing invalid locations and Git/access failures

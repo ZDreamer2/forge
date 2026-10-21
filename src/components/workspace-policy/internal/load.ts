@@ -16,6 +16,9 @@ export async function loadWorkspacePolicy(absolutePath: string): Promise<Workspa
 	) {
 		throw new TypeError("Workspace module must default-export a WorkspacePolicy");
 	}
+	if ("displayName" in policy && (typeof policy.displayName !== "string" || policy.displayName.length === 0)) {
+		throw new TypeError("Workspace displayName must be a nonempty string");
+	}
 	const paths = new Set<string>();
 	for (const repository of policy.repositories) {
 		if (

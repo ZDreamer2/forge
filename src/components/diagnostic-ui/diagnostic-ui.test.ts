@@ -70,8 +70,9 @@ async function browserScript() {
 	}[] = [];
 	const timers = new Map<number, () => void>();
 	let nextTimer = 0;
+	const document = { title: "Forge", getElementById: element, createElement: () => new Element() };
 	runInNewContext(script, {
-		document: { getElementById: element, createElement: () => new Element() },
+		document,
 		AbortController,
 		fetch: (path: string, options: { signal: AbortSignal; cache: string }) => {
 			assert.equal(options.cache, "no-store");
@@ -92,6 +93,7 @@ async function browserScript() {
 		clearTimeout: (id: number) => timers.delete(id),
 	});
 	return {
+		document,
 		element,
 		requests,
 		timers,
@@ -126,7 +128,7 @@ for (const failing of ["/api/workspace", "/api/changes"]) {
 test("refresh retains useful identity, clears old changes and renders workspace values literally", async () => {
 	const browser = await browserScript();
 	browser.requests[0]?.resolve({
-		workspace: { root: "/<workspace>" },
+		workspace: { root: "/<workspace>", name: "</title><script>throw 1</script> & BiCo" },
 		repositories: [{ path: "<repo>", status: "missing" }],
 	});
 	browser.requests[1]?.resolve({
@@ -142,6 +144,7 @@ test("refresh retains useful identity, clears old changes and renders workspace 
 		],
 	});
 	await browser.settle();
+	assert.equal(browser.document.title, "🛠️ </title><script>throw 1</script> & BiCo");
 	const texts = (element: Element): string[] => [element.textContent, ...element.children.flatMap(texts)];
 	assert.ok(texts(browser.element("identity")).includes("/<workspace>"));
 	const rendered = texts(browser.element("changes"));
@@ -159,6 +162,7 @@ test("refresh retains useful identity, clears old changes and renders workspace 
 	await refreshed;
 	assert.equal(browser.element("identity").children, retained);
 	assert.deepEqual(browser.element("changes").children, []);
+	assert.equal(browser.document.title, "Forge");
 	assert.match(browser.element("identity-error").textContent, /offline/);
 	assert.match(browser.element("changes-error").textContent, /HTTP 503/);
 	assert.equal(browser.element("refresh").disabled, false);
@@ -176,7 +180,7 @@ test("client deadline aborts stalled requests and restores successful retry", as
 	const refreshed = browser.element("refresh").click?.();
 	assert.equal(browser.element("identity-error").textContent, "");
 	assert.equal(browser.element("changes-error").textContent, "");
-	browser.requests[2]?.resolve({ workspace: { root: "/retry" }, repositories: [] });
+	browser.requests[2]?.resolve({ workspace: { root: "/retry", name: "BiCo" }, repositories: [] });
 	browser.requests[3]?.resolve({ codebases: {}, changes: [] });
 	await refreshed;
 	assert.equal(browser.element("status").textContent, "Up to date.");
@@ -187,4 +191,5 @@ test("client deadline aborts stalled requests and restores successful retry", as
 	browser.requests[1]?.resolve({ codebases: {}, changes: [] });
 	await browser.settle();
 	assert.equal(browser.element("identity").children[0]?.textContent, "/retry");
+	assert.equal(browser.document.title, "🛠️ BiCo");
 });

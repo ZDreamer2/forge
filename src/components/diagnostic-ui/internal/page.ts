@@ -4,7 +4,7 @@ export const page = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>Forge workspace</title>
+<title>Forge</title>
 <style>
 body { font: 16px system-ui, sans-serif; margin: 2rem auto; padding: 0 1rem; max-width: 75rem; color: #202830; background: #fafbfc; }
 button { font: inherit; padding: .5rem 1rem; cursor: pointer; }
@@ -67,6 +67,7 @@ async function request(path) {
   }
 }
 function showIdentity(data) {
+  document.title = "🛠️ " + data.workspace.name;
   const root = textElement("p", data.workspace.root, "path");
   const list = document.createElement("ul");
   for (const repo of data.repositories) {
@@ -106,6 +107,7 @@ async function refresh() {
         show(await request(path));
         return true;
       } catch (error) {
+        if (path === "/api/workspace") document.title = "Forge";
         region.textContent = label + ": " + error.message + ". Use Refresh to retry.";
         status.textContent = "Refresh failed. Use Refresh to retry.";
         return false;

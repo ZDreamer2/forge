@@ -9,6 +9,7 @@ test("identity maps declared snapshot in order without serializing policy or ext
 	];
 	const routes = createWorkspaceRoutes({
 		root: "/parent/selected",
+		name: "Selected",
 		repositories,
 		collectChanges: async () => {
 			throw new Error("Identity must not collect changes");
@@ -17,7 +18,7 @@ test("identity maps declared snapshot in order without serializing policy or ext
 	repositories.reverse();
 	const response = await routes.request("/workspace");
 	assert.deepEqual(await response.json(), {
-		workspace: { root: "/parent/selected" },
+		workspace: { root: "/parent/selected", name: "Selected" },
 		repositories: [
 			{ path: "nested", status: "missing" },
 			{ path: ".", status: "available", gitRoot: "/parent" },
@@ -52,6 +53,7 @@ test("changes serialize one safe definition index, ID references and only the re
 	};
 	const routes = createWorkspaceRoutes({
 		root: "/selected",
+		name: "Selected",
 		repositories: [],
 		collectChanges: async () => {
 			collections++;

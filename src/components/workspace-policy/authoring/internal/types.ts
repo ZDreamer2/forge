@@ -23,6 +23,8 @@ export interface CodebaseContext {
  * files lexically. Rename membership includes both old and new paths.
  */
 export interface WorkspacePolicy {
+	/** Literal display text; omission uses the canonical workspace root basename. */
+	readonly displayName?: string;
 	readonly repositories: readonly RepositoryDeclaration[];
 	codebasesForChange(change: WorkspaceChange): readonly CodebaseContext[];
 }

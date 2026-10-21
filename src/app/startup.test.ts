@@ -70,7 +70,10 @@ export default {
 	for (let request = 0; request < 2; request++) {
 		const response = await fetch(`${server.address}/api/workspace`);
 		assert.equal(response.status, 200);
-		assert.deepEqual(await response.json(), { workspace: { root: await realpath(input.root) }, repositories });
+		assert.deepEqual(await response.json(), {
+			workspace: { root: await realpath(input.root), name: "workspace" },
+			repositories,
+		});
 		await rm(join(input.root, "nested"), { recursive: true, force: true });
 	}
 	assert.equal(await readFile(log, "utf8"), "loaded\n");
@@ -119,7 +122,10 @@ export default {
 	const status = execFileSync("git", ["-C", input.directory, "status", "--porcelain=v1"]);
 	const server = await start(input.options);
 	t.after(server.close);
-	const identity = { workspace: { root: await realpath(input.root) }, repositories: server.snapshot.repositories };
+	const identity = {
+		workspace: { root: await realpath(input.root), name: "workspace" },
+		repositories: server.snapshot.repositories,
+	};
 	const expectedChange = (repo: string, path: string) => ({
 		repo,
 		path,
@@ -206,4 +212,19 @@ test("policy and repository failures refuse startup before installing terminatio
 		await assert.rejects(start(input.options));
 		assert.deepEqual(signalListeners(), previous);
 	}
+});
+
+test("startup publishes explicit literal policy name instead of checkout basename", async (t) => {
+	const input = await fixture(t);
+	const name = "BiCo <script> & 🛠️";
+	await writeFile(
+		input.policyPath,
+		`export default { displayName: ${JSON.stringify(name)}, repositories: [], codebasesForChange: () => [] };`,
+	);
+	const server = await start(input.options);
+	t.after(server.close);
+	assert.deepEqual(await (await fetch(`${server.address}/api/workspace`)).json(), {
+		workspace: { root: await realpath(input.root), name },
+		repositories: [],
+	});
 });

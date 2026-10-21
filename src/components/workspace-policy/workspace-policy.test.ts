@@ -32,3 +32,24 @@ test("rejects malformed exports and propagates import failures", async () => {
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test("display names are literal text and explicit values must be nonempty strings", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "forge-policy-name-"));
+	try {
+		const values = ["BiCo", "</title><script>alert(1)</script>", " ", "", null, 42, {}, false, undefined];
+		for (const [index, displayName] of values.entries()) {
+			const path = join(directory, `name-${index}.mts`);
+			await writeFile(
+				path,
+				`export default { displayName: ${JSON.stringify(displayName)}, repositories: [], codebasesForChange: () => [] };`,
+			);
+			if (typeof displayName === "string" && displayName.length > 0) {
+				assert.equal((await loadWorkspacePolicy(path)).displayName, displayName);
+			} else {
+				await assert.rejects(loadWorkspacePolicy(path), /displayName must be a nonempty string/);
+			}
+		}
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});

@@ -5,12 +5,13 @@ import { apiError, workspaceChanges, workspaceIdentity } from "./wire.ts";
 
 type Deps = {
 	root: string;
+	name: string;
 	repositories: readonly RepositoryResolution[];
 	collectChanges: () => Promise<CollectedWorkspaceChanges>;
 };
 
-export function createWorkspaceRoutes({ root, repositories, collectChanges }: Deps) {
-	const identity = workspaceIdentity(root, repositories);
+export function createWorkspaceRoutes({ root, name, repositories, collectChanges }: Deps) {
+	const identity = workspaceIdentity(root, name, repositories);
 	const routes = new Hono();
 	routes.get("/workspace", (context) => context.json(identity));
 	routes.get("/changes", async (context) => context.json(workspaceChanges(await collectChanges())));

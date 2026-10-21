@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { createWorkspaceChanges } from "../components/workspace-changes/index.ts";
 import { loadWorkspacePolicy, resolveRepositories } from "../components/workspace-policy/index.ts";
 import { createGitProcess } from "../lib/git/index.ts";
@@ -17,7 +18,8 @@ export async function start(options: Options) {
 	const policy = await loadWorkspacePolicy(config.policyPath);
 	const git = createGitProcess(options.env);
 	const repositories = await resolveRepositories(config.root, policy.repositories, git);
-	const snapshot = Object.freeze({ root: config.root, policy, repositories });
+	const name = policy.displayName ?? (basename(config.root) || config.root);
+	const snapshot = Object.freeze({ root: config.root, name, policy, repositories });
 	const changes = createWorkspaceChanges({
 		root: config.root,
 		repositories,

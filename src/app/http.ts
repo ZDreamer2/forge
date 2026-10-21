@@ -8,13 +8,14 @@ import { createWorkspaceRoutes } from "./workspace-routes.ts";
 
 type Deps = {
 	root: string;
+	name: string;
 	repositories: readonly RepositoryResolution[];
 	port: number;
 	collectChanges: () => Promise<CollectedWorkspaceChanges>;
 	reportError?: (error: Error) => void;
 };
 
-export function createHttpApp({ root, repositories, port, collectChanges, reportError }: Deps) {
+export function createHttpApp({ root, name, repositories, port, collectChanges, reportError }: Deps) {
 	const app = new Hono();
 	app.onError((error, context) => {
 		if (error instanceof AccessRejectedError) return context.json(apiError("forbidden"), 403);
@@ -23,7 +24,7 @@ export function createHttpApp({ root, repositories, port, collectChanges, report
 	});
 	app.use("*", createRequestGuard({ port }));
 	app.route("/", createDiagnosticRoutes());
-	app.route("/api", createWorkspaceRoutes({ root, repositories, collectChanges }));
+	app.route("/api", createWorkspaceRoutes({ root, name, repositories, collectChanges }));
 	app.notFound((context) => context.json(apiError("not_found"), 404));
 	return app;
 }

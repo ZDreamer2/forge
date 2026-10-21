@@ -2,7 +2,7 @@ import type { CollectedWorkspaceChanges } from "../components/workspace-changes/
 import type { RepositoryResolution } from "../components/workspace-policy/index.ts";
 
 type WorkspaceIdentity = {
-	workspace: { root: string };
+	workspace: { root: string; name: string };
 	repositories: ({ path: string; status: "available"; gitRoot: string } | { path: string; status: "missing" })[];
 };
 
@@ -29,9 +29,13 @@ export function apiError(code: ApiErrorCode) {
 	return { error: { code, message: messages[code] } };
 }
 
-export function workspaceIdentity(root: string, repositories: readonly RepositoryResolution[]): WorkspaceIdentity {
+export function workspaceIdentity(
+	root: string,
+	name: string,
+	repositories: readonly RepositoryResolution[],
+): WorkspaceIdentity {
 	return {
-		workspace: { root },
+		workspace: { root, name },
 		repositories: repositories.map((repository) =>
 			repository.status === "available"
 				? { path: repository.path, status: "available", gitRoot: repository.gitRoot }
