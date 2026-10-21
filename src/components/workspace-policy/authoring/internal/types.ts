@@ -6,7 +6,7 @@ export interface RepositoryDeclaration {
 export interface WorkspaceChange {
 	readonly repo: string;
 	readonly path: string;
-	readonly kind: "added" | "modified" | "deleted" | "renamed" | "copied" | "type_changed";
+	readonly kind: "added" | "modified" | "deleted" | "renamed";
 	readonly from?: string;
 }
 
@@ -20,7 +20,7 @@ export interface CodebaseContext {
  * Trusted project code, called explicitly after loading. Forge probes only
  * declared repositories; missing locations are skipped, not configuration errors.
  * Routing is synchronous, side-effect-free and must handle absent
- * files lexically. Rename/copy membership includes both old and new paths.
+ * files lexically. Rename membership includes both old and new paths.
  */
 export interface WorkspacePolicy {
 	readonly repositories: readonly RepositoryDeclaration[];

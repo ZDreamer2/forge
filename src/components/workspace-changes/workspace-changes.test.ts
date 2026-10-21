@@ -11,11 +11,13 @@ import {
 	rename,
 	rm,
 	symlink,
+	utimes,
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type TestContext, test } from "node:test";
+import { createGitProcess } from "../../lib/git/index.ts";
 import { resolveRepositories, type WorkspaceChange, type WorkspacePolicy } from "../workspace-policy/index.ts";
 import { createWorkspaceChanges } from "./index.ts";
 
@@ -47,42 +49,38 @@ async function fixture(t: TestContext) {
 	const directory = await mkdtemp(join(tmpdir(), "forge-changes-"));
 	t.after(() => rm(directory, { recursive: true, force: true }));
 	const root = join(directory, "checkout");
-	const temporaryRoot = join(directory, "scratch");
 	await mkdir(root);
-	await mkdir(temporaryRoot);
 	git(root, "init", "-q", "--initial-branch=main");
-	return { directory, root, temporaryRoot };
+	return { directory, root };
 }
 
 async function collector(
-	input: { root: string; temporaryRoot: string },
+	input: { root: string },
 	codebasesForChange: WorkspacePolicy["codebasesForChange"] = () => [],
 	paths: readonly string[] = ["."],
 	operationalEnv: Readonly<NodeJS.ProcessEnv> = env,
 ) {
-	return createWorkspaceChanges({
+	const service = createWorkspaceChanges({
 		...input,
 		repositories: await resolveRepositories(
 			input.root,
 			paths.map((path) => ({ path })),
+			createGitProcess(operationalEnv),
 		),
 		codebasesForChange,
-		env: operationalEnv,
+		git: createGitProcess(operationalEnv),
 	});
+	return {
+		collect: async (signal?: AbortSignal) => (await service.collect(signal)).changes,
+		collectResult: service.collect,
+	};
 }
 
-function change(
-	path: string,
-	kind: WorkspaceChange["kind"],
-	addedLines: number | null,
-	removedLines: number | null,
-	extra: Record<string, unknown> = {},
-) {
-	return { repo: ".", path, kind, binary: addedLines === null, addedLines, removedLines, codebases: [], ...extra };
+function change(path: string, kind: WorkspaceChange["kind"], extra: Record<string, unknown> = {}) {
+	return { repo: ".", path, kind, codebases: [], ...extra };
 }
 
-// Include the source object store, refs, index and working files, so writes by
-// temporary comparison plumbing cannot hide behind an unchanged git status.
+// Include source objects, refs, indexes and working files: Git status must not refresh them.
 async function snapshot(root: string): Promise<Record<string, unknown>> {
 	const result: Record<string, unknown> = {};
 	async function visit(directory: string, prefix: string) {
@@ -99,7 +97,7 @@ async function snapshot(root: string): Promise<Record<string, unknown>> {
 	return result;
 }
 
-test("collects net working content independent of staging and hidden index flags without source mutation", async (t) => {
+test("compares HEAD to the working tree while respecting hidden index flags and preserving source state", async (t) => {
 	const input = await fixture(t);
 	const { root } = input;
 	for (const name of ["mixed", "reversed", "restored", "assumed", "sparse", "sparse-absent", "deleted"])
@@ -126,114 +124,111 @@ test("collects net working content independent of staging and hidden index flags
 	const collect = await collector(input);
 	const before = await snapshot(root);
 	assert.deepEqual(await collect.collect(), [
-		change("assumed", "modified", 1, 1),
-		change("deleted", "deleted", 0, 1),
-		change("mixed", "modified", 2, 1),
-		change("sparse", "modified", 1, 1),
-		change("sparse-absent", "deleted", 0, 1),
-		change("untracked", "added", 1, 0),
+		change("deleted", "deleted"),
+		change("mixed", "modified"),
+		change("untracked", "added"),
 	]);
 	assert.deepEqual(await snapshot(root), before);
-	assert.deepEqual(await readdir(input.temporaryRoot), []);
+
 	await put(root, "mixed", "mixed baseline\n");
 	await rm(join(root, "untracked"));
 	const next = await collect.collect();
 	assert.equal(
-		next.some((entry) => entry.path === "mixed" || entry.path === "untracked"),
+		next.some((entry) => entry.path === "untracked"),
 		false,
 	);
-	assert.deepEqual(await readdir(input.temporaryRoot), []);
 });
 
-test("retains pure and edited renames, text zero counts, binary null counts and missing final newlines", async (t) => {
-	const input = await fixture(t);
-	const { root } = input;
-	const edited = Array.from({ length: 20 }, (_, index) => `edited rename original line ${index}\n`).join("");
-	await put(root, "pure-text-old", "pure text rename\n");
-	await put(root, "edited-old", edited);
-	await put(root, "pure-binary-old", Buffer.from([0, 1, 2, 3, 255]));
-	await put(root, "binary-modified", Buffer.from([0, 8, 9]));
-	await put(root, "binary-deleted", Buffer.from([0, 12, 13]));
-	await put(root, "no-final-newline", "previous");
-	commit(root);
-	await rename(join(root, "pure-text-old"), join(root, "pure-text-new"));
-	await rename(join(root, "pure-binary-old"), join(root, "pure-binary-new"));
-	await rename(join(root, "edited-old"), join(root, "edited-new"));
-	await put(root, "edited-new", edited.replace("line 10\n", "line ten changed\n"));
-	await put(root, "binary-modified", Buffer.from([0, 8, 10]));
-	await put(root, "binary-added", Buffer.from([0, 99, 100]));
-	await rm(join(root, "binary-deleted"));
-	await put(root, "no-final-newline", "replacement\nsecond");
-	const collect = await collector(input);
-	assert.deepEqual(await collect.collect(), [
-		change("binary-added", "added", null, null),
-		change("binary-deleted", "deleted", null, null),
-		change("binary-modified", "modified", null, null),
-		change("edited-new", "renamed", 1, 1, { from: "edited-old" }),
-		change("no-final-newline", "modified", 2, 1),
-		change("pure-binary-new", "renamed", null, null, { from: "pure-binary-old" }),
-		change("pure-text-new", "renamed", 0, 0, { from: "pure-text-old" }),
-	]);
-});
-
-test("reports empty text additions and deletions with zero line counts", async (t) => {
+test("reports empty-file additions and deletions", async (t) => {
 	const input = await fixture(t);
 	const collect = await collector(input);
 	await put(input.root, "empty", "");
-	assert.deepEqual(await collect.collect(), [change("empty", "added", 0, 0)]);
+	assert.deepEqual(await collect.collect(), [change("empty", "added")]);
+	git(input.root, "add", "empty");
+	const staged = await snapshot(input.root);
+	assert.deepEqual(await collect.collect(), [change("empty", "added")]);
+	assert.deepEqual(await snapshot(input.root), staged);
 	commit(input.root);
 	await rm(join(input.root, "empty"));
-	assert.deepEqual(await collect.collect(), [change("empty", "deleted", 0, 0)]);
+	const deleted = await snapshot(input.root);
+	assert.deepEqual(await collect.collect(), [change("empty", "deleted")]);
+	assert.deepEqual(await snapshot(input.root), deleted);
 });
 
-test("preserves executable-only changes, including binary blobs, and ignores staged chmod reversals", async (t) => {
+test("reconciles content and stat reversals while retaining structural and binary changes in one read-only diff", async (t) => {
 	const input = await fixture(t);
 	const { root } = input;
 	git(root, "config", "core.fileMode", "true");
-	await put(root, "text-mode", "mode unchanged content\n");
-	await put(root, "binary-mode", Buffer.from([0, 3, 7, 11]));
-	await put(root, "reversed-mode", "reversed mode content\n");
-	await put(root, "head-executable", "head executable content\n");
-	await chmod(join(root, "head-executable"), 0o755);
+	for (const name of ["content-reversed", "mode", "mode-reversed", "stat-only"])
+		await put(root, name, `${name} baseline\n`);
+	await put(root, "binary\tline\nname", Buffer.from([0, 1, 2]));
+	await put(root, "empty-deleted", "");
+	await put(root, "rename\told\nname", "unique renamed content\n");
+	await put(root, "type", "same-target");
+	await put(root, ":(glob)*\tline\nname", "old literal content\n");
 	commit(root);
-	for (const name of ["text-mode", "binary-mode", "reversed-mode"]) await chmod(join(root, name), 0o755);
-	git(root, "add", "reversed-mode");
-	await chmod(join(root, "reversed-mode"), 0o644);
-	const collect = await collector(input);
-	assert.deepEqual(await collect.collect(), [
-		change("binary-mode", "modified", null, null),
-		change("text-mode", "modified", 0, 0),
+	await put(root, "content-reversed", "temporary staged content\n");
+	await chmod(join(root, "mode-reversed"), 0o755);
+	git(root, "add", "--all");
+	await put(root, "content-reversed", "content-reversed baseline\n");
+	await chmod(join(root, "mode-reversed"), 0o644);
+	// Force stale stat metadata independently of timestamp resolution or racy-clean handling.
+	for (const name of ["content-reversed", "mode-reversed", "stat-only"])
+		await utimes(join(root, name), new Date("2000-01-01T00:00:00Z"), new Date("2000-01-01T00:00:00Z"));
+	await chmod(join(root, "mode"), 0o755);
+	await put(root, "binary\tline\nname", Buffer.from([0, 3, 4]));
+	await rm(join(root, "empty-deleted"));
+	await put(root, "empty-added", "");
+	git(root, "mv", "rename\told\nname", "rename\tnew\nname");
+	await rm(join(root, "type"));
+	await symlink("same-target", join(root, "type"));
+	await put(root, ":(glob)*\tline\nname", "new literal content\n");
+	for (const [key, value] of [
+		["diff.autoRefreshIndex", "true"],
+		["diff.ignoreSubmodules", "none"],
+		["diff.noprefix", "true"],
+		["diff.statGraphWidth", "1"],
+		["diff.dirstat", "files,1,cumulative"],
+	])
+		git(root, "config", key as string, value as string);
+	const gitProcess = createGitProcess(env);
+	const repositories = await resolveRepositories(root, [{ path: "." }], gitProcess);
+	const diffs: { args: readonly string[]; stdout: Buffer }[] = [];
+	const service = createWorkspaceChanges({
+		root,
+		repositories,
+		codebasesForChange: () => [],
+		git: async (cwd, args, options) => {
+			const result = await gitProcess(cwd, args, options);
+			if (args[0] === "diff") diffs.push({ args, stdout: result.stdout });
+			return result;
+		},
+	});
+	const before = await snapshot(root);
+	assert.deepEqual((await service.collect()).changes, [
+		change(":(glob)*\tline\nname", "modified"),
+		change("binary\tline\nname", "modified"),
+		change("empty-added", "added"),
+		change("empty-deleted", "deleted"),
+		change("mode", "modified"),
+		change("rename\tnew\nname", "renamed", { from: "rename\told\nname" }),
+		change("type", "modified"),
 	]);
-	git(root, "config", "core.fileMode", "false");
-	git(root, "update-index", "--chmod=-x", "head-executable");
-	await chmod(join(root, "head-executable"), 0o644);
-	assert.deepEqual(await collect.collect(), []);
-	await put(root, "new-executable", "new executable content\n");
-	await chmod(join(root, "new-executable"), 0o755);
-	git(root, "add", "new-executable");
-	assert.deepEqual(await collect.collect(), [change("new-executable", "added", 1, 0)]);
+	assert.deepEqual(await snapshot(root), before);
+	assert.equal(diffs.length, 1);
+	const diff = diffs[0];
+	assert.ok(diff);
+	for (const flag of ["--raw", "--numstat", "-z"]) assert.ok(diff.args.includes(flag), flag);
+	const output = diff.stdout.toString("utf8");
+	// These entries really reached the raw stream; the collector must reconcile them with numstat.
+	for (const name of ["content-reversed", "mode-reversed", "stat-only"])
+		assert.ok(output.includes(` M\0${name}\0`), name);
+	assert.ok(output.includes("-\t-\tbinary\tline\nname\0"));
+	assert.ok(output.includes("0\t0\t\0rename\told\nname\0rename\tnew\nname\0"));
+	assert.ok(output.includes("0\t0\ttype\0"));
 });
 
-test("uses scoped Git attributes for binary metadata-only changes and forced-text statistics", async (t) => {
-	const input = await fixture(t);
-	git(input.root, "config", "core.fileMode", "true");
-	await put(input.root, ".gitattributes", "*.opaque -diff\n*.forced diff\n");
-	await put(input.root, "mode.opaque", "ordinary text classified as binary\n");
-	await put(input.root, "previous.opaque", "ordinary renamed text classified as binary\n");
-	await put(input.root, "content.forced", Buffer.from("previous\0content\n"));
-	commit(input.root);
-	await chmod(join(input.root, "mode.opaque"), 0o755);
-	await rename(join(input.root, "previous.opaque"), join(input.root, "current.opaque"));
-	await put(input.root, "content.forced", Buffer.from("current\0content\n"));
-	const collect = await collector(input);
-	assert.deepEqual(await collect.collect(), [
-		change("content.forced", "modified", 1, 1),
-		change("current.opaque", "renamed", null, null, { from: "previous.opaque" }),
-		change("mode.opaque", "modified", null, null),
-	]);
-});
-
-test("captures symlink targets without reading referents and handles file/directory/type replacements", async (t) => {
+test("reports symlink and file/directory/type changes without opening referents", async (t) => {
 	const input = await fixture(t);
 	const { root } = input;
 	await put(root, "file-to-directory", "old flat content\n");
@@ -270,13 +265,13 @@ test("captures symlink targets without reading referents and handles file/direct
 			{ path: "edited-link", kind: "modified" },
 			{ path: "file-to-directory", kind: "deleted" },
 			{ path: "file-to-directory/new-child", kind: "added" },
-			{ path: "file-to-link", kind: "type_changed" },
-			{ path: "link-to-file", kind: "type_changed" },
+			{ path: "file-to-link", kind: "modified" },
+			{ path: "link-to-file", kind: "modified" },
 		],
 	);
 	assert.deepEqual(
 		result.find((entry) => entry.path === "edited-link"),
-		change("edited-link", "modified", 1, 1),
+		change("edited-link", "modified"),
 	);
 });
 
@@ -288,13 +283,13 @@ test("handles genuinely unborn HEAD and literal unusual filenames", async (t) =>
 	for (const [index, name] of names.entries()) await put(input.root, name, `unique initial ${index}\n`);
 	assert.deepEqual(
 		await collect.collect(),
-		names.toSorted().map((name) => change(name, "added", 1, 0)),
+		names.toSorted().map((name) => change(name, "added")),
 	);
 	commit(input.root);
 	for (const [index, name] of names.entries()) await put(input.root, name, `unique final ${index}\n`);
 	assert.deepEqual(
 		await collect.collect(),
-		names.toSorted().map((name) => change(name, "modified", 1, 1)),
+		names.toSorted().map((name) => change(name, "modified")),
 	);
 });
 
@@ -303,6 +298,7 @@ test("routes final entries with both rename paths, accepts empty/shared membersh
 	await put(input.root, "previous", "renamed policy content\n");
 	commit(input.root);
 	await rename(join(input.root, "previous"), join(input.root, "current"));
+	git(input.root, "add", "--all");
 	await put(input.root, "unowned", "unowned content\n");
 	const seen: WorkspaceChange[] = [];
 	const collect = await collector(input, (entry) => {
@@ -315,14 +311,11 @@ test("routes final entries with both rename paths, accepts empty/shared membersh
 			: [];
 	});
 	assert.deepEqual(await collect.collect(), [
-		change("current", "renamed", 0, 0, {
+		change("current", "renamed", {
 			from: "previous",
-			codebases: [
-				{ id: "previous-owner", guidance: "guidance/does-not-have-to-exist" },
-				{ id: "current-owner", guidance: "guidance/does-not-have-to-exist" },
-			],
+			codebases: ["previous-owner", "current-owner"],
 		}),
-		change("unowned", "added", 1, 0),
+		change("unowned", "added"),
 	]);
 	assert.deepEqual(seen, [
 		{ repo: ".", path: "current", kind: "renamed", from: "previous" },
@@ -330,7 +323,7 @@ test("routes final entries with both rename paths, accepts empty/shared membersh
 	]);
 });
 
-test("rejects invalid and throwing policy results atomically and cleans scratch without changing sources", async (t) => {
+test("rejects invalid and throwing policy results without changing sources", async (t) => {
 	const input = await fixture(t);
 	await put(input.root, "a", "first content\n");
 	commit(input.root);
@@ -352,40 +345,18 @@ test("rejects invalid and throwing policy results atomically and cleans scratch 
 			entry.path === "a" ? [] : (invalid as ReturnType<WorkspacePolicy["codebasesForChange"]>),
 		);
 		await assert.rejects(collect.collect());
-		assert.deepEqual(await readdir(input.temporaryRoot), []);
+
 		assert.deepEqual(await snapshot(input.root), before);
 	}
 	const throwing = await collector(input, () => {
 		throw new Error("routing failure");
 	});
-	await assert.rejects(throwing.collect(), /routing failure/);
-	assert.deepEqual(await readdir(input.temporaryRoot), []);
-	assert.deepEqual(await snapshot(input.root), before);
-});
+	await assert.rejects(
+		throwing.collect(),
+		(error: Error) => error.cause instanceof Error && error.cause.message === "routing failure",
+	);
 
-test("fails on invalid HEAD, Git execution errors and unreadable current content", async (t) => {
-	const input = await fixture(t);
-	await put(input.root, "tracked", "original content\n");
-	commit(input.root);
-	await put(input.root, "tracked", "changed content\n");
-	const collect = await collector(input);
-	const head = await readFile(join(input.root, ".git/refs/heads/main"));
-	await writeFile(join(input.root, ".git/refs/heads/main"), `${"f".repeat(40)}\n`);
-	const invalidBefore = await snapshot(input.root);
-	await assert.rejects(collect.collect());
-	assert.deepEqual(await snapshot(input.root), invalidBefore);
-	assert.deepEqual(await readdir(input.temporaryRoot), []);
-	await writeFile(join(input.root, ".git/refs/heads/main"), head);
-	const missingGit = await collector(input, () => [], ["."], { ...env, PATH: input.temporaryRoot });
-	await assert.rejects(missingGit.collect());
-	assert.deepEqual(await readdir(input.temporaryRoot), []);
-	await chmod(join(input.root, "tracked"), 0);
-	try {
-		await assert.rejects(collect.collect());
-		assert.deepEqual(await readdir(input.temporaryRoot), []);
-	} finally {
-		await chmod(join(input.root, "tracked"), 0o644);
-	}
+	assert.deepEqual(await snapshot(input.root), before);
 });
 
 test("sanitizes inherited Git redirection variables rather than using another repository or index", async (t) => {
@@ -406,30 +377,11 @@ test("sanitizes inherited Git redirection variables rather than using another re
 		GIT_ALTERNATE_OBJECT_DIRECTORIES: join(other, ".git/objects"),
 	});
 	const before = await snapshot(other);
-	assert.deepEqual(await collect.collect(), [change("local", "added", 1, 0)]);
+	assert.deepEqual(await collect.collect(), [change("local", "added")]);
 	assert.deepEqual(await snapshot(other), before);
 });
 
-test("fails explicitly for unsupported file types and undecodable filename bytes", async (t) => {
-	for (const failure of ["fifo", "filename"] as const) {
-		const input = await fixture(t);
-		const collect = await collector(input);
-		if (failure === "fifo") {
-			await put(input.root, "unsupported", "tracked regular file\n");
-			commit(input.root);
-			await rm(join(input.root, "unsupported"));
-			execFileSync("mkfifo", [join(input.root, "unsupported")]);
-		} else
-			await writeFile(
-				Buffer.concat([Buffer.from(`${input.root}/invalid-`), Buffer.from([0xff])]),
-				"invalid name content\n",
-			);
-		await assert.rejects(collect.collect());
-		assert.deepEqual(await readdir(input.temporaryRoot), []);
-	}
-});
-
-test("disables external diff and text conversion programs during comparison", async (t) => {
+test("does not execute external diff and text conversion programs during status", async (t) => {
 	const input = await fixture(t);
 	await put(input.root, ".gitattributes", "*.custom diff=fixture\n");
 	await put(input.root, "file.custom", "previous content\n");
@@ -440,10 +392,10 @@ test("disables external diff and text conversion programs during comparison", as
 	git(input.root, "config", "diff.external", join(input.directory, "missing-external-diff"));
 	git(input.root, "config", "diff.fixture.textconv", join(input.directory, "missing-textconv"));
 	const collect = await collector(input);
-	assert.deepEqual(await collect.collect(), [change("file.custom", "modified", 1, 1)]);
+	assert.deepEqual(await collect.collect(), [change("file.custom", "modified")]);
 });
 
-test("scopes parent repositories above the workspace before renames and content reads", async (t) => {
+test("scopes parent Git status to the workspace and hides outside rename sources", async (t) => {
 	const input = await fixture(t);
 	const workspace = join(input.root, "workspace");
 	await mkdir(workspace);
@@ -455,13 +407,14 @@ test("scopes parent repositories above the workspace before renames and content 
 	await rename(join(input.root, "outside-in"), join(workspace, "arrived"));
 	await rename(join(workspace, "inside-out"), join(input.root, "departed"));
 	await put(input.root, "outside-unreadable", "outside modified\n");
+	git(input.root, "add", "--all");
 	await chmod(join(input.root, "outside-unreadable"), 0);
 	const seen: WorkspaceChange[] = [];
 	const collect = await collector({ ...input, root: workspace }, (entry) => {
 		seen.push(entry);
 		return [];
 	});
-	assert.deepEqual(await collect.collect(), [change("arrived", "added", 1, 0), change("inside-out", "deleted", 0, 1)]);
+	assert.deepEqual(await collect.collect(), [change("arrived", "added"), change("inside-out", "deleted")]);
 	assert.deepEqual(seen, [
 		{ repo: ".", path: "arrived", kind: "added" },
 		{ repo: ".", path: "inside-out", kind: "deleted" },
@@ -501,11 +454,11 @@ test("honors declaration order and nested ownership, skipping undeclared clones,
 	await put(root, "absent/new", "newly appearing excluded\n");
 	const before = await snapshot(root);
 	assert.deepEqual(await collect.collect(), [
-		change("nested/deep/overlap", "modified", 1, 1, { repo: "nested/deep" }),
-		change("nested/deep/own", "modified", 1, 1, { repo: "nested/deep" }),
-		change("main", "modified", 1, 1),
-		change("nested/overlap", "modified", 1, 1, { repo: "nested" }),
-		change("nested/own", "modified", 1, 1, { repo: "nested" }),
+		change("nested/deep/overlap", "modified", { repo: "nested/deep" }),
+		change("nested/deep/own", "modified", { repo: "nested/deep" }),
+		change("main", "modified"),
+		change("nested/overlap", "modified", { repo: "nested" }),
+		change("nested/own", "modified", { repo: "nested" }),
 	]);
 	assert.deepEqual(
 		seen.map(({ repo, path }) => ({ repo, path })),
@@ -518,7 +471,6 @@ test("honors declaration order and nested ownership, skipping undeclared clones,
 		],
 	);
 	assert.deepEqual(await snapshot(root), before);
-	assert.deepEqual(await readdir(input.temporaryRoot), []);
 });
 
 test("omits parent gitlink dirtiness while collecting the declared child", async (t) => {
@@ -532,7 +484,7 @@ test("omits parent gitlink dirtiness while collecting the declared child", async
 	git(input.root, "commit", "-qm", "gitlink");
 	await put(nested, "file", "nested current\n");
 	const collect = await collector(input, () => [], [".", "nested"]);
-	assert.deepEqual(await collect.collect(), [change("nested/file", "modified", 1, 1, { repo: "nested" })]);
+	assert.deepEqual(await collect.collect(), [change("nested/file", "modified", { repo: "nested" })]);
 });
 
 test("preserves an in-workspace declared repository alias without duplicating physical files", async (t) => {
@@ -554,10 +506,10 @@ test("preserves an in-workspace declared repository alias without duplicating ph
 	);
 	await put(physical, "file", "physical current\n");
 	const before = await snapshot(input.root);
-	assert.deepEqual(await collect.collect(), [change("alias/file", "modified", 1, 1, { repo: "alias" })]);
+	assert.deepEqual(await collect.collect(), [change("alias/file", "modified", { repo: "alias" })]);
 	assert.deepEqual(seen, [{ repo: "alias", path: "alias/file", kind: "modified" }]);
 	assert.deepEqual(await snapshot(input.root), before);
-	assert.deepEqual(await readdir(input.temporaryRoot), []);
+
 	const outside = join(input.directory, "outside");
 	await mkdir(outside);
 	await rm(join(input.root, "alias"));
@@ -565,7 +517,24 @@ test("preserves an in-workspace declared repository alias without duplicating ph
 	const replaced = await snapshot(input.root);
 	await assert.rejects(collect.collect());
 	assert.deepEqual(await snapshot(input.root), replaced);
-	assert.deepEqual(await readdir(input.temporaryRoot), []);
+});
+
+test("keeps missing declared children excluded beneath an aliased repository", async (t) => {
+	const input = await fixture(t);
+	const physical = join(input.root, "physical");
+	await put(input.root, ".gitignore", "physical/\nalias\n");
+	commit(input.root);
+	await mkdir(physical);
+	git(physical, "init", "-q");
+	await put(physical, "file", "original\n");
+	commit(physical);
+	await symlink("physical", join(input.root, "alias"));
+	const collect = await collector(input, () => [], [".", "alias", "alias/absent"]);
+	await put(physical, "file", "current\n");
+	await put(physical, "absent/new-file", "appeared after startup\n");
+	const before = await snapshot(input.root);
+	assert.deepEqual(await collect.collect(), [change("alias/file", "modified", { repo: "alias" })]);
+	assert.deepEqual(await snapshot(input.root), before);
 });
 
 test("fails when an available nested repository loses its Git identity or disappears", async (t) => {
@@ -581,7 +550,6 @@ test("fails when an available nested repository loses its Git identity or disapp
 		const before = await snapshot(input.root);
 		await assert.rejects(collect.collect());
 		assert.deepEqual(await snapshot(input.root), before);
-		assert.deepEqual(await readdir(input.temporaryRoot), []);
 	}
 });
 
@@ -605,14 +573,540 @@ test("isolates source split-index files and index hooks on success and policy fa
 		}
 		const before = await snapshot(root);
 		const collect = await collector(input);
-		assert.deepEqual(await collect.collect(), [change("tracked", "modified", 1, 1)], configuration);
+		assert.deepEqual(await collect.collect(), [change("tracked", "modified")], configuration);
 		assert.deepEqual(await snapshot(root), before, configuration);
-		assert.deepEqual(await readdir(input.temporaryRoot), []);
+
 		const failure = await collector(input, () => {
 			throw new Error("late policy failure");
 		});
-		await assert.rejects(failure.collect(), /late policy failure/);
+		await assert.rejects(
+			failure.collect(),
+			(error: Error) => error.cause instanceof Error && error.cause.message === "late policy failure",
+		);
 		assert.deepEqual(await snapshot(root), before, configuration);
-		assert.deepEqual(await readdir(input.temporaryRoot), []);
 	}
 });
+
+test("keeps staged renames but reports unstaged moves as additions/deletions", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, "staged-old", "staged rename\n");
+	await put(input.root, "unstaged-old", "unstaged rename\n");
+	commit(input.root);
+	git(input.root, "mv", "staged-old", "staged-new");
+	await rename(join(input.root, "unstaged-old"), join(input.root, "unstaged-new"));
+	assert.deepEqual(await (await collector(input)).collect(), [
+		change("staged-new", "renamed", { from: "staged-old" }),
+		change("unstaged-new", "added"),
+		change("unstaged-old", "deleted"),
+	]);
+});
+
+test("preserves mode-only changes and cancels staged chmod reversals", async (t) => {
+	const input = await fixture(t);
+	git(input.root, "config", "core.fileMode", "true");
+	await put(input.root, "mode", "mode\n");
+	await put(input.root, "reversed", "reversed\n");
+	commit(input.root);
+	await chmod(join(input.root, "mode"), 0o755);
+	await chmod(join(input.root, "reversed"), 0o755);
+	git(input.root, "add", "reversed");
+	await chmod(join(input.root, "reversed"), 0o644);
+	assert.deepEqual(await (await collector(input)).collect(), [change("mode", "modified")]);
+});
+
+test("keeps clean CRLF and working-tree encoding normalization Git-owned without refreshing stat data", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, ".gitattributes", "*.txt text eol=crlf\n*.utf16 text working-tree-encoding=UTF-16LE\n");
+	await put(input.root, "clean.txt", "first\r\nsecond\r\n");
+	await put(input.root, "clean.utf16", Buffer.from("hello\n", "utf16le"));
+	commit(input.root);
+	// Rewrite identical bytes to invalidate index stat data without making a content change.
+	await put(input.root, "clean.txt", "first\r\nsecond\r\n");
+	await put(input.root, "clean.utf16", Buffer.from("hello\n", "utf16le"));
+	const before = await snapshot(input.root);
+	assert.deepEqual(await (await collector(input)).collect(), []);
+	assert.deepEqual(await snapshot(input.root), before);
+});
+
+test("fails usefully for unresolved conflicts rather than reporting an incomplete list", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, "conflicted", "base\n");
+	commit(input.root);
+	git(input.root, "checkout", "-qb", "other");
+	await put(input.root, "conflicted", "theirs\n");
+	commit(input.root);
+	git(input.root, "checkout", "-q", "main");
+	await put(input.root, "conflicted", "ours\n");
+	commit(input.root);
+	assert.throws(() => git(input.root, "merge", "other"));
+	const before = await snapshot(input.root);
+	await assert.rejects(
+		(await collector(input)).collect(),
+		(error: Error) => error.cause instanceof Error && /Unresolved merge conflict: conflicted/.test(error.cause.message),
+	);
+	assert.deepEqual(await snapshot(input.root), before);
+});
+
+test("uses trusted normalization filters and reports required filter failures", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, ".gitattributes", "*.filtered filter=fixture\n");
+	git(input.root, "config", "filter.fixture.clean", "tr A-Z a-z");
+	await put(input.root, "file.filtered", "baseline\n");
+	commit(input.root);
+	git(input.root, "rm", "-q", "file.filtered");
+	await put(input.root, "file.filtered", "BASELINE\n");
+	const before = await snapshot(input.root);
+	assert.deepEqual(await (await collector(input)).collect(), []);
+	assert.deepEqual(await snapshot(input.root), before);
+	git(input.root, "config", "filter.fixture.clean", "false");
+	git(input.root, "config", "filter.fixture.required", "true");
+	await assert.rejects((await collector(input)).collect());
+});
+
+test("rejects partial/promisor repository configuration before status", async (t) => {
+	for (const [key, value] of [
+		["extensions.partialClone", "origin"],
+		["remote.origin.promisor", "true"],
+	]) {
+		const input = await fixture(t);
+		git(input.root, "config", key as string, value as string);
+		await assert.rejects(
+			(await collector(input)).collect(),
+			(error: Error) => error.cause instanceof Error && /Partial\/promisor/.test(error.cause.message),
+		);
+	}
+});
+
+test("uses a fixed number of bulk Git commands as the tracked file count grows", async (t) => {
+	for (const count of [1, 250]) {
+		const input = await fixture(t);
+		for (let index = 0; index < count; index++) await put(input.root, `file-${index}`, `baseline ${index}\n`);
+		commit(input.root);
+		for (let index = 0; index < count; index++) await put(input.root, `file-${index}`, `modified ${index}\n`);
+		const gitProcess = createGitProcess(env);
+		const repositories = await resolveRepositories(input.root, [{ path: "." }], gitProcess);
+		const commands: string[] = [];
+		const collect = createWorkspaceChanges({
+			root: input.root,
+			repositories,
+			codebasesForChange: () => [],
+			git: (cwd, args, options) => {
+				commands.push(args[0] as string);
+				return gitProcess(cwd, args, options);
+			},
+		});
+		assert.equal((await collect.collect()).changes.length, count);
+		assert.deepEqual(commands, ["rev-parse", "config", "ls-files", "rev-parse", "diff"]);
+	}
+});
+
+test("rejects undecodable filename bytes and supports aborted collection", async (t) => {
+	const input = await fixture(t);
+	await writeFile(Buffer.concat([Buffer.from(`${input.root}/invalid-`), Buffer.from([0xff])]), "invalid\n");
+	await assert.rejects((await collector(input)).collect());
+	const controller = new AbortController();
+	controller.abort(new Error("stopped"));
+	await assert.rejects((await collector(input)).collect(controller.signal), /stopped/);
+});
+
+test("reconciles restored deletion and rename sources by HEAD content and mode", async (t) => {
+	for (const scenario of [
+		"equal",
+		"different",
+		"rename-back",
+		"rename-recreated",
+		"executable",
+		"link",
+		"placeholder",
+		"directory",
+	] as const) {
+		const input = await fixture(t);
+		git(input.root, "config", "core.fileMode", "true");
+		if (scenario === "link" || scenario === "placeholder") await symlink("target", join(input.root, "old"));
+		else await put(input.root, "old", "baseline\n");
+		commit(input.root);
+		if (scenario.startsWith("rename")) {
+			git(input.root, "mv", "old", "new");
+			if (scenario === "rename-back") await rename(join(input.root, "new"), join(input.root, "old"));
+			else await put(input.root, "old", "baseline\n");
+		} else {
+			git(input.root, "rm", "-q", "old");
+			if (scenario === "link") await symlink("target", join(input.root, "old"));
+			else if (scenario === "placeholder") {
+				git(input.root, "config", "core.symlinks", "false");
+				await put(input.root, "old", "target");
+			} else if (scenario === "directory") await put(input.root, "old/child", "new child\n");
+			else await put(input.root, "old", scenario === "different" ? "different\n" : "baseline\n");
+			if (scenario === "executable") await chmod(join(input.root, "old"), 0o755);
+		}
+		const before = await snapshot(input.root);
+		const actual = await (await collector(input)).collect();
+		const expected =
+			scenario === "different" || scenario === "executable"
+				? [change("old", "modified")]
+				: scenario === "rename-recreated"
+					? [change("new", "added")]
+					: scenario === "directory"
+						? [change("old", "deleted"), change("old/child", "added")]
+						: [];
+		assert.deepEqual(actual, expected, scenario);
+		assert.deepEqual(await snapshot(input.root), before, scenario);
+	}
+});
+
+test("indexes referenced codebases safely and rejects conflicting definitions across repositories", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, "file", "new\n");
+	const collect = await collector(input, () => [
+		{ id: "__proto__", guidance: "shared" },
+		{ id: "other", guidance: "shared" },
+		{ id: "__proto__", guidance: "shared" },
+	]);
+	const result = await collect.collectResult();
+	assert.deepEqual(result.changes, [change("file", "added", { codebases: ["__proto__", "other"] })]);
+	assert.deepEqual(
+		JSON.parse(JSON.stringify(result.codebases)),
+		JSON.parse('{"__proto__":{"guidance":"shared"},"other":{"guidance":"shared"}}'),
+	);
+	await mkdir(join(input.root, "nested"));
+	git(join(input.root, "nested"), "init", "-q");
+	await put(input.root, "nested/file", "new nested\n");
+	const conflicting = await collector(input, (item) => [{ id: "same", guidance: item.repo }], [".", "nested"]);
+	await assert.rejects(
+		conflicting.collect(),
+		(error: Error) => error.cause instanceof Error && /Conflicting guidance/.test(error.cause.message),
+	);
+});
+
+test("rejects corrupt HEAD refs while allowing unborn staged-then-deleted additions", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, "transient", "temporary\n");
+	git(input.root, "add", "transient");
+	await rm(join(input.root, "transient"));
+	assert.deepEqual(await (await collector(input)).collect(), []);
+	await writeFile(join(input.root, ".git/refs/heads/main"), "broken-ref\n");
+	await assert.rejects((await collector(input)).collect());
+	await writeFile(join(input.root, ".git/refs/heads/main"), `${"a".repeat(40)}\n`);
+	await assert.rejects((await collector(input)).collect());
+});
+
+test("rejects equal conflict stages even when bulk diff would be empty and ignores outside conflicts", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, "conflict", "same\n");
+	await put(input.root, "workspace/file", "owned\n");
+	commit(input.root);
+	const oid = git(input.root, "rev-parse", "HEAD:conflict").trim();
+	git(input.root, "update-index", "--force-remove", "conflict");
+	execFileSync("git", ["-C", input.root, "update-index", "--index-info"], {
+		env,
+		input: [1, 2, 3].map((stage) => `100644 ${oid} ${stage}\tconflict\n`).join(""),
+	});
+	assert.equal(git(input.root, "diff", "--raw", "HEAD"), "");
+	await assert.rejects((await collector(input)).collect());
+	assert.deepEqual(await (await collector({ root: join(input.root, "workspace") })).collect(), []);
+});
+
+test("preserves a leading BOM character in untracked and restored filenames", async (t) => {
+	const input = await fixture(t);
+	const name = "\uFEFFname";
+	await put(input.root, name, "literal filename\n");
+	const collect = await collector(input);
+	const untracked = await snapshot(input.root);
+	assert.deepEqual(await collect.collect(), [change(name, "added")]);
+	assert.deepEqual(await snapshot(input.root), untracked);
+	commit(input.root);
+	git(input.root, "rm", "-q", "--", name);
+	await put(input.root, name, "literal filename\n");
+	const restored = await snapshot(input.root);
+	assert.deepEqual(await collect.collect(), []);
+	assert.deepEqual(await snapshot(input.root), restored);
+});
+
+test("reconciles executable restorations using Git's owner execute bit", async (t) => {
+	for (const [headMode, currentMode, changed] of [
+		[0o644, 0o654, false],
+		[0o644, 0o645, false],
+		[0o755, 0o655, true],
+		[0o755, 0o744, false],
+	] as const) {
+		const input = await fixture(t);
+		git(input.root, "config", "core.fileMode", "true");
+		await put(input.root, "file", "same content\n");
+		await chmod(join(input.root, "file"), headMode);
+		commit(input.root);
+		git(input.root, "rm", "-q", "file");
+		await put(input.root, "file", "same content\n");
+		await chmod(join(input.root, "file"), currentMode);
+		const before = await snapshot(input.root);
+		assert.deepEqual(
+			await (await collector(input)).collect(),
+			changed ? [change("file", "modified")] : [],
+			`${headMode.toString(8)} -> ${currentMode.toString(8)}`,
+		);
+		assert.deepEqual(await snapshot(input.root), before);
+	}
+});
+
+test("preserves newline and trailing-space roots and tagged-looking untracked filenames", async (t) => {
+	const input = await fixture(t);
+	const root = join(input.directory, " root\nwith trailing space ");
+	await rename(input.root, root);
+	await put(root, "tracked", "baseline\n");
+	commit(root);
+	await put(root, "tracked", "changed\n");
+	const names = [`100644 ${"a".repeat(40)} 1\tpretend\nconflict`, "M tracked", "? untracked"];
+	for (const name of names) await put(root, name, "literal untracked\n");
+	const collect = await collector({ root });
+	const before = await snapshot(root);
+	assert.deepEqual(await collect.collect(), [
+		...names.toSorted().map((name) => change(name, "added")),
+		change("tracked", "modified"),
+	]);
+	assert.deepEqual(await snapshot(root), before);
+});
+
+test("checks changed promisor configuration and pack markers on every Refresh", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, "tracked", "baseline\n");
+	commit(input.root);
+	await put(input.root, "tracked", "changed\n");
+	const collect = await collector(input);
+	assert.deepEqual(await collect.collect(), [change("tracked", "modified")]);
+	git(input.root, "config", "remote.origin.promisor", "true");
+	const configured = await snapshot(input.root);
+	await assert.rejects(
+		collect.collect(),
+		(error: Error) => error.cause instanceof Error && /Partial\/promisor/.test(error.cause.message),
+	);
+	assert.deepEqual(await snapshot(input.root), configured);
+	git(input.root, "config", "remote.origin.promisor", "false");
+	const marker = join(input.root, ".git/objects/pack/new.promisor");
+	await writeFile(marker, "");
+	const marked = await snapshot(input.root);
+	await assert.rejects(
+		collect.collect(),
+		(error: Error) => error.cause instanceof Error && /Partial\/promisor/.test(error.cause.message),
+	);
+	assert.deepEqual(await snapshot(input.root), marked);
+	await rm(marker);
+	assert.deepEqual(await collect.collect(), [change("tracked", "modified")]);
+});
+
+test("rejects ignored equal conflict stages before HEAD or diff in the combined listing", async (t) => {
+	const input = await fixture(t);
+	await put(input.root, "tracked", "same\n");
+	await put(input.root, ".gitignore", "conflict*\n");
+	commit(input.root);
+	const name = "conflict\nwith\ttabs";
+	const oid = git(input.root, "rev-parse", "HEAD:tracked").trim();
+	execFileSync("git", ["-C", input.root, "update-index", "-z", "--index-info"], {
+		env,
+		input: Buffer.from([1, 2, 3].map((stage) => `100644 ${oid} ${stage}\t${name}\0`).join("")),
+	});
+	await put(input.root, name, "ignored conflict\n");
+	const gitProcess = createGitProcess(env);
+	const repositories = await resolveRepositories(input.root, [{ path: "." }], gitProcess);
+	const seen: string[][] = [];
+	const collect = createWorkspaceChanges({
+		root: input.root,
+		repositories,
+		codebasesForChange: () => [],
+		git: (cwd, args, options) => {
+			seen.push([...args]);
+			return gitProcess(cwd, args, options);
+		},
+	});
+	const before = await snapshot(input.root);
+	await assert.rejects(
+		collect.collect(),
+		(error: Error) =>
+			error.cause instanceof Error && error.cause.message.includes(`Unresolved merge conflict: ${name}`),
+	);
+	assert.equal(
+		seen.some((args) => args[0] === "diff" || args.includes("HEAD^{commit}")),
+		false,
+	);
+	const listing = seen.find((args) => args[0] === "ls-files");
+	assert.ok(listing);
+	for (const flag of ["--unmerged", "--others", "--exclude-standard", "-t", "-z"]) assert.ok(listing.includes(flag));
+	assert.deepEqual(await snapshot(input.root), before);
+});
+
+test("uses two serial Git lanes and applies policy after both finish in declaration order", {
+	timeout: 5000,
+}, async (t) => {
+	const input = await fixture(t);
+	const paths = ["slow", "fast", "third"];
+	for (const path of paths) {
+		await mkdir(join(input.root, path));
+		git(join(input.root, path), "init", "-q");
+		await put(input.root, `${path}/file`, "baseline\n");
+		commit(join(input.root, path));
+		await put(input.root, `${path}/file`, "changed\n");
+	}
+	const gitProcess = createGitProcess(env);
+	const repositories = await resolveRepositories(
+		input.root,
+		paths.map((path) => ({ path })),
+		gitProcess,
+	);
+	let releaseFirst!: () => void;
+	const firstFinished = new Promise<void>((resolve) => {
+		releaseFirst = resolve;
+	});
+	let releaseThird!: () => void;
+	const thirdFinished = new Promise<void>((resolve) => {
+		releaseThird = resolve;
+	});
+	t.after(() => {
+		releaseFirst();
+		releaseThird();
+	});
+	let active = 0;
+	let peak = 0;
+	const busy = new Set<string>();
+	const finished: string[] = [];
+	const seen: string[] = [];
+	const before = await snapshot(input.root);
+	const result = await createWorkspaceChanges({
+		root: input.root,
+		repositories,
+		git: async (cwd, args, options) => {
+			assert.equal(busy.has(cwd), false, "commands within each repository stay serial");
+			busy.add(cwd);
+			active++;
+			peak = Math.max(peak, active);
+			try {
+				if (cwd === join(input.root, "slow")) {
+					if (args[0] === "diff") await thirdFinished;
+					else await firstFinished;
+				}
+				const result = await gitProcess(cwd, args, options);
+				if (args[0] === "diff") {
+					finished.push(cwd);
+					if (cwd === join(input.root, "fast")) releaseFirst();
+					if (cwd === join(input.root, "third")) releaseThird();
+				}
+				return result;
+			} finally {
+				active--;
+				busy.delete(cwd);
+			}
+		},
+		codebasesForChange: (item) => {
+			assert.equal(active, 0, "policy runs after collection lanes join");
+			seen.push(item.repo);
+			return [{ id: item.repo, guidance: "shared" }];
+		},
+	}).collect();
+	assert.equal(peak, 2);
+	assert.deepEqual(
+		finished,
+		["fast", "third", "slow"].map((path) => join(input.root, path)),
+	);
+	assert.deepEqual(seen, paths);
+	assert.deepEqual(
+		result.changes.map((item) => item.repo),
+		paths,
+	);
+	assert.deepEqual(Object.keys(result.codebases), paths);
+	assert.deepEqual(await snapshot(input.root), before);
+});
+
+async function filterPids(marker: string): Promise<number[]> {
+	for (let attempt = 0; attempt < 200; attempt++) {
+		try {
+			return JSON.parse(await readFile(marker, "utf8"));
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+	}
+	throw new Error("Filter did not report its PIDs");
+}
+
+for (const mode of ["peer failure", "parent abort"]) {
+	test(`${mode} joins cancelled filter descendants and preserves first-failure attribution`, {
+		timeout: 5000,
+	}, async (t) => {
+		const input = await fixture(t);
+		const slow = join(input.root, "slow");
+		const bad = join(input.root, "bad");
+		for (const root of [slow, bad]) {
+			await mkdir(root);
+			git(root, "init", "-q");
+			await put(root, "file.txt", "baseline\n");
+			commit(root);
+			await put(root, "file.txt", "changed\n");
+		}
+		const marker = join(input.directory, "pids");
+		const script = join(slow, ".git/filter.mjs");
+		await writeFile(
+			script,
+			`
+import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+process.on('SIGTERM', () => {});
+const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); process.stdout.write('ready'); setInterval(() => {}, 1000)"], { stdio: ['ignore', 'pipe', 'ignore'] });
+child.stdout.once('data', () => writeFileSync(process.env.FORGE_FILTER_PIDS, JSON.stringify([process.pid, child.pid])));
+setInterval(() => {}, 1000);
+`,
+		);
+		await put(slow, ".gitattributes", "*.txt filter=hanging\n");
+		git(slow, "config", "filter.hanging.clean", `${process.execPath} ${script}`);
+		git(slow, "config", "filter.hanging.required", "true");
+		if (mode === "peer failure") git(bad, "config", "remote.origin.promisor", "true");
+		const gitProcess = createGitProcess({ ...env, FORGE_FILTER_PIDS: marker });
+		const repositories = await resolveRepositories(input.root, [{ path: "slow" }, { path: "bad" }], gitProcess);
+		let policies = 0;
+		let active = 0;
+		const controller = new AbortController();
+		t.after(() => controller.abort());
+		const before = await snapshot(input.root);
+		await assert.rejects(
+			createWorkspaceChanges({
+				root: input.root,
+				repositories,
+				git: async (cwd, args, options) => {
+					active++;
+					try {
+						if (cwd === bad && args[0] === "config") {
+							await filterPids(marker);
+							if (mode === "parent abort") controller.abort(new Error("external stop"));
+						}
+						return await gitProcess(cwd, args, options);
+					} finally {
+						active--;
+					}
+				},
+				codebasesForChange: () => {
+					policies++;
+					return [];
+				},
+			}).collect(controller.signal),
+			(error: Error) => {
+				if (mode === "peer failure") {
+					assert.equal(error.message, "Change collection failed for repository bad");
+					assert.ok(error.cause instanceof Error);
+					assert.match(error.cause.message, /Partial\/promisor/);
+				} else {
+					const messages: string[] = [];
+					for (let cause: unknown = error; cause instanceof Error; cause = cause.cause) messages.push(cause.message);
+					assert.match(messages.join(" "), /external stop|aborted/);
+				}
+				return true;
+			},
+		);
+		assert.equal(active, 0, "all pending Git lanes settled before rejection");
+		assert.equal(policies, 0);
+		for (const pid of await filterPids(marker)) {
+			try {
+				const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+				assert.match(stat.slice(stat.lastIndexOf(")") + 2), /^[ZX] /, `filter process ${pid} is terminated`);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+			}
+		}
+		assert.deepEqual(await snapshot(input.root), before);
+	});
+}

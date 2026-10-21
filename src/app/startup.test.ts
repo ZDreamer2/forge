@@ -91,7 +91,7 @@ appendFileSync(${JSON.stringify(log)}, 'loaded\\n');
 export default {
  repositories: [{path:'nested'}, {path:'absent'}, {path:'.'}],
  label: 'startup-policy',
- codebasesForChange(change) { return [{id: this.label, guidance: 'guidance/' + change.repo}]; }
+ codebasesForChange(change) { return [{id: this.label + ':' + change.repo, guidance: 'guidance/' + change.repo}]; }
 };`,
 	);
 	await writeFile(join(input.root, ".gitignore"), "docs/\nnested/\nabsent/\n");
@@ -120,24 +120,29 @@ export default {
 	const server = await start(input.options);
 	t.after(server.close);
 	const identity = { workspace: { root: await realpath(input.root) }, repositories: server.snapshot.repositories };
-	const expectedChange = (repo: string, path: string, addedLines: number) => ({
+	const expectedChange = (repo: string, path: string) => ({
 		repo,
 		path,
 		kind: "modified",
-		binary: false,
-		addedLines,
-		removedLines: 1,
-		codebases: [{ id: "startup-policy", guidance: `guidance/${repo}` }],
+		codebases: [`startup-policy:${repo}`],
 	});
 	assert.deepEqual(await (await fetch(`${server.address}/api/changes`)).json(), {
-		changes: [expectedChange("nested", "nested/child.txt", 1), expectedChange(".", "tracked.txt", 1)],
+		codebases: {
+			"startup-policy:nested": { guidance: "guidance/nested" },
+			"startup-policy:.": { guidance: "guidance/." },
+		},
+		changes: [expectedChange("nested", "nested/child.txt"), expectedChange(".", "tracked.txt")],
 	});
 	await writeFile(join(input.root, "tracked.txt"), "second\nextra\n");
 	await writeFile(input.policyPath, "throw new Error('Must not reload policy');");
 	execFileSync("git", ["init", "-q", join(input.root, "absent")]);
 	await writeFile(join(input.root, "absent/ignored.txt"), "not a startup participant\n");
 	assert.deepEqual(await (await fetch(`${server.address}/api/changes`)).json(), {
-		changes: [expectedChange("nested", "nested/child.txt", 1), expectedChange(".", "tracked.txt", 2)],
+		codebases: {
+			"startup-policy:nested": { guidance: "guidance/nested" },
+			"startup-policy:.": { guidance: "guidance/." },
+		},
+		changes: [expectedChange("nested", "nested/child.txt"), expectedChange(".", "tracked.txt")],
 	});
 	assert.equal(await readFile(log, "utf8"), "loaded\n");
 	assert.deepEqual(await (await fetch(`${server.address}/api/workspace`)).json(), identity);

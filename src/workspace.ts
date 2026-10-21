@@ -4,4 +4,4 @@ export type {
 	RepositoryDeclaration,
 	WorkspaceChange,
 	WorkspacePolicy,
-} from "./components/workspace-policy/index.ts";
+} from "./components/workspace-policy/authoring/index.ts";

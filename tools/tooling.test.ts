@@ -75,12 +75,22 @@ test("real graph preserves the public type re-export", () => {
 	);
 	assert.equal(result.status, 0, result.stderr);
 	const graph = JSON.parse(result.stdout);
-	const facade = graph.modules.find((module: { source: string }) => module.source === "src/workspace.ts");
-	assert.ok(
-		facade.dependencies.some(
-			(dependency: { resolved: string }) => dependency.resolved === "src/components/workspace-policy/index.ts",
-		),
-	);
+	const authoringModules = new Set([
+		"src/workspace.ts",
+		"src/components/workspace-policy/authoring/index.ts",
+		"src/components/workspace-policy/authoring/internal/types.ts",
+	]);
+	const reached = new Set<string>();
+	function visit(source: string) {
+		if (reached.has(source)) return;
+		assert.ok(authoringModules.has(source), `Public authoring declarations reach ${source}`);
+		reached.add(source);
+		const module = graph.modules.find((item: { source: string }) => item.source === source);
+		assert.ok(module, `Public type module exists: ${source}`);
+		for (const dependency of module.dependencies) visit(dependency.resolved);
+	}
+	visit("src/workspace.ts");
+	assert.deepEqual(reached, authoringModules);
 });
 
 test("HTTP libraries and component edges follow the architecture map", () => {
@@ -90,9 +100,8 @@ test("HTTP libraries and component edges follow the architecture map", () => {
 		const files: Record<string, string> = {
 			"src/components/workspace-policy/index.ts": "export type Value = string;",
 			"src/components/workspace-changes/index.ts": "export type { Value } from '../workspace-policy/index.ts';",
-			"src/components/workspace-api/index.ts":
-				"export type { Value } from '../workspace-policy/index.ts'; export type { Value as Change } from '../workspace-changes/index.ts';",
-			"src/components/workspace-api/internal/routes.ts": "import { Hono } from 'hono'; export const app = new Hono();",
+			"src/app/workspace-routes.ts": "import { Hono } from 'hono'; export const app = new Hono();",
+			"src/components/diagnostic-ui/internal/routes.ts": "import { Hono } from 'hono'; export const app = new Hono();",
 			"src/lib/loopback-access/internal/guard.ts":
 				"import type { MiddlewareHandler } from 'hono'; export type Guard = MiddlewareHandler;",
 			"src/app/http.ts": "import { Hono } from 'hono'; export const app = new Hono();",
@@ -114,20 +123,19 @@ test("HTTP libraries and component edges follow the architecture map", () => {
 		assert.equal(valid.status, 0, valid.stdout + valid.stderr);
 		write(
 			"src/components/workspace-policy/internal/invalid.ts",
-			"import '../../workspace-api/index.ts'; import { Hono } from 'hono'; export const app = new Hono();",
+			"import '../../diagnostic-ui/internal/routes.ts'; import { Hono } from 'hono'; export const app = new Hono();",
 		);
 		write("src/app/invalid.ts", "import { serve } from '@hono/node-server'; export const listen = serve;");
-		write("src/components/workspace-api/internal/invalid.ts", "import '../../unlisted/index.ts';");
 		write("src/components/unlisted/index.ts", "export type Value = string;");
 		write(
 			"src/components/workspace-changes/internal/invalid.ts",
-			"import '../../workspace-api/index.ts'; import '../../unlisted/index.ts';",
+			"import '../../diagnostic-ui/internal/routes.ts'; import '../../unlisted/index.ts';",
 		);
+		write("src/components/diagnostic-ui/internal/invalid.ts", "import '../../workspace-policy/index.ts';");
 		const invalid = cruise();
 		assert.notEqual(invalid.status, 0);
 		for (const rule of [
 			"listed-component-edges-only",
-			"workspace-api-component-edges",
 			"workspace-changes-component-edges",
 			"hono-confinement",
 			"node-adapter-confinement",

@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
+import type { WorkspacePolicy } from "../authoring/index.ts";
 import { validRepositoryPath } from "./repositories.ts";
-import type { WorkspacePolicy } from "./types.ts";
 
 /** Imports execute trusted workspace code; this is not a sandbox or hot loader. */
 export async function loadWorkspacePolicy(absolutePath: string): Promise<WorkspacePolicy> {

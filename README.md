@@ -1,8 +1,8 @@
 # @zdreamer/forge
 
 Provisional Forge workspace application. The unreleased source supports a
-foreground read-only workspace server and the policy-loading diagnostic. Registry
-release `0.1.1` supplies the diagnostic and policy types; it does not contain the
+foreground read-only workspace server, a minimal browser diagnostic and the
+policy-loading diagnostic. Registry release `0.1.1` supplies the diagnostic and policy types; it does not contain the
 server. Executable: `forge`; public authoring types: `@zdreamer/forge/workspace`.
 Licensed under [MIT](LICENSE).
 
@@ -62,6 +62,14 @@ only the port setting is imported. A missing `.env` is allowed, while unreadable
 or invalid-encoding files fail startup.
 
 The foreground process prints `http://127.0.0.1:<port>` after listener readiness.
+Open that address to see workspace/repository identity and current changed files,
+including Git-reported rename sources and concrete
+codebase memberships. Paths and guidance are displayed as text. The page shows
+loading, empty and error states; Refresh retries failed requests and clears the
+previous change list while loading. Successful workspace identity is retained
+when a request fails. Refresh reads current changes but does not reload startup
+policy or repository participation. There is no polling.
+
 `GET /api/workspace` returns the workspace root and declared available/missing
 repositories in declaration order. Invalid existing repositories, Git/access
 failures and policy/configuration errors refuse startup. Requests require that
@@ -69,19 +77,38 @@ exact Host and, when present, Origin; CLI requests may omit Origin. Restart to
 reload configuration, policy and repository identity. Stop with SIGINT or
 SIGTERM; shutdown closes the listener and releases the port.
 
-`GET /api/changes` returns `{ changes: [...] }`: net HEAD-to-current-working-copy
-changes, including non-ignored untracked files, independently of staging. Entries
-carry repository ID, workspace-relative path, kind, optional rename/copy `from`,
-binary status, added/removed line counts and concrete codebase memberships. Binary
-counts are `null`; text metadata-only changes retain zero counts.
+`GET /api/changes` returns
+`{ codebases: { id: { guidance: "path" } }, changes: [...] }`. Changes carry repo,
+workspace-relative path, added/modified/deleted/renamed kind, optional rename
+`from` and unique codebase ID arrays. Definitions occur once per response;
+conflicting guidance for one ID fails collection. No binary/line counts.
 
-Collection reads fresh working content on each request using the startup policy
-and participating repositories. Missing-at-startup repositories remain excluded;
-loss of an available repository, Git/read failures or invalid/throwing routing
-results fail the entire request. Paths stay inside the selected workspace even
-when its main Git root extends above it. Nested repositories are distinct;
-undeclared clones and Git internals are excluded. Temporary comparison state leaves
-source files, indexes and objects unchanged. Startup executes trusted policy code.
+Comparison uses one bulk HEAD/working `diff --raw --numstat -z` and non-ignored untracked listing,
+with targeted normalized hash/mode reconciliation for recreated deletion/rename
+sources. Index refresh is disabled; numstat presence removes raw stat noise while
+mode/type changes, zero-count changes and binaries remain. Counts stay internal.
+Identical staged reversals disappear. Git owns attributes, filters and
+index flags; hidden flag edits can remain hidden, and ignored recreations absent
+from the untracked list remain deletions. Unstaged moves stay deletion/addition.
+Unborn HEAD is supported; conflicts fail even with no diff. This is practical Git
+comparison, not exhaustive physical equivalence or a replacement for dirt detection.
+
+The observed command baseline is Git 2.34.1. Complete local repositories are
+supported; partial/promisor repositories fail before object-demanding comparison
+to prevent silent lazy fetch. Normal trusted clean/process filters are allowed;
+external diff/textconv, optional writes, fsmonitor and hooks are disabled. Ambient
+Git repository/index/worktree overrides do not select another checkout. Server
+commands do not stage/commit/write indexes, refs or objects. Trusted policy and
+filters can execute code with side effects; this is not an effects sandbox.
+
+Missing-at-startup repositories remain excluded; loss of an available repository,
+Git failures or invalid/throwing routing results fail the whole request. Paths
+stay inside the workspace even when its Git root extends above it. Declared
+nested repositories are distinct; undeclared clones and Git internals are excluded.
+Results are live observations, without atomic cross-repository snapshots.
+Overlapping requests share one active collection, with no result cache. A
+30-second collection deadline bounds waiting; shutdown aborts and reaps active
+Git children before completion. The browser allows 35 seconds per request, then restores retry.
 
 For a direct check while the server runs, replace the example address with the
 address printed by the server:
@@ -92,8 +119,10 @@ curl "$FORGE_ADDRESS/api/workspace"
 curl "$FORGE_ADDRESS/api/changes"
 ```
 
-`/` still returns not found; this source has no browser page yet. Registry `0.1.1`
-remains the diagnostic-only release.
+The server and browser page are read-only: no staging, commits, diff rendering,
+file browsing or agent interaction. Registry `0.1.1` remains the diagnostic-only
+release; source and installed-tarball verification do not constitute publication
+or registry adoption.
 
 ## Workspace authoring contract (provisional)
 
@@ -128,7 +157,7 @@ Repository IDs use `.` for the main repo and normalized workspace-relative POSIX
 paths for nested repos. Change paths are workspace-relative; legacy CLI changes
 can include `../` paths when the main Git root lies above the workspace.
 `codebasesForChange` resolves membership lexically, without requiring files to
-exist, and includes both rename/copy sides. Several concrete codebases can share
+exist, and includes both rename sides. Several concrete codebases can share
 guidance; membership does not imply verification.
 
 Policy modules are trusted executable code, not sandboxed; installation does not

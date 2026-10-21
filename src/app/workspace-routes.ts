@@ -1,12 +1,12 @@
 import { Hono } from "hono";
-import type { CollectedChange } from "../../workspace-changes/index.ts";
-import type { RepositoryResolution } from "../../workspace-policy/index.ts";
+import type { CollectedWorkspaceChanges } from "../components/workspace-changes/index.ts";
+import type { RepositoryResolution } from "../components/workspace-policy/index.ts";
 import { apiError, workspaceChanges, workspaceIdentity } from "./wire.ts";
 
 type Deps = {
 	root: string;
 	repositories: readonly RepositoryResolution[];
-	collectChanges: () => Promise<readonly CollectedChange[]>;
+	collectChanges: () => Promise<CollectedWorkspaceChanges>;
 };
 
 export function createWorkspaceRoutes({ root, repositories, collectChanges }: Deps) {

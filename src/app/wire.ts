@@ -1,5 +1,5 @@
-import type { CollectedChange } from "../../workspace-changes/index.ts";
-import type { RepositoryResolution } from "../../workspace-policy/index.ts";
+import type { CollectedWorkspaceChanges } from "../components/workspace-changes/index.ts";
+import type { RepositoryResolution } from "../components/workspace-policy/index.ts";
 
 type WorkspaceIdentity = {
 	workspace: { root: string };
@@ -9,15 +9,13 @@ type WorkspaceIdentity = {
 type ApiErrorCode = "forbidden" | "not_found" | "method_not_allowed" | "internal_error";
 
 type WorkspaceChanges = {
+	codebases: Record<string, { guidance: string }>;
 	changes: {
 		repo: string;
 		path: string;
-		kind: "added" | "modified" | "deleted" | "renamed" | "copied" | "type_changed";
+		kind: "added" | "modified" | "deleted" | "renamed";
 		from?: string;
-		binary: boolean;
-		addedLines: number | null;
-		removedLines: number | null;
-		codebases: { id: string; guidance: string }[];
+		codebases: string[];
 	}[];
 };
 
@@ -42,19 +40,17 @@ export function workspaceIdentity(root: string, repositories: readonly Repositor
 	};
 }
 
-export function workspaceChanges(changes: readonly CollectedChange[]): WorkspaceChanges {
+export function workspaceChanges(result: CollectedWorkspaceChanges): WorkspaceChanges {
 	return {
-		changes: changes.map((change) => ({
+		codebases: Object.fromEntries(
+			Object.entries(result.codebases).map(([id, definition]) => [id, { guidance: definition.guidance }]),
+		),
+		changes: result.changes.map((change) => ({
 			repo: change.repo,
 			path: change.path,
 			kind: change.kind,
-			...((change.kind === "renamed" || change.kind === "copied") && change.from !== undefined
-				? { from: change.from }
-				: {}),
-			binary: change.binary,
-			addedLines: change.addedLines,
-			removedLines: change.removedLines,
-			codebases: change.codebases.map((codebase) => ({ id: codebase.id, guidance: codebase.guidance })),
+			...(change.kind === "renamed" && change.from !== undefined ? { from: change.from } : {}),
+			codebases: [...change.codebases],
 		})),
 	};
 }

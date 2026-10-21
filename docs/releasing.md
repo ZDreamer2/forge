@@ -2,16 +2,22 @@
 
 ## Release notes
 
+- `0.1.2` (unreleased candidate): foreground read-only workspace server with identity/current-change
+  APIs and a minimal browser diagnostic at `/`. Refresh reads current changes;
+  restart reloads policy and repository participation. No diff/file browsing,
+  Git mutations or agent interaction. Publication and consumer registry adoption
+  remain pending; the published `0.1.1` has no server or browser page.
 - `0.1.1`: validates GitHub Actions trusted publishing and provenance. No runtime,
   policy-contract or toolchain changes from bootstrap `0.1.0`.
 - `0.1.0`: initial MIT policy-contract/diagnostic prototype.
 
 ## Release boundary
 
-This public MIT package is a provisional policy-contract/diagnostic prototype,
-not a server or review UI. Review both source history and the packed artifact for
-private material before upload. Package contents are limited to built `dist/`,
-package metadata, README and LICENSE; no install hooks run.
+This public MIT package has a provisional policy contract. The unreleased source
+adds a read-only server/browser diagnostic; it is not the full review UI. Review
+both source history and the packed artifact for private material before upload.
+Package contents are limited to built `dist/`, package metadata, README and
+LICENSE; no install hooks run.
 
 `ci.yml` checks pushes to `main`, PRs, manual runs and reusable calls. It installs
 the frozen pinned toolchain, runs type/lint/graph/tests and a clean tarball consumer

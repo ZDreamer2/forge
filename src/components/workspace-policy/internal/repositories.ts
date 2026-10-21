@@ -1,10 +1,7 @@
-import { execFile } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { promisify } from "node:util";
-import type { RepositoryDeclaration } from "./types.ts";
-
-const execute = promisify(execFile);
+import { type GitProcess, gitFailure } from "../../../lib/git/index.ts";
+import type { RepositoryDeclaration } from "../authoring/index.ts";
 
 export function validRepositoryPath(path: string): boolean {
 	return (
@@ -25,6 +22,7 @@ export type RepositoryResolution =
 export async function resolveRepositories(
 	workspaceRoot: string,
 	declarations: readonly RepositoryDeclaration[],
+	git: GitProcess,
 ): Promise<readonly RepositoryResolution[]> {
 	const root = await realpath(workspaceRoot);
 	const results: RepositoryResolution[] = [];
@@ -52,8 +50,14 @@ export async function resolveRepositories(
 		if (isAbsolute(within) || within === ".." || within.startsWith(`..${sep}`)) {
 			throw new Error(`Declared repository escapes workspace root: ${path}`);
 		}
-		const { stdout } = await execute("git", ["-C", directory, "rev-parse", "--show-toplevel"]);
-		const gitRoot = await realpath(stdout.trim());
+		const result = await git(directory, ["rev-parse", "--show-toplevel"]);
+		if (result.code !== 0) throw gitFailure(`repository probe (${path})`, result);
+		if (result.stdout.at(-1) !== 10) throw new Error("Git returned an invalid repository root");
+		const gitRoot = await realpath(new TextDecoder("utf-8", { fatal: true }).decode(result.stdout.subarray(0, -1)));
+		const fromGitRoot = relative(gitRoot, directory);
+		if (isAbsolute(fromGitRoot) || fromGitRoot === ".." || fromGitRoot.startsWith(`..${sep}`)) {
+			throw new Error(`Git root does not contain workspace: ${path}`);
+		}
 		// '.' intentionally permits a Git root above the selected workspace.
 		if (path !== "." && gitRoot !== directory) {
 			throw new Error(`Declared nested repository resolves to another Git root: ${path}`);

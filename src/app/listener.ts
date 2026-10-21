@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { getRequestListener, RequestError } from "@hono/node-server";
-import { apiError } from "../components/workspace-api/index.ts";
+import { apiError } from "./wire.ts";
 
 type Deps = {
 	fetch: (request: Request) => Response | Promise<Response>;

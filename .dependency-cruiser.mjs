@@ -7,14 +7,8 @@ export default {
 		{
 			name: "listed-component-edges-only",
 			severity: "error",
-			from: { path: "^src/components/([^/]+)/", pathNot: "^src/components/(workspace-api|workspace-changes)/" },
+			from: { path: "^src/components/([^/]+)/", pathNot: "^src/components/workspace-changes/" },
 			to: { path: "^src/components/", pathNot: "^src/components/$1/" },
-		},
-		{
-			name: "workspace-api-component-edges",
-			severity: "error",
-			from: { path: "^src/components/workspace-api/" },
-			to: { path: "^src/components/", pathNot: "^src/components/(workspace-api|workspace-policy|workspace-changes)/" },
 		},
 		{
 			name: "workspace-changes-component-edges",
@@ -27,7 +21,7 @@ export default {
 			severity: "error",
 			from: {
 				path: "^src/",
-				pathNot: "^src/(app/http(?:\\.test)?\\.ts|components/workspace-api/|lib/loopback-access/)",
+				pathNot: "^src/(app/(http|workspace-routes)(?:\\.test)?\\.ts|components/diagnostic-ui/|lib/loopback-access/)",
 			},
 			to: { path: "(^|/)hono/" },
 		},

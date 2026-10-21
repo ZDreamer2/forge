@@ -1,6 +1,6 @@
 {
 	"name": "@zdreamer/forge",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Forge workspace application and typed workspace policy contract",
 	"license": "MIT",
 	"repository": {
