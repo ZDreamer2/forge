@@ -9,7 +9,7 @@ import { basename, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const manifest = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8")) as {
+const manifest = JSON.parse(await readFile(new URL("../../../package.json", import.meta.url), "utf8")) as {
 	version: string;
 };
 const main = fileURLToPath(new URL("../main.ts", import.meta.url));

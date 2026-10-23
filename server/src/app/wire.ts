@@ -1,23 +1,6 @@
+import type { ApiErrorCode, WorkspaceChanges, WorkspaceIdentity } from "../components/api-contract/index.ts";
 import type { CollectedWorkspaceChanges } from "../components/workspace-changes/index.ts";
 import type { RepositoryResolution } from "../components/workspace-policy/index.ts";
-
-type WorkspaceIdentity = {
-	workspace: { root: string; name: string };
-	repositories: ({ path: string; status: "available"; gitRoot: string } | { path: string; status: "missing" })[];
-};
-
-type ApiErrorCode = "forbidden" | "not_found" | "method_not_allowed" | "internal_error";
-
-type WorkspaceChanges = {
-	codebases: Record<string, { guidance: string }>;
-	changes: {
-		repo: string;
-		path: string;
-		kind: "added" | "modified" | "deleted" | "renamed";
-		from?: string;
-		codebases: string[];
-	}[];
-};
 
 export function apiError(code: ApiErrorCode) {
 	const messages = {

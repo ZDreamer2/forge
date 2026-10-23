@@ -1,4 +1,4 @@
 {
 	"extends": "@zdreamer/forge-ts-service/tsconfig",
-	"include": ["src", "tools/*.ts"]
+	"include": ["tools/*.ts"]
 }

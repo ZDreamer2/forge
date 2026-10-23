@@ -1,0 +1,10 @@
+{
+	"root": false,
+	"extends": ["@zdreamer/forge-ts-service/biome"],
+	"overrides": [
+		{
+			"includes": ["src/main.ts"],
+			"linter": { "rules": { "style": { "noProcessEnv": "off" } } }
+		}
+	]
+}

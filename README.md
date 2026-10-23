@@ -11,6 +11,27 @@ use a minor release with migration notes; exact-pin the application and use its
 own policy types from the same installation. No separate policy-version field or
 compatibility layer is provided. See [release operations](https://github.com/ZDreamer2/forge/blob/main/docs/releasing.md).
 
+## Source layout
+
+One package and installation own all dependencies. Its directories separate source
+and runtime responsibilities; they are not workspace packages:
+
+```text
+server/src/    CLI, HTTP composition, domain components, public API contract and libs
+ui/src/        reserved standalone React application root (no React/Vite scaffold yet)
+docs/          application architecture and installation guidance
+tools/         tooling/release and installed-consumer checks
+dist/          normal TypeScript output, preserving server/src paths
+```
+
+The server retains its service conventions and local entries at
+`server/docs/forge/`. UI implementation and its browser tooling remain future work;
+the existing vanilla diagnostic is still server-owned. There are no member
+manifests or duplicated dependency declarations. [Architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md)
+owns source dependencies and build boundaries. The application-owned
+[HTTP API contract](https://github.com/ZDreamer2/forge/blob/main/server/docs/protocol.md)
+specifies wire behavior independently of the currently implemented operations.
+
 ## Develop
 
 Use Node 24.21.0 (`.nvmrc`) and Corepack pnpm 11.15.1:
@@ -22,6 +43,11 @@ corepack pnpm --config.verify-deps-before-run=error run build
 corepack pnpm --config.verify-deps-before-run=error run test:workspace
 ```
 
+For server-only acceptance, run
+`corepack pnpm --config.verify-deps-before-run=error run check:server` from this
+root. It includes server/contract typechecks, server-scoped Biome checks,
+architectural dependency rules and server tests.
+
 The independent installation uses published `@zdreamer/forge-ts-service@0.1.1`
 presets, their exact-pinned tool peers, the seven-day third-party release-age
 floor, and explicit SWC script permission. `.cache/pnpm` is the portable default;
@@ -29,14 +55,20 @@ a hosting checkout can override the store during installation.
 
 `test:workspace` checks public types and the installed executable through an
 isolated tarball consumer, without publishing or running install scripts. An
-optional `workspace.ts` argument also checks a consuming project's policy.
+optional `workspace.ts` argument also checks a consuming project's policy. Run
+aggregate commands at the repository root: the gate delegates service-local checks
+to `server/`, including its public API contract's browser-safety checks, and verifies
+cross-runtime boundaries at the root.
+Build is a clean followed by ordinary TypeScript compilation, without output
+flattening or import rewriting. Root `bin` and `exports` select the emitted paths;
+use the command/public export instead of depending on physical dist paths.
 
 ## Run the source server
 
 After building, run from this repository:
 
 ```sh
-node dist/main.js serve --workspace /absolute/path/to/checkout
+node dist/server/src/main.js serve --workspace /absolute/path/to/checkout
 ```
 
 The CLI form is `forge serve --workspace <path>` once a server-capable release

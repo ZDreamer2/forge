@@ -17,12 +17,12 @@
 		"dist/"
 	],
 	"bin": {
-		"forge": "./dist/main.js"
+		"forge": "./dist/server/src/main.js"
 	},
 	"exports": {
 		"./workspace": {
-			"types": "./dist/workspace.d.ts",
-			"default": "./dist/workspace.js"
+			"types": "./dist/server/src/workspace.d.ts",
+			"default": "./dist/server/src/workspace.js"
 		}
 	},
 	"engines": {
@@ -31,7 +31,8 @@
 	"packageManager": "pnpm@11.15.1",
 	"scripts": {
 		"build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
-		"check": "tsc --noEmit && biome check . && depcruise --config .dependency-cruiser.mjs 'src/**/*.ts' && node --test",
+		"check": "tsc --noEmit && biome check . && corepack pnpm --config.verify-deps-before-run=error run check:server && depcruise --config .dependency-cruiser.mjs server/src ui/src && node --test tools/*.test.ts",
+		"check:server": "tsc -p server/tsconfig.json --noEmit && tsc -p server/tsconfig.contract.json --noEmit && biome check server && cd server && depcruise --config .dependency-cruiser.mjs 'src/**/*.ts' && node --test",
 		"test:workspace": "node tools/workspace-consumer.ts"
 	},
 	"devDependencies": {

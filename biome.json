@@ -1,18 +1,6 @@
 {
 	"extends": ["@zdreamer/forge-ts-service/biome"],
 	"files": {
-		"includes": ["src/**", "tools/*.ts", "*.json", "*.mjs"]
-	},
-	"overrides": [
-		{
-			"includes": ["src/main.ts"],
-			"linter": {
-				"rules": {
-					"style": {
-						"noProcessEnv": "off"
-					}
-				}
-			}
-		}
-	]
+		"includes": ["server/**", "ui/**", "tools/*.ts", "*.json", "*.mjs"]
+	}
 }

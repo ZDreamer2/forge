@@ -1,44 +1,53 @@
 import base from "@zdreamer/forge-ts-service/dependency-cruiser";
 
+const contract = "^server/src/components/api-contract/";
+
+// Installation boundaries complement, rather than replace, server-local zone rules.
 export default {
-	...base,
 	forbidden: [
-		...base.forbidden,
 		{
-			name: "listed-component-edges-only",
+			name: "source-not-to-installation-entrypoints",
 			severity: "error",
-			from: { path: "^src/components/([^/]+)/", pathNot: "^src/components/workspace-changes/" },
-			to: { path: "^src/components/", pathNot: "^src/components/$1/" },
+			from: { path: "^(server|ui)/src/" },
+			to: { path: "^(tools|scripts)/" },
 		},
 		{
-			name: "workspace-changes-component-edges",
+			name: "browser-not-to-server-internals",
 			severity: "error",
-			from: { path: "^src/components/workspace-changes/" },
-			to: { path: "^src/components/", pathNot: "^src/components/(workspace-changes|workspace-policy)/" },
+			from: { path: "^ui/src/" },
+			to: { path: "^server/", pathNot: `${contract}index\\.ts$` },
 		},
 		{
-			name: "hono-confinement",
+			name: "server-not-to-ui",
 			severity: "error",
-			from: {
-				path: "^src/",
-				pathNot: "^src/(app/(http|workspace-routes)(?:\\.test)?\\.ts|components/diagnostic-ui/|lib/loopback-access/)",
-			},
-			to: { path: "(^|/)hono/" },
+			from: { path: "^server/src/" },
+			to: { path: "^ui/" },
 		},
 		{
-			name: "node-adapter-confinement",
+			name: "api-contract-is-independent",
 			severity: "error",
-			from: { path: "^src/", pathNot: "^src/app/listener(?:\\.test)?\\.ts$" },
-			to: { path: "(^|/)@hono/node-server/" },
+			from: { path: contract },
+			to: { pathNot: contract },
 		},
 		{
-			name: "no-unlisted-third-party-runtime",
+			name: "browser-not-to-node",
 			severity: "error",
-			from: { path: "^src/" },
-			to: {
-				dependencyTypes: ["npm", "npm-dev", "npm-optional", "npm-peer"],
-				pathNot: "(^|/)(hono|@hono/node-server)/",
-			},
+			from: { path: `^ui/src/|${contract}` },
+			to: { dependencyTypes: ["core"] },
 		},
+		{
+			name: "api-contract-public-entry-only",
+			severity: "error",
+			from: { path: "^(server|ui)/src/", pathNot: contract },
+			to: { path: contract, pathNot: `${contract}index\\.ts$` },
+		},
+		{ name: "no-circular", severity: "error", from: {}, to: { circular: true } },
 	],
+	options: {
+		...base.options,
+		enhancedResolveOptions: {
+			...base.options.enhancedResolveOptions,
+			extensions: [".tsx", ...base.options.enhancedResolveOptions.extensions],
+		},
+	},
 };

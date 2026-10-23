@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { findPackageJSON } from "node:module";
 import { fileURLToPath } from "node:url";
 import { inspect } from "./app/inspect.ts";
 import { start } from "./app/startup.ts";
@@ -11,7 +12,9 @@ try {
 	if (command === "--help" || command === undefined) {
 		console.log(usage);
 	} else if (command === "serve" && args.length === 2 && args[0] === "--workspace" && args[1] !== "") {
-		const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as {
+		const manifestPath = findPackageJSON(import.meta.url);
+		if (manifestPath === undefined) throw new Error("Forge package manifest was not found");
+		const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
 			version: string;
 		};
 		const server = await start({ workspace: args[1] as string, cwd: process.cwd(), env: process.env });

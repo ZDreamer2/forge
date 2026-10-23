@@ -13,10 +13,11 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { request as httpRequest } from "node:http";
+import { findPackageJSON } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const temporary = mkdtempSync(join(tmpdir(), "forge-consumer-"));
@@ -153,7 +154,9 @@ async function installedServer(executable: string, cwd: string, workspace: strin
 			]),
 			"Installed server readiness",
 		);
-		const manifest = JSON.parse(readFileSync(join(dirname(realpathSync(executable)), "../package.json"), "utf8"));
+		const manifestPath = findPackageJSON(pathToFileURL(realpathSync(executable)));
+		assert.ok(manifestPath);
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 		assert.equal(
 			stdout,
 			`Forge @zdreamer/forge ${manifest.version}\nExecutable: ${JSON.stringify(realpathSync(executable))}\nWorkspace: ${JSON.stringify(workspace)}\nhttp://127.0.0.1:${port}\n`,
@@ -333,6 +336,12 @@ try {
 	assert.equal(installedManifest.name, manifest.name);
 	assert.equal(installedManifest.version, manifest.version);
 	assert.equal(installedManifest.license, "MIT");
+	assert.ok(existsSync(join(installed, "dist/server/src/components/api-contract/index.d.ts")));
+	assert.equal(existsSync(join(installed, "dist/protocol")), false);
+	assert.match(
+		readFileSync(join(installed, "dist/server/src/app/wire.d.ts"), "utf8"),
+		/\.\.\/components\/api-contract\/index\.ts/,
+	);
 	assert.match(readFileSync(join(installed, "LICENSE"), "utf8"), /MIT License/);
 	assert.ok(
 		packed[0].files.every((file: { path: string }) => /^(dist\/|package.json$|README.md$|LICENSE$)/.test(file.path)),
@@ -355,6 +364,17 @@ export default {
 } satisfies WorkspacePolicy;
 `,
 	);
+	// Check the UI-facing source seam in the actual artifact, not as a new npm export.
+	writeFileSync(
+		join(consumer, "api-contract.ts"),
+		`import type { ApiErrorCode, WorkspaceChanges, WorkspaceIdentity } from './node_modules/@zdreamer/forge/dist/server/src/components/api-contract/index.js';
+export const changes = {codebases: {}, changes: []} satisfies WorkspaceChanges;
+export const identity = {workspace: {root: '/example', name: 'Example'}, repositories: []} satisfies WorkspaceIdentity;
+export const error = 'not_found' satisfies ApiErrorCode;
+// @ts-expect-error Node globals must not leak through the browser-safe contract.
+export type NodeGlobal = typeof process;
+`,
+	);
 	writeFileSync(
 		join(consumer, "tsconfig.json"),
 		JSON.stringify({
@@ -366,7 +386,7 @@ export default {
 				module: "NodeNext",
 				types: [],
 			},
-			include: ["workspace.ts"],
+			include: ["workspace.ts", "api-contract.ts"],
 		}),
 	);
 	const compiler = join(root, "node_modules/.bin/tsc");

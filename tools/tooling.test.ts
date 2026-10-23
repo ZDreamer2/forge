@@ -7,10 +7,27 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const serverRoot = join(root, "server");
+
+test("standalone server acceptance rejects lint violations", () => {
+	const fixture = mkdtempSync(join(serverRoot, "src/app/server-lint-fixture-"));
+	try {
+		writeFileSync(join(fixture, "example.ts"), "debugger;\n");
+		const result = spawnSync("corepack", ["pnpm", "--config.verify-deps-before-run=error", "run", "check:server"], {
+			cwd: root,
+			encoding: "utf8",
+			timeout: 30_000,
+		});
+		assert.notEqual(result.status, 0, result.stdout + result.stderr);
+		assert.match(result.stdout + result.stderr, /lint\/suspicious\/noDebugger/);
+	} finally {
+		rmSync(fixture, { recursive: true, force: true });
+	}
+});
 
 test("inherited environment rule fires and app allowance remains effective", () => {
-	const componentFixture = mkdtempSync(join(root, "src/components/tooling-fixture-"));
-	const appFixture = mkdtempSync(join(root, "src/app/tooling-fixture-"));
+	const componentFixture = mkdtempSync(join(serverRoot, "src/components/tooling-fixture-"));
+	const appFixture = mkdtempSync(join(serverRoot, "src/app/tooling-fixture-"));
 	try {
 		for (const directory of [componentFixture, appFixture]) {
 			writeFileSync(join(directory, "example.ts"), "export const value = process.env.PORT;\n");
@@ -50,7 +67,7 @@ test("inherited zone and local component restrictions reject actual imports", ()
 		);
 		const result = spawnSync(
 			join(root, "node_modules/.bin/depcruise"),
-			["--config", join(root, ".dependency-cruiser.mjs"), "src/**/*.ts"],
+			["--config", join(serverRoot, ".dependency-cruiser.mjs"), "src/**/*.ts"],
 			{
 				cwd: temporary,
 				encoding: "utf8",
@@ -69,7 +86,7 @@ test("real graph preserves the public type re-export", () => {
 		join(root, "node_modules/.bin/depcruise"),
 		["--config", ".dependency-cruiser.mjs", "--output-type", "json", "src/**/*.ts"],
 		{
-			cwd: root,
+			cwd: serverRoot,
 			encoding: "utf8",
 		},
 	);
@@ -115,7 +132,7 @@ test("HTTP libraries and component edges follow the architecture map", () => {
 		function cruise() {
 			return spawnSync(
 				join(root, "node_modules/.bin/depcruise"),
-				["--config", join(root, ".dependency-cruiser.mjs"), "src/**/*.ts"],
+				["--config", join(serverRoot, ".dependency-cruiser.mjs"), "src/**/*.ts"],
 				{ cwd: temporary, encoding: "utf8" },
 			);
 		}
