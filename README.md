@@ -80,7 +80,7 @@ Startup loads exactly `<guidance-folder>/workspace.ts`. The default folder is
 `ZD_AI_FORGE_WORKSPACE_GUIDE` selects a different folder, relative to that checkout
 or absolute; `.env` cannot set this override. Invalid explicit choices fail
 without ancestor search or fallback. The standalone server requires the trusted
-TypeScript module, not the Python workflow's `on-plan.md`, `on-diff-route` or
+TypeScript module, not the Python workflow's `on-codebase-selection.md`, `on-diff-route` or
 `config.yaml` entries. External trusted guidance folders are allowed.
 
 Set `ZD_AI_FORGE_PORT` in the process environment or selected checkout's `.env`.
