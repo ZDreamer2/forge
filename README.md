@@ -81,7 +81,7 @@ Startup loads exactly `<guidance-folder>/workspace.ts`. The default folder is
 or absolute; `.env` cannot set this override. Invalid explicit choices fail
 without ancestor search or fallback. The standalone server requires the trusted
 TypeScript module, not the Python workflow's `on-codebase-selection.md`, `on-diff-route` or
-`config.yaml` entries. External trusted guidance folders are allowed.
+`forge-workspace.yaml` entries. External trusted guidance folders are allowed.
 
 Set `ZD_AI_FORGE_PORT` in the process environment or selected checkout's `.env`.
 A nonempty process value takes precedence, including invalid values; an empty
