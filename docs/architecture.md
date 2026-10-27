@@ -21,9 +21,10 @@ requirements despite sharing an installation. The UI consumes the server's publi
 `api-contract` entry, never server internals. This contract is browser-safe vocabulary
 without Node globals, implementation dependencies or UI frameworks; it is owned by
 the server, not a third codebase. Server domain results are mapped into wire shapes;
-neither domain internals nor workspace-authoring types become browser APIs. The
-public `./workspace` export exposes policy-authoring types independently of the
-HTTP contract and operational policy loader.
+neither domain internals nor workspace configuration become browser APIs.
+Workspace configuration is the `forge-workspace.yaml` registry Python Forge also
+reads; the earlier `workspace.ts` policy and its public `./workspace` authoring
+export are removed by migration, without a legacy path.
 
 The [HTTP API contract](../server/docs/protocol.md) owns observable behavior and
 unresolved API semantics. The [README](../README.md) owns source layout, supported capabilities,
@@ -61,7 +62,7 @@ assembly. Domain components do not construct each other or read process
 configuration; composition supplies their dependencies.
 
 Current implementation: the source still has the earlier diagnostic slice:
-`workspace-policy` (authored policy plus repository probing), `workspace-changes`
+`workspace-policy` (loading `workspace.ts` plus repository probing), `workspace-changes`
 (HEAD/working comparison with policy-callback membership) and identity/changes
 routes in `app`. The machine-checked allowlist enforces these current edges
 (`workspace-changes -> workspace-policy` only) until migration moves the code into
@@ -82,7 +83,7 @@ checking/staging. Future migration must align their participation and scope befo
 sharing authority.
 
 Workspace inspection is read-only with respect to source files and Git metadata.
-Authored configuration, analysis handlers and Git filters are trusted executable code, not an effects sandbox;
+Authored configuration is data; analysis handlers and Git filters are trusted executable code, not an effects sandbox;
 HTTP protection does not change that trust model. File access remains within the
 selected workspace even when its containing Git root extends above it.
 
