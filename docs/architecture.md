@@ -29,46 +29,60 @@ The [HTTP API contract](../server/docs/protocol.md) owns observable behavior and
 unresolved API semantics. The [README](../README.md) owns source layout, supported capabilities,
 configuration, package entry paths and development commands.
 
-## Server responsibilities
+## Server components
 
-- `api-contract` owns the public wire vocabulary consumed by server routes and UI.
-  It is independent of operational server components; browser safety is verified
-  as part of server acceptance. Contract changes also require consumer verification.
-- `workspace-policy` interprets trusted authored policy and resolves declared
-  repositories into startup context. It owns project knowledge, not HTTP or change
-  collection.
-- `workspace-changes` owns HTTP-independent Git comparison and codebase membership
-  for the selected workspace. It consumes policy context rather than discovering a
-  second set of participating repositories.
-- `app` composes capabilities, maps results to the protocol, assembles protected
-  HTTP access and owns startup/shutdown. It also owns the thin identity/change
-  routes and shared collection lifecycle rather than introducing a separate API
-  component for this diagnostic slice.
-- `diagnostic-ui` owns the minimal diagnostic page. Its browser code consumes the
-  HTTP API; it has no domain-component dependencies.
+The map below is the baseline for server work. Components live under
+`server/src/components/`; each new baseline component has `docs/UnitGuide.md` with
+its design context.
 
-The domain-component edge is `workspace-changes -> workspace-policy`; other
-component edges are forbidden. Technical Git execution and loopback-access
-capabilities stay below these responsibilities. Git execution owns bounded process
-and cancellation mechanics; HTTP knowledge stays at HTTP assembly, diagnostic
-routes and loopback middleware. Domain components do not construct each other or
-read process configuration; composition supplies their dependencies.
+| Component | Responsibility | Outgoing component imports |
+| --- | --- | --- |
+| `workspace-config` | Trusted authored workspace knowledge: registered codebases, declared repositories, display name, handler references | None |
+| `workspace-repositories` | Observed participating repositories: startup resolution, status, path participation | workspace-config |
+| `workspace-tree` | Tree vocabulary and data: nodes, sides, owners, repository/codebase roots, fixed review metadata, building and derived values | workspace-config |
+| `tree-sources` | Builds base trees from sources of workspace state, each with a content reader for its sides | workspace-tree, workspace-repositories, workspace-config |
+| `tree-analysis` | Runs Forge, workspace and codebase handlers over any tree, adding review metadata | workspace-tree, workspace-config |
+| `http-api` | Domain endpoints: selects a source, builds and analyzes its tree, maps results to the wire contract | tree-sources, tree-analysis, workspace-tree, workspace-repositories, workspace-config, api-contract |
+| `api-contract` | Browser-safe wire vocabulary consumed by server and UI; contract changes also require consumer verification | None |
+| `diagnostic-ui` | Minimal diagnostic page; its browser code consumes the HTTP API | None |
+
+The workspace tree is the shared base. Sources produce trees; analysis enriches any
+tree without knowing its source; `http-api` is the only component combining them.
+Authored knowledge (`workspace-config`) stays separate from observed Git state
+(`workspace-repositories`, `tree-sources`). Clients receive structural meaning,
+ownership, totals and review metadata from the server rather than deriving them.
+
+`app` reads process configuration, constructs instances, mounts routes, assembles
+protected HTTP access and owns shared in-flight work and startup/shutdown. `lib/git`
+owns bounded Git process and cancellation mechanics and plain Git operations that
+need no workspace knowledge; `lib/loopback-access` owns the Host/Origin guard. HTTP
+knowledge stays in `http-api`, diagnostic routes, loopback middleware and HTTP
+assembly. Domain components do not construct each other or read process
+configuration; composition supplies their dependencies.
+
+Current implementation: the source still has the earlier diagnostic slice:
+`workspace-policy` (authored policy plus repository probing), `workspace-changes`
+(HEAD/working comparison with policy-callback membership) and identity/changes
+routes in `app`. The machine-checked allowlist enforces these current edges
+(`workspace-changes -> workspace-policy` only) until migration moves the code into
+the baseline components; the allowlist and this note change with that migration.
 
 ## Authority, trust and lifecycle
 
-Policy and repository participation are loaded at startup and replaced on restart.
-The server probes declared repositories rather than scanning for additional clones;
+Authored configuration and repository participation are loaded at startup and
+replaced on restart. The server probes declared repositories rather than scanning for additional clones;
 missing-at-startup repositories remain excluded, while loss of an available
 repository fails collection instead of silently reducing the result.
 
-Refresh observes current Git state within that startup context. Results are live
-observations, not atomic cross-repository snapshots. The practical HEAD/working
+Refresh observes current Git state within that startup context. Each request builds
+and analyzes its own tree; results are live observations, not cached trees or
+atomic cross-repository snapshots. The practical HEAD/working
 comparison is not staging equivalence or a replacement for durable capture and
 checking/staging. Future migration must align their participation and scope before
 sharing authority.
 
 Workspace inspection is read-only with respect to source files and Git metadata.
-Authored policy and Git filters are trusted executable code, not an effects sandbox;
+Authored configuration, analysis handlers and Git filters are trusted executable code, not an effects sandbox;
 HTTP protection does not change that trust model. File access remains within the
 selected workspace even when its containing Git root extends above it.
 

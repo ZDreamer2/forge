@@ -123,18 +123,25 @@ This browser list does not replace Python dirt detection, capture or checking/
 staging. Future migration must align collection/check/staging participation together;
 never stage the broader discovered/whole-repository scope using only this narrow list.
 
-Clients can derive the changed-file tree from these paths; a separate tree operation is not needed.
+This list carries no tree structure, totals or review metadata. Clients do not
+reconstruct structural meaning from it; the server-owned changes tree is the subject
+of the analysis operation below.
 
 #### Analyze workspace changes
 
 `GET /changes/analysis`
 
-Returns the workspace changes enriched with review attention and findings from Forge, workspace, and applicable codebase analysis.
+Returns the workspace changes as a server-owned tree: changed files plus their
+directories and the root, enriched by Forge, workspace, and applicable codebase
+analysis.
 
-- Review attention: emphasize, deemphasize, or normally hide a file, with a reason.
-- Findings: warnings or errors attached to a file, a location within it, or the changeset, with explanations.
+- Totals: line-change counters for every node, including directories and the root.
+- Review attention: emphasize, deemphasize, or normally hide a node and its subtree, with a reason; a nested node can override its ancestor.
+- Signals: notices or warnings attached to a node or a location within a file, with explanations. The root represents the changeset. De-emphasis does not hide signals.
 
-The response includes all changed files, including those marked as normally hidden.
+A rename is one node at its new path that identifies the previous path. The response
+includes all changed files, including those marked as normally hidden. The tree's
+wire representation remains to be defined.
 
 #### Read file diff
 

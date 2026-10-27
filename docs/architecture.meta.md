@@ -7,6 +7,7 @@ Specification for creating and editing [Forge application architecture](architec
 - Gives maintainers a high-level map for assigning responsibilities and judging changes to dependencies, authority and lifetimes. It explains consequential boundaries and their rationale, rather than cataloging the source tree.
 - Distinguishes one package/installation from its server and frontend codebases. Shared distribution does not merge runtime environments, implementation ownership or verification scopes.
 - Preserves the server's authority over the selected workspace, the server-owned browser-safe API contract and the separation of authored policy from wire vocabulary. These boundaries prevent clients from reconstructing competing workspace models or importing server internals.
+- The component map is the baseline that server work builds toward. While code lags behind it, a short current-implementation note names the actual components and edges the machine-checked allowlist enforces; migration updates the code, allowlist and note together. Per-component design context belongs to each component's `docs/UnitGuide.md`, not this map.
 - Records architectural decisions at the level that changes when responsibilities or significant dependencies change. Helpers, file moves, command flags and algorithm steps belong to their owning code, tests or operating documentation, not a second implementation description.
 
 ## AiDocFormat
