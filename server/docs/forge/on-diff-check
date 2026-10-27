@@ -3,18 +3,20 @@
 
 import json
 from pathlib import Path
-import subprocess
 import sys
 
 
 def main() -> int:
     try:
-        payload = json.load(sys.stdin)
-        checker = Path(payload["root"]) / "ai/bc-plugins/dev/forge/codebases/ts-service/on-diff-check"
-        return subprocess.run(
-            [sys.executable, str(checker)], input=json.dumps(payload), text=True,
-        ).returncode
-    except (OSError, KeyError, TypeError, ValueError) as error:
+        input_text = sys.stdin.read()
+        payload = json.loads(input_text)
+        scripts = Path(payload["root"]) / "ai/bc-plugins/dev/forge/codebases/ts-service/scripts"
+        sys.dont_write_bytecode = True
+        sys.path.insert(0, str(scripts))
+        from ts_service_diff_check import main as check
+
+        return check(input_text)
+    except (ImportError, OSError, KeyError, TypeError, ValueError) as error:
         print(f"on-diff-check: {error}", file=sys.stderr)
         return 1
 
