@@ -1,10 +1,18 @@
 # tree-sources Guide
 
-Builds base workspace trees from sources of workspace state. Each source produces a tree recording its two sides, plus a content reader for those sides that analysis and file/diff operations use.
+Builds base workspace trees from sources of workspace state. Each source produces a tree recording its two sides. Content readers for analysis and file/diff operations will accompany sources when those capabilities arrive.
 
 ## Notes
 
-Not implemented yet. The HEAD/working comparison currently lives in `workspace-changes` and returns a flat change list.
+`index.ts` exposes the `working-changes` source factory. It builds a canonical
+workspace tree using startup repository participation and fresh path-boundary
+observations for each collection. Raw Git modes and numstat counts survive into
+the tree; exceptional recreated or clipped pairs receive statistics for their final
+sides. Owned scratch indexes compare existing HEAD objects against actual working
+paths without normalizing baseline bytes again or writing source Git metadata.
+
+Content readers and the other sources below are deferred until they have consumers;
+this implementation returns only the base tree.
 
 Sources are nested units under `internal/`, exposed through this component's surface:
 

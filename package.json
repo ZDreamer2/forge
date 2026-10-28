@@ -1,7 +1,7 @@
 {
 	"name": "@zdreamer/forge",
 	"version": "0.1.2",
-	"description": "Forge workspace application and typed workspace policy contract",
+	"description": "Forge workspace application",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
@@ -19,21 +19,16 @@
 	"bin": {
 		"forge": "./dist/server/src/main.js"
 	},
-	"exports": {
-		"./workspace": {
-			"types": "./dist/server/src/workspace.d.ts",
-			"default": "./dist/server/src/workspace.js"
-		}
-	},
+	"exports": {},
 	"engines": {
 		"node": ">=24.18.1 <25"
 	},
 	"packageManager": "pnpm@11.15.1",
 	"scripts": {
 		"build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
-		"check": "tsc --noEmit && biome check . && corepack pnpm --config.verify-deps-before-run=error run check:server && depcruise --config .dependency-cruiser.mjs server/src ui/src && node --test tools/*.test.ts",
-		"check:server": "tsc -p server/tsconfig.json --noEmit && tsc -p server/tsconfig.contract.json --noEmit && biome check server && cd server && depcruise --config .dependency-cruiser.mjs 'src/**/*.ts' && node --test",
-		"test:workspace": "node tools/workspace-consumer.ts"
+		"check": "tsc --noEmit && biome check . && corepack pnpm --config.verify-deps-before-run=error run check:server && depcruise --config .dependency-cruiser.mjs server/src ui/src && node --test tools/tests/*.test.ts",
+		"check:server": "node tools/check-test-layout.ts && tsc -p server/tsconfig.json --noEmit && tsc -p server/tsconfig.contract.json --noEmit && biome check server && cd server && depcruise --config .dependency-cruiser.mjs 'src/**/*.ts' && node --test",
+		"test:workspace": "node tools/tests/workspace-consumer.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.7",
@@ -45,6 +40,7 @@
 	},
 	"dependencies": {
 		"@hono/node-server": "2.1.4",
-		"hono": "4.13.13"
+		"hono": "4.13.13",
+		"yaml": "2.9.1"
 	}
 }

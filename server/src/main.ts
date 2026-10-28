@@ -2,11 +2,9 @@
 import { readFile } from "node:fs/promises";
 import { findPackageJSON } from "node:module";
 import { fileURLToPath } from "node:url";
-import { inspect } from "./app/inspect.ts";
 import { start } from "./app/startup.ts";
 
-const usage =
-	"forge serve --workspace <path>\nforge inspect-workspace <workspace.ts> <repository> <path> [previous-path]";
+const usage = "forge serve --workspace <path>";
 const [command, ...args] = process.argv.slice(2);
 try {
 	if (command === "--help" || command === undefined) {
@@ -21,9 +19,6 @@ try {
 		console.log(
 			`Forge @zdreamer/forge ${manifest.version}\nExecutable: ${JSON.stringify(fileURLToPath(import.meta.url))}\nWorkspace: ${JSON.stringify(server.snapshot.root)}\n${server.address}`,
 		);
-	} else if (command === "inspect-workspace" && (args.length === 3 || args.length === 4)) {
-		const [modulePath, repo, path, from] = args as [string, string, string, string | undefined];
-		console.log(JSON.stringify(await inspect(modulePath, repo, path, from)));
 	} else {
 		console.error(`Usage: ${usage}`);
 		process.exitCode = 1;

@@ -6,7 +6,7 @@ export type WorkspaceIdentity = {
 export type ApiErrorCode = "forbidden" | "not_found" | "method_not_allowed" | "internal_error";
 
 export type WorkspaceChanges = {
-	codebases: Record<string, { guidance: string }>;
+	codebases: Record<string, { root: string; guidance: string; type?: string }>;
 	changes: {
 		repo: string;
 		path: string;

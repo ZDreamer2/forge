@@ -1,6 +1,6 @@
 {
 	"extends": ["@zdreamer/forge-ts-service/biome"],
 	"files": {
-		"includes": ["server/**", "ui/**", "tools/*.ts", "*.json", "*.mjs"]
+		"includes": ["server/**", "ui/**", "tools/**/*.ts", "*.json", "*.mjs"]
 	}
 }

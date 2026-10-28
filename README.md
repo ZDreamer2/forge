@@ -1,15 +1,13 @@
 # @zdreamer/forge
 
 Provisional Forge workspace application. The unreleased source supports a
-foreground read-only workspace server, a minimal browser diagnostic and the
-policy-loading diagnostic. Registry release `0.1.1` supplies the diagnostic and policy types; it does not contain the
-server. Executable: `forge`; public authoring types: `@zdreamer/forge/workspace`.
-Licensed under [MIT](LICENSE).
+foreground read-only workspace server and a minimal browser diagnostic, using the
+shared `forge-workspace.yaml` registry. Registry release `0.1.1` remains the older
+policy diagnostic; it has no server. Executable: `forge`. Licensed under [MIT](LICENSE).
 
-The `0.x` policy contract is provisional. Breaking authoring or semantic changes
-use a minor release with migration notes; exact-pin the application and use its
-own policy types from the same installation. No separate policy-version field or
-compatibility layer is provided. See [release operations](https://github.com/ZDreamer2/forge/blob/main/docs/releasing.md).
+The `0.x` configuration contract is provisional. Breaking changes require a minor
+release with migration notes. No release or registry adoption is implied by source
+acceptance. See [release operations](https://github.com/ZDreamer2/forge/blob/main/docs/releasing.md).
 
 ## Source layout
 
@@ -53,9 +51,19 @@ presets, their exact-pinned tool peers, the seven-day third-party release-age
 floor, and explicit SWC script permission. `.cache/pnpm` is the portable default;
 a hosting checkout can override the store during installation.
 
-`test:workspace` checks public types and the installed executable through an
-isolated tarball consumer, without publishing or running install scripts. An
-optional `workspace.ts` argument also checks a consuming project's policy. Run
+Tests live in lowercase `tests/` folders beside their owner: `server/src/app/tests/`
+for assembly and CLI behavior, a component/lib/nested unit's own `tests/` for its
+contract and internals, and `tools/tests/` for package tooling and tarball acceptance.
+Test-only support and fixtures stay with these tests. Production builds exclude
+entire `tests/` folders; test placement and private import boundaries are checked.
+Tooling's temporary deliberately invalid source fixtures retain the paths required
+to exercise real checkers and are removed after each check. The reserved frontend
+keeps its separate naming convention.
+
+`test:workspace` checks the browser-safe API contract and installed executable
+through an isolated YAML-configured tarball consumer, without publishing or running
+install scripts. It accepts no policy argument and verifies the removed authoring
+export cannot be imported. Run
 aggregate commands at the repository root: the gate delegates service-local checks
 to `server/`, including its public API contract's browser-safety checks, and verifies
 cross-runtime boundaries at the root.
@@ -75,15 +83,13 @@ The CLI form is `forge serve --workspace <path>` once a server-capable release
 is installed. Relative workspace paths resolve against the invocation directory;
 the selected directory is canonicalized as the authoritative checkout.
 
-Startup loads exactly `<guidance-folder>/workspace.ts`. The default folder is
-`docs/forge/workspace` inside the selected checkout. A nonempty process
+Startup loads exactly `<guidance-folder>/forge-workspace.yaml`. The default folder
+is `docs/forge/workspace` inside the selected checkout. A nonempty process
 `ZD_AI_FORGE_WORKSPACE_GUIDE` selects a different folder, relative to that checkout
-or absolute; `.env` cannot set this override. Invalid explicit choices fail
-without ancestor search or fallback. The standalone server requires the trusted
-TypeScript module; it does not consume the Python workflow's
-`on-codebase-selection.md` or concrete/type registrations in `forge-workspace.yaml`.
-Its policy membership rules are not yet aligned with Python's concrete-first
-routing. External trusted guidance folders are allowed.
+or absolute; `.env` cannot set this override. Invalid explicit choices fail without
+ancestor search or fallback. External guidance folders are allowed. The server
+reads registered concrete/type markers as data and does not require
+`on-codebase-selection.md` or execute project configuration modules.
 
 Set `ZD_AI_FORGE_PORT` in the process environment or selected checkout's `.env`.
 A nonempty process value takes precedence, including invalid values; an empty
@@ -98,7 +104,6 @@ or invalid-encoding files fail startup.
 After listener readiness, the foreground process prints its package version,
 JSON-quoted executable and authoritative workspace paths, then
 `http://127.0.0.1:<port>` on its own line. It prints no environment values.
-The `inspect-workspace` diagnostic retains its JSON-only stdout contract.
 Open that address to see workspace/repository identity and current changed files,
 including Git-reported rename sources and concrete
 codebase memberships. Workspace names, paths and guidance are displayed literally
@@ -107,23 +112,24 @@ it starts as `Forge` and returns to `Forge` when the identity request fails.
 The page shows loading, empty and error states; Refresh retries failed requests and clears the
 previous change list while loading. Successful workspace identity is retained
 when a request fails. Refresh reads current changes but does not reload startup
-policy or repository participation. There is no polling.
+configuration or repository participation. There is no polling.
 
 `GET /api/workspace` returns the workspace root, resolved display name and declared
 available/missing repositories in declaration order. Invalid existing repositories, Git/access
-failures and policy/configuration errors refuse startup. Requests require that
+failures and configuration errors refuse startup. Requests require that
 exact Host and, when present, Origin; CLI requests may omit Origin. Restart to
-reload configuration, policy and repository identity. Stop with SIGINT or
+reload configuration and repository identity. Stop with SIGINT or
 SIGTERM; shutdown closes the listener and releases the port.
 
 `GET /api/changes` returns
-`{ codebases: { id: { guidance: "path" } }, changes: [...] }`. Changes carry repo,
+`{ codebases: { root: { root: "path", guidance: "path", type?: "id" } }, changes: [...] }`. Changes carry repo,
 workspace-relative path, added/modified/deleted/renamed kind, optional rename
 `from` and unique codebase ID arrays. Definitions occur once per response;
-conflicting guidance for one ID fails collection. No binary/line counts.
+identities are registered workspace-relative concrete roots and include both
+present-side rename owners. No binary/line counts are exposed.
 
 Comparison uses one bulk HEAD/working `diff --raw --numstat -z` and non-ignored untracked listing,
-with targeted normalized hash/mode reconciliation for recreated deletion/rename
+with targeted normalized reconciliation for recreated deletion/rename
 sources. Index refresh is disabled; numstat presence removes raw stat noise while
 mode/type changes, zero-count changes and binaries remain. Counts stay internal.
 Identical staged reversals disappear. Git owns attributes, filters and
@@ -137,11 +143,12 @@ supported; partial/promisor repositories fail before object-demanding comparison
 to prevent silent lazy fetch. Normal trusted clean/process filters are allowed;
 external diff/textconv, optional writes, fsmonitor and hooks are disabled. Ambient
 Git repository/index/worktree overrides do not select another checkout. Server
-commands do not stage/commit/write indexes, refs or objects. Trusted policy and
-filters can execute code with side effects; this is not an effects sandbox.
+commands do not stage/commit/write source indexes, refs or objects. Exceptional
+pair statistics use owned temporary indexes outside the checkout. Trusted filters
+can execute code with side effects; this is not an effects sandbox.
 
 Missing-at-startup repositories remain excluded; loss of an available repository,
-Git failures or invalid/throwing routing results fail the whole request. Paths
+Git failures fail the whole request. Paths
 stay inside the workspace even when its Git root extends above it. Declared
 nested repositories are distinct; undeclared clones and Git internals are excluded.
 Results are live observations, without atomic cross-repository snapshots.
@@ -163,62 +170,42 @@ file browsing or agent interaction. Registry `0.1.1` remains the diagnostic-only
 release; source and installed-tarball verification do not constitute publication
 or registry adoption.
 
-## Workspace authoring contract (provisional)
+## Workspace configuration and migration
 
-Projects can exact-pin Forge as a local development dependency:
+The source reads the same concrete registry as Python Forge, with required server
+repository declarations and optional display name:
 
-```sh
-pnpm add --save-dev --save-exact @zdreamer/forge@0.1.1
+```yaml
+display_name: Example workspace
+repositories:
+  - .
+  - tools/optional-checkout
+codebases:
+  - ../../../app/docs/forge/forge-codebase.yaml
+codebase_types: []
 ```
 
-```ts
-import type { WorkspacePolicy } from '@zdreamer/forge/workspace';
+Marker references are relative to the containing YAML file; repository IDs are
+normalized workspace-relative POSIX paths, with `.` for the main repository.
+Repository declarations are ordered and explicit; codebase registration does not
+opt a repository into collection. Missing marker/root directories are skipped;
+present malformed declarations, duplicate references/roots/type IDs and unknown
+adopted types fail startup. Closest registered roots determine membership lexically,
+including deleted and renamed paths. Registry parity with Python does not imply
+repository discovery or staging-scope parity: Python still scans repositories.
 
-export default {
-  repositories: [{ path: '.' }, { path: 'tools/optional-checkout' }],
-  codebasesForChange: () => [{ id: 'application', guidance: 'docs/code' }],
-} satisfies WorkspacePolicy;
-```
+`display_name` is an optional nonempty string, preserved literally. If omitted,
+the server uses the canonical workspace basename (or root itself). Restart reloads
+configuration, registry markers and repository participation.
 
-The unreleased source also accepts optional `displayName` policy metadata. An
-explicit value must be a nonempty string and is preserved exactly, without
-trimming or HTML interpretation. The server resolves an omitted name to the
-canonical workspace root's basename, or the root itself if it has no basename,
-and returns it as `workspace.name` in identity. Restart to reload the name.
-Registry `0.1.1` does not declare this field in its authoring types. To retain
-metadata while typechecking against that exact pin, use a structurally checked
-variable:
+This is a breaking migration from the earlier executable policy:
 
-```ts
-const policy = {
-  displayName: 'Example workspace',
-  repositories: [{ path: '.' }],
-  codebasesForChange: () => [],
-};
-export default policy satisfies WorkspacePolicy;
-```
-
-Module lookup follows the workspace file's ancestors, not the executable's
-installation. A global executable alone does not supply editor/typechecker
-resolution. Keep the dependency in an installation above the workspace module;
-an isolated installation beside that module is also sufficient.
-
-The current diagnostic command loads a selected trusted module explicitly:
-
-```sh
-forge inspect-workspace /absolute/path/workspace.ts . src/example.ts
-# Optional last argument: previous path of a rename.
-```
-
-Repository IDs use `.` for the main repo and normalized workspace-relative POSIX
-paths for nested repos. Change paths are workspace-relative; legacy CLI changes
-can include `../` paths when the main Git root lies above the workspace.
-`codebasesForChange` resolves membership lexically, without requiring files to
-exist, and includes both rename sides. Several concrete codebases can share
-guidance; membership does not imply verification.
-
-Policy modules are trusted executable code, not sandboxed; installation does not
-load them. The changes collector validates callback results at runtime; the diagnostic
-uses the authored types without that validation. See
-[architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md) for loading limits and repository resolution,
-which the diagnostic does not invoke.
+- Move `displayName` to YAML `display_name` and the ordered repository paths to
+  YAML `repositories`. Register concrete/type marker files in the shared registry.
+- Remove `workspace.ts`, policy-specific TypeScript checks and imports from
+  `@zdreamer/forge/workspace`; that export is removed.
+- Remove uses of `forge inspect-workspace` and the optional `test:workspace`
+  policy argument. The supported source CLI is `forge serve --workspace <path>`.
+- Keep an independent exact-pinned executable installation when useful. Existing
+  registry `0.1.1` installations remain diagnostic-only until an approved release
+  and explicit repin. No compatibility loader is provided.

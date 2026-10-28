@@ -44,7 +44,7 @@ Returns a startup snapshot:
 }
 ```
 
-`workspace.root` is the canonical absolute selected checkout. `workspace.name` is its resolved display name: optional policy `displayName` when authored, otherwise the canonical root's basename (or the root itself if it has no basename). An explicit name MUST be a nonempty string; it is preserved exactly. Clients MUST render names as literal text without HTML interpretation. Repositories retain policy declaration order; `path` is the normalized declaration ID (`.` or a workspace-relative POSIX path). An available repository has canonical absolute `gitRoot`, which MAY be above the workspace for `.`; a missing repository omits it. Policy functions and environment values are not returned. The snapshot is replaced on restart, with no per-request discovery or reload.
+`workspace.root` is the canonical absolute selected checkout. `workspace.name` is its resolved display name: optional YAML `display_name` when authored, otherwise the canonical root's basename (or the root itself if it has no basename). An explicit name MUST be a nonempty string; it is preserved exactly. Clients MUST render names as literal text without HTML interpretation. Repositories retain configuration declaration order; `path` is the normalized declaration ID (`.` or a workspace-relative POSIX path). An available repository has canonical absolute `gitRoot`, which MAY be above the workspace for `.`; a missing repository omits it. Configuration internals and environment values are not returned. The snapshot is replaced on restart, with no per-request discovery or reload.
 
 #### Resolve codebase context for paths
 
@@ -71,9 +71,9 @@ Returns a response-local definition index and changes:
 
 ```json
 {
-  "codebases": { "service": { "guidance": "docs/service" } },
+  "codebases": { "src/service": { "root": "src/service", "guidance": "docs/service", "type": "service" } },
   "changes": [
-    { "repo": ".", "path": "src/file.ts", "kind": "modified", "codebases": ["service"] }
+    { "repo": ".", "path": "src/file.ts", "kind": "modified", "codebases": ["src/service"] }
   ]
 }
 ```
@@ -84,13 +84,18 @@ Returns a response-local definition index and changes:
 | `path` | Workspace-relative POSIX current path, or previous path for deletion. |
 | `kind` | `added`, `modified`, `deleted` or `renamed`. Type changes normalize to modified; defensive copy records normalize to added. |
 | `from` | Workspace-relative previous path, required only for renamed. |
-| `codebases` | Unique concrete codebase ID strings; empty membership is valid. |
+| `codebases` | Unique normalized workspace-relative concrete roots; empty membership is valid. |
 
-Top-level `codebases` maps each referenced concrete ID to `{ "guidance": "path" }`.
-IDs are data, including prototype-property names. Several IDs may share guidance;
-conflicting definitions of one ID anywhere in a response fail the whole request.
-Policy callbacks still return definitions; the server validates and deduplicates
-them. Empty success is `{ "codebases": {}, "changes": [] }`.
+Top-level `codebases` maps each referenced concrete root to
+`{ "root": "path", "guidance": "path", "type"?: "registered-type-id" }`.
+The root is `.` or a workspace-relative POSIX path; guidance is relative to the
+workspace and may point outside it. Types identify adopted shared guidance, not
+concrete membership. Registry roots resolve lexically, independently for each
+present side, with the closest containing root winning. An unmatched path has
+empty membership. A rename includes both present-side owners, deduplicated in
+base/current order. Definitions include only referenced owners; roots such as
+`__proto__` remain ordinary data keys. Empty success is
+`{ "codebases": {}, "changes": [] }`.
 
 Binary changes and mode/type changes remain entries; Git's core.fileMode/core.symlinks semantics apply.
 Gitlinks/undeclared clones and their contents are excluded; transitions between
@@ -103,7 +108,7 @@ Both rename endpoints are scoped before publishing. A crossing move becomes an
 in-scope addition/deletion, never an outside `from`. Membership includes applicable
 in-scope sides and distinguishes codebase IDs from reusable guidance folders.
 NUL-delimited UTF-8 filenames preserve tabs/newlines/spaces; invalid UTF-8 fails
-explicitly. Git, read, normalization/filter and invalid/throwing callback failures
+explicitly. Git, read and normalization/filter failures
 fail the whole request with `internal_error`, with no partial success.
 
 Collections are live observations without atomic cross-repository snapshots.
@@ -117,7 +122,7 @@ refused before object-demanding comparison to prevent silent lazy fetch. Ordinar
 trusted filters/configuration are allowed. External diff/textconv, optional writes,
 fsmonitor and hooks are disabled, and ambient Git root/index/worktree redirection
 is removed. Server commands do not stage/commit/write source indexes, refs or
-objects. Trusted policy and filters execute code outside this effects guarantee.
+objects. Configuration is data-only; trusted filters execute code outside this effects guarantee.
 
 This browser list does not replace Python dirt detection, capture or checking/
 staging. Future migration must align collection/check/staging participation together;

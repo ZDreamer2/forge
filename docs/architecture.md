@@ -61,12 +61,11 @@ knowledge stays in `http-api`, diagnostic routes, loopback middleware and HTTP
 assembly. Domain components do not construct each other or read process
 configuration; composition supplies their dependencies.
 
-Current implementation: the source still has the earlier diagnostic slice:
-`workspace-policy` (loading `workspace.ts` plus repository probing), `workspace-changes`
-(HEAD/working comparison with policy-callback membership) and identity/changes
-routes in `app`. The machine-checked allowlist enforces these current edges
-(`workspace-changes -> workspace-policy` only) until migration moves the code into
-the baseline components; the allowlist and this note change with that migration.
+Current implementation includes configuration, repository participation, the canonical
+workspace tree, the working-changes source and identity/flat changes HTTP routes.
+The machine-checked component edges match these owners. `tree-analysis` remains
+documentation only; content readers, analysis handlers and the public tree wire
+representation are deferred.
 
 ## Authority, trust and lifecycle
 

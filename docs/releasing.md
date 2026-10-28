@@ -4,7 +4,11 @@
 
 - `0.1.2` (unreleased candidate): foreground read-only workspace server with identity/current-change
   APIs and a minimal browser diagnostic at `/`. Refresh reads current changes;
-  restart reloads policy and repository participation. No diff/file browsing,
+  restart reloads YAML configuration and repository participation. The candidate
+  now includes a breaking shared-registry/concrete-root migration: the old
+  `./workspace` export, executable policy and `inspect-workspace` CLI are removed.
+  A future release needs an appropriate minor version; the candidate version has
+  not been changed. See [migration instructions](../README.md#workspace-configuration-and-migration). No diff/file browsing,
   Git mutations or agent interaction. Publication and consumer registry adoption
   remain pending; the published `0.1.1` has no server or browser page.
 - `0.1.1`: validates GitHub Actions trusted publishing and provenance. No runtime,
@@ -13,7 +17,7 @@
 
 ## Release boundary
 
-This public MIT package has a provisional policy contract. The unreleased source
+This public MIT package has a provisional configuration contract. The unreleased source
 adds a read-only server/browser diagnostic; it is not the full review UI. Review
 both source history and the packed artifact for private material before upload.
 Package contents are limited to built `dist/`, package metadata, README and
@@ -94,8 +98,10 @@ For each subsequent release:
 
 1. Update the exact package version and release notes; check and review before
    pushing/merging to `main`: that push automatically releases an unpublished
-   version after verification. During `0.x`, breaking policy changes require a
-   minor version and migration notes plus consumer type/routing checks.
+   version after verification. During `0.x`, breaking configuration changes require a
+   minor version and migration notes plus installed YAML/registry/routing and
+   browser-contract consumer checks. The removed policy export/inspect/type checks
+   are not current release gates.
 2. Watch the Publish workflow. If checks fail, fix the source and push again with
    the same unpublished version; no additional version bump is needed.
 3. Verify registry metadata, tarball integrity, trusted-publishing provenance and

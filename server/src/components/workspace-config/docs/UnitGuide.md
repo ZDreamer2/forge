@@ -4,9 +4,9 @@ Interprets the workspace's trusted authored configuration into data the rest of 
 
 ## Notes
 
-Not implemented yet. The current `workspace-policy` component loads `workspace.ts` with the earlier callback-based membership model; the migration replaces it entirely, with no legacy path.
+`index.ts` exposes `loadWorkspaceConfig` and the resolved registry vocabulary. The loader reads data only; it does not import workspace modules or load analysis handlers.
 
-The source is the same `forge-workspace.yaml` Python Forge reads, in the folder selected by `ZD_AI_FORGE_WORKSPACE_GUIDE` (default `docs/forge/workspace`), and the concrete `forge-codebase.yaml` and type files it references. There is one codebase registry; the server never re-declares codebases. `workspace.ts`, its public `./workspace` authoring types and the policy checks in consuming workspaces are removed; a consuming workspace's installation remains only to exact-pin the `forge` executable. The YAML also gains a declared repository list and an optional display name; exact keys are settled while implementing. Python ignores keys it does not read and keeps its repository scan until it adopts the declared list.
+The source is the same `forge-workspace.yaml` Python Forge reads, in the folder selected by `ZD_AI_FORGE_WORKSPACE_GUIDE` (default `docs/forge/workspace`), and the concrete `forge-codebase.yaml` and type files it references. There is one codebase registry; the server never re-declares codebases. `workspace.ts`, its public `./workspace` authoring types and the policy checks in consuming workspaces are removed; a consuming workspace's installation remains only to exact-pin the `forge` executable. The required `repositories` list contains normalized workspace-relative strings (`.` is allowed); optional `display_name` is preserved exactly and falls back to the workspace basename in application composition. Python ignores keys it does not read and keeps its repository scan until it adopts the declared list.
 
 Configuration is data: loading it executes no project code. Registry rules (reference resolution, root/type validation, duplicate-root errors) are temporarily implemented here and in Python. Keep them equivalent, at least by checking both against the real workspace, until Python commands become clients of the server.
 

@@ -1,6 +1,7 @@
 import { basename } from "node:path";
-import { createWorkspaceChanges } from "../components/workspace-changes/index.ts";
-import { loadWorkspacePolicy, resolveRepositories } from "../components/workspace-policy/index.ts";
+import { createWorkingChanges } from "../components/tree-sources/index.ts";
+import { loadWorkspaceConfig } from "../components/workspace-config/index.ts";
+import { resolveRepositories } from "../components/workspace-repositories/index.ts";
 import { createGitProcess } from "../lib/git/index.ts";
 import { createCollection } from "./collection.ts";
 import { loadConfig } from "./config.ts";
@@ -15,15 +16,15 @@ type Options = {
 
 export async function start(options: Options) {
 	const config = await loadConfig(options);
-	const policy = await loadWorkspacePolicy(config.policyPath);
+	const workspaceConfig = await loadWorkspaceConfig(config.configPath);
 	const git = createGitProcess(options.env);
-	const repositories = await resolveRepositories(config.root, policy.repositories, git);
-	const name = policy.displayName ?? (basename(config.root) || config.root);
-	const snapshot = Object.freeze({ root: config.root, name, policy, repositories });
-	const changes = createWorkspaceChanges({
+	const repositories = await resolveRepositories(config.root, workspaceConfig.repositories, git);
+	const name = workspaceConfig.displayName ?? (basename(config.root) || config.root);
+	const snapshot = Object.freeze({ root: config.root, name, workspaceConfig, repositories });
+	const changes = createWorkingChanges({
 		root: config.root,
 		repositories,
-		codebasesForChange: (change) => policy.codebasesForChange(change),
+		codebases: workspaceConfig.codebases,
 		git,
 	});
 	const collection = createCollection({ collect: (signal) => changes.collect(signal) });

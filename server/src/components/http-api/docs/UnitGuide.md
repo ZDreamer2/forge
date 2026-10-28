@@ -4,7 +4,10 @@ Owns the server's domain HTTP endpoints. An endpoint selects a source, builds it
 
 ## Notes
 
-Not implemented yet. The identity and changes routes, with their wire mapping, currently live in `app`.
+`index.ts` exposes domain route construction and the shared error envelope. Identity
+and flat changes mapping live in `internal/routes.ts` and `internal/wire.ts`. The
+changes route consumes app-owned shared collection; it projects the canonical tree
+with response-local concrete definitions. Analysis and its wire shape remain deferred.
 
 This is the only component combining tree sources with analysis. Domain rules stay in the components owning them; endpoints orchestrate and map.
 

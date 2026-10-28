@@ -8,12 +8,12 @@ Service graph checks/tests run from `server/`, preserving local path semantics;
 the root graph also enforces UI access
 through the contract entry only.
 Consumer tests exercise the actual tarball; source imports or a symlink are
-not packaging evidence. Pass an absolute consuming `workspace.ts` path as the
-optional `test:workspace` argument to verify real policy types and the installed
-diagnostic without embedding private rules into this public repository.
+not packaging evidence. `test:workspace` takes no policy argument: it verifies YAML configuration and
+the installed server plus browser-safe contract, including removal of the old
+workspace-authoring export. Keep private workspace evidence outside the package.
 
-Server changes require the colocated app/CLI checks as well as unit checks. They
-exercise real temporary Git repositories, sockets and spawned CLI processes:
+Server changes require `src/app/tests/` app/CLI checks and each unit's owner-local
+`tests/` checks. They exercise real temporary Git repositories, sockets and spawned CLI processes:
 configuration precedence, identity, fresh HEAD/working changes and routing,
 Host/Origin enforcement, repository-loss failures, occupied-port failure and bounded
 SIGINT/SIGTERM shutdown. Collector fixtures cover staging reversals, boundary
@@ -30,10 +30,10 @@ JavaScript.
 For a direct source check, build and use the [source server
 instructions](../../../README.md#run-the-source-server), then request
 `/api/workspace` and `/api/changes` with the configured loopback authority. Each
-non-overlapping changes request collects current HEAD/working changes using startup policy/repository participation;
+non-overlapping changes request collects current HEAD/working changes using startup configuration/repository participation;
 missing-at-startup checkouts remain skipped and available-checkout failures are
 explicit errors. Open `/` for the service-owned diagnostic page. Refresh retries
-both APIs and reads current changes; restart reloads policy/repository
+both APIs and reads current changes; restart reloads configuration/repository
 participation. The UI remains read-only, with text paths and no diff/file browser.
 
 For browser changes, smoke-test the installed tarball in a real browser against
@@ -44,6 +44,6 @@ from deliberate fixture edits. Also compare the page against API/Git state on th
 authoritative checkout without automated mutations. Keep private observations and
 screenshots outside public package contents; record any observation limits.
 
-Registry `0.1.1` remains the diagnostic-only release. Retain tarball/public-type
+Registry `0.1.1` remains the diagnostic-only release. Retain tarball/contract
 verification and release-workflow checks when extending the source; publication
 and registry adoption require their separate release gates.

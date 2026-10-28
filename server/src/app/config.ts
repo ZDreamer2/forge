@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 
 export interface Config {
 	readonly root: string;
-	readonly policyPath: string;
+	readonly configPath: string;
 	readonly port: number;
 }
 
@@ -21,16 +21,16 @@ export async function loadConfig({ workspace, cwd, env }: ConfigInput): Promise<
 		throw new Error("Workspace must be a directory");
 	}
 	const root = await realpath(selected);
-	const policyPath = join(resolve(root, guidance), "workspace.ts");
-	if (!(await stat(policyPath)).isFile()) {
-		throw new Error("Workspace policy must be a workspace.ts file in the selected guidance folder");
+	const configPath = join(resolve(root, guidance), "forge-workspace.yaml");
+	if (!(await stat(configPath)).isFile()) {
+		throw new Error("Workspace configuration must be a forge-workspace.yaml file in the selected guidance folder");
 	}
 	const dotenvPort = await readDotenvPort(join(root, ".env"));
 	const value = processPort || dotenvPort || "";
 	if (!/^[0-9]{1,5}$/.test(value) || Number(value) < 1024 || Number(value) > 65535) {
 		throw new Error("ZD_AI_FORGE_PORT must be an ASCII decimal TCP port from 1024 through 65535");
 	}
-	return Object.freeze({ root, policyPath, port: Number(value) });
+	return Object.freeze({ root, configPath, port: Number(value) });
 }
 
 async function readDotenvPort(path: string): Promise<string | undefined> {

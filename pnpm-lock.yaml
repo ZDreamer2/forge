@@ -14,6 +14,9 @@ importers:
       hono:
         specifier: 4.13.13
         version: 4.13.13
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
     devDependencies:
       '@biomejs/biome':
         specifier: 2.5.7
@@ -508,6 +511,11 @@ packages:
     engines: {node: ^22.13||^24||>=26}
     hasBin: true
 
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
 snapshots:
 
   '@biomejs/biome@2.5.7':
@@ -860,3 +868,5 @@ snapshots:
   undici-types@7.18.2: {}
 
   watskeburt@6.0.0: {}
+
+  yaml@2.9.1: {}

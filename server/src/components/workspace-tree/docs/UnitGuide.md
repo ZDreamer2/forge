@@ -4,7 +4,7 @@ Vocabulary and data structure for a tree of workspace paths that sources build a
 
 ## Notes
 
-Not implemented yet.
+`index.ts` exposes the request-local `WorkspaceTree`, its insertion vocabulary and `createWorkspaceTree`. Insertion resolves owners from explicit startup context. `nodes` includes real directory ancestors; `entries` retains source insertion order. `totals(path)` derives basic numeric added/removed line totals from current entry data. Analysis metadata and custom totals remain deferred.
 
 ### Nodes
 
@@ -22,12 +22,14 @@ The metadata set is fixed: emphasis (`emphasize`, `normal`, `deemphasize`, `hidd
 
 Emphasis applies to a subtree, and the nearest explicit setting wins, so an important subtree can contain unimportant ones such as tests deeper down. Signals bubble up to ancestors and are never hidden by de-emphasis: a warning inside a collapsed gray subtree stays visible on it.
 
-Derived values are computed on demand from the tree rather than stored by pipeline phases, so handlers can use them too. They include effective emphasis and totals: line changes for every node including directories and the root, and further totals such as growth excluding de-emphasized files or per codebase.
+Derived values are computed on demand from the tree rather than stored by pipeline phases, so future handlers can use them too. Basic line totals already cover every node including directories and the root. Renames count once along the destination path; former ancestry is retained for context with no duplicated file entry or counts. Binary entries contribute no fabricated text counts. Effective emphasis and further totals such as growth excluding de-emphasized files or per codebase follow with analysis.
 
 ### Shape
 
 There is one tree type; analysis metadata is optional. Light operations such as listing, check scoping or staging use a tree without running analysis.
 
-A tree is built per request and mutated in place during that request. Classes are data-only under the service conventions: methods operate on their own fields, without dependencies or I/O. Reading file content is a capability supplied separately, not a tree method.
+A tree is built incrementally per request through `insert()`. Its live `nodes` and `entries` views allow reading, not independent structural edits: insertion owns node identity, side ownership and synchronization of the map and ordered entries. Statistics remain writable on nodes, and analysis metadata will be enriched in place; the tree is not a frozen snapshot. These are TypeScript API constraints, not a runtime sandbox for trusted code.
+
+Classes are data-only under the service conventions: methods operate on their own fields, without dependencies or I/O. Reading file content is a capability supplied separately, not a tree method.
 
 Results with their own lifecycle, such as check runs or review checkpoints, may live beside the tree keyed by path rather than on nodes. Decide that when they arrive; their visible effect can still be emphasis and signals.

@@ -17,7 +17,7 @@ section { border-top: 1px solid #ccd3da; margin-top: 1.5rem; }
 </head>
 <body>
 <h1>Forge workspace</h1>
-<p>Read-only workspace diagnostic. Refresh reads current changes. Restart the server to reload policy and repository participation.</p>
+<p>Read-only workspace diagnostic. Refresh reads current changes. Restart the server to reload configuration and repository participation.</p>
 <button id="refresh" type="button">Refresh</button>
 <p id="status" role="status" aria-live="polite">Loading…</p>
 <section aria-labelledby="identity-heading">
@@ -87,7 +87,7 @@ function showChanges(data) {
     if (change.from !== undefined) item.append(textElement("p", "From: " + change.from, "path"));
     const memberships = document.createElement("ul");
     for (const id of change.codebases) {
-      memberships.append(textElement("li", id + " — " + data.codebases[id].guidance, "path"));
+      memberships.append(textElement("li", id + " — " + data.codebases[id].guidance + (data.codebases[id].type ? " — " + data.codebases[id].type : ""), "path"));
     }
     item.append(change.codebases.length ? memberships : textElement("p", "No codebase membership."));
     list.append(item);

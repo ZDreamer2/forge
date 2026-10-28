@@ -4,7 +4,7 @@ Owns the workspace's participating Git repositories: resolving declarations at s
 
 ## Notes
 
-Not implemented yet. Repository probing currently lives in `workspace-policy`, and path participation in `workspace-changes` internals.
+`index.ts` exposes startup `resolveRepositories`, pure `repositoryExclusions` and per-collection `createScope`. Exclusion calculation keeps declared locations, canonical nested Git roots and missing descendants through aliases separate from their parent participant. Sources render these exclusions into their own Git command pathspecs and pass the same paths to `createScope`; they do not reconstruct declaration/alias rules. Repository declarations and probe identity are retained at startup; each collection creates fresh directory observations so Refresh sees new or removed undeclared clones and symlink boundaries.
 
 Probe declared repositories only; never scan for additional clones. A repository missing at startup stays excluded until restart; loss of an available repository is a failure, not a silently smaller result.
 

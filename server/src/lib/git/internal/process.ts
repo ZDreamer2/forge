@@ -6,7 +6,13 @@ export type GitResult = { code: number; stdout: Buffer; stderr: Buffer };
 export type GitProcess = (
 	cwd: string,
 	args: readonly string[],
-	options?: { signal?: AbortSignal; timeoutMs?: number; maxOutputBytes?: number; input?: Buffer },
+	options?: {
+		signal?: AbortSignal;
+		timeoutMs?: number;
+		maxOutputBytes?: number;
+		input?: Buffer;
+		scratchIndex?: string;
+	},
 ) => Promise<GitResult>;
 
 /** Keep deliberate config isolation while ignoring ambient checkout/index redirection. */
@@ -48,7 +54,12 @@ export function createGitProcess(environment: Readonly<NodeJS.ProcessEnv>): GitP
 					"diff.autoRefreshIndex=false",
 					...args,
 				],
-				{ cwd, env, detached: true, stdio: ["pipe", "pipe", "pipe"] },
+				{
+					cwd,
+					env: options.scratchIndex ? { ...env, GIT_INDEX_FILE: options.scratchIndex } : env,
+					detached: true,
+					stdio: ["pipe", "pipe", "pipe"],
+				},
 			);
 			const stdout: Buffer[] = [];
 			const stderr: Buffer[] = [];
