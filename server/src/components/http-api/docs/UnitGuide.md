@@ -1,16 +1,23 @@
 # http-api Guide
 
-Owns the server's domain HTTP endpoints. An endpoint selects a source, builds its tree, runs analysis when the operation needs it and maps the result into `api-contract` shapes.
+Owns domain HTTP endpoints, selecting sources and mapping domain results into
+browser-safe `api-contract` shapes. It is the component combining source collection
+with analysis; domain rules remain with their respective owners.
 
-## Notes
+`/changes` projects shared base collection into a flat change list and never runs
+handlers. `/changes/analysis` waits for that collection under an app-owned request
+budget, then starts an independent analysis run. It supplies the source's narrow
+current-size capability for nodes of that collected tree. Cancellation cannot
+cancel another request's shared collection. `app` owns admission, controllers,
+shutdown, mounting and Host/Origin protection. Source size operations register with
+that request owner: settling or cancelling a run aborts and drains its source
+probes before disposal completes. Arbitrary authored-handler promises may still
+be abandoned when they do not cooperate.
 
-`index.ts` exposes domain route construction and the shared error envelope. Identity
-and flat changes mapping live in `internal/routes.ts` and `internal/wire.ts`. The
-changes route consumes app-owned shared collection; it projects the canonical tree
-with response-local concrete definitions. Analysis and its wire shape remain deferred.
-
-This is the only component combining tree sources with analysis. Domain rules stay in the components owning them; endpoints orchestrate and map.
-
-The server owns structural meaning, ownership, totals and review metadata; clients render and fold rather than derive them. The wire representation of trees remains open. The [API contract](../../../../docs/protocol.md) owns observable behavior.
-
-`app` owns mounting, Host/Origin protection, shared in-flight work and shutdown; this unit owns endpoint behavior. GET and HEAD operations stay read-only.
+The analysis mapping emits a path-indexed node table with explicit root and child
+adjacency. It translates owner and handler references into response-local
+definitions, preserving safe literal keys. Direct annotations remain on their
+nodes; finalized totals, effective emphasis and inclusive signal counts carry the
+server's structural meaning to clients. The [API contract](../../../../docs/protocol.md)
+owns the wire semantics and safe handler-error envelope. GET and HEAD remain
+read-only toward workspace and Git state; trusted modules are not sandboxed.

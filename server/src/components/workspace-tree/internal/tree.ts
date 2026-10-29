@@ -95,6 +95,9 @@ export class WorkspaceTree {
 			repo: entry.repo,
 			...(entry.kind === undefined ? {} : { kind: entry.kind }),
 			...(entry.from === undefined ? {} : { from: entry.from }),
+			...(entry.kind === "renamed" && entry.renameContentChanged !== undefined
+				? { renameContentChanged: entry.renameContentChanged }
+				: {}),
 			...(entry.base === undefined ? {} : { base: this.side(entry.from ?? entry.path, entry.base.kind) }),
 			...(entry.current === undefined ? {} : { current: this.side(entry.path, entry.current.kind) }),
 			...(entry.statistics === undefined ? {} : { statistics: { ...entry.statistics } }),

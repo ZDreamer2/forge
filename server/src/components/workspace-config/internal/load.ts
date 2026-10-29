@@ -2,6 +2,7 @@ import { lstat, readFile, readlink, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { parse } from "yaml";
 import {
+	type ResolvedAnalysisHandler,
 	type ResolvedCodebase,
 	type ResolvedCodebaseType,
 	type WorkspaceConfig,
@@ -91,6 +92,19 @@ async function references(config: string, data: Record<string, unknown>, key: st
 	return paths;
 }
 
+function analysisHandlers(config: string, data: Record<string, unknown>): readonly ResolvedAnalysisHandler[] {
+	if (!Object.hasOwn(data, "analysis_handlers")) return [];
+	const raw = data.analysis_handlers;
+	if (!Array.isArray(raw)) throw new WorkspaceConfigError(`${config}: analysis_handlers must be a list`);
+	return raw.map((value: unknown, index) => {
+		const path = relative(value, `${config}: analysis_handlers entry`);
+		if (!/^\.{1,2}\//.test(path) || !/\.(?:m?ts|m?js)$/.test(path) || path.includes("\\") || /[*?]/.test(path)) {
+			throw new WorkspaceConfigError(`${config}: analysis_handlers requires explicit relative ESM module paths`);
+		}
+		return { modulePath: resolve(dirname(config), path), ordinal: index + 1 };
+	});
+}
+
 export function validRepositoryPath(path: string): boolean {
 	return (
 		path === "." ||
@@ -128,7 +142,12 @@ export async function loadWorkspaceConfig(absolutePath: string): Promise<Workspa
 			type = types.get(id);
 			if (!type) throw new WorkspaceConfigError(`${marker}: unknown codebase type ${id}`);
 		}
-		codebases.push({ root, guide: dirname(marker), ...(type === undefined ? {} : { type }) });
+		codebases.push({
+			root,
+			guide: dirname(marker),
+			analysisHandlers: analysisHandlers(marker, concrete),
+			...(type === undefined ? {} : { type }),
+		});
 	}
 	if (!Array.isArray(data.repositories)) throw new WorkspaceConfigError(`${config}: repositories must be a list`);
 	const seen = new Set<string>();
@@ -147,6 +166,7 @@ export async function loadWorkspaceConfig(absolutePath: string): Promise<Workspa
 		displayName = data.display_name;
 	}
 	return {
+		analysisHandlers: analysisHandlers(config, data),
 		repositories,
 		codebases,
 		codebaseTypes: [...types.values()],

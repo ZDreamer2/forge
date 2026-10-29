@@ -41,8 +41,8 @@ its design context.
 | `workspace-config` | Trusted authored workspace knowledge: registered codebases, declared repositories, display name, handler references | None |
 | `workspace-repositories` | Observed participating repositories: startup resolution, status, path participation | workspace-config |
 | `workspace-tree` | Tree vocabulary and data: nodes, sides, owners, repository/codebase roots, fixed review metadata, building and derived values | workspace-config |
-| `tree-sources` | Builds base trees from sources of workspace state, each with a content reader for its sides | workspace-tree, workspace-repositories, workspace-config |
-| `tree-analysis` | Runs Forge, workspace and codebase handlers over any tree, adding review metadata | workspace-tree, workspace-config |
+| `tree-sources` | Builds base trees from sources of workspace state, with bounded source capabilities | workspace-tree, workspace-repositories, workspace-config |
+| `tree-analysis` | Runs ordered trusted handlers over a run-local tree facade and finalizes review metadata | workspace-tree, workspace-config |
 | `http-api` | Domain endpoints: selects a source, builds and analyzes its tree, maps results to the wire contract | tree-sources, tree-analysis, workspace-tree, workspace-repositories, workspace-config, api-contract |
 | `api-contract` | Browser-safe wire vocabulary consumed by server and UI; contract changes also require consumer verification | None |
 | `diagnostic-ui` | Minimal diagnostic page; its browser code consumes the HTTP API | None |
@@ -62,10 +62,9 @@ assembly. Domain components do not construct each other or read process
 configuration; composition supplies their dependencies.
 
 Current implementation includes configuration, repository participation, the canonical
-workspace tree, the working-changes source and identity/flat changes HTTP routes.
-The machine-checked component edges match these owners. `tree-analysis` remains
-documentation only; content readers, analysis handlers and the public tree wire
-representation are deferred.
+workspace tree, working changes, ordered analysis handlers and identity/flat/analyzed
+changes HTTP routes. The machine-checked component edges match these owners.
+Sources supply narrow current-file byte sizes; full content readers remain deferred.
 
 ## Authority, trust and lifecycle
 
@@ -74,8 +73,8 @@ replaced on restart. The server probes declared repositories rather than scannin
 missing-at-startup repositories remain excluded, while loss of an available
 repository fails collection instead of silently reducing the result.
 
-Refresh observes current Git state within that startup context. Each request builds
-and analyzes its own tree; results are live observations, not cached trees or
+Refresh observes current Git state within that startup context. Overlapping requests may share base collection, while each analysis request owns
+its facade, annotations and final derived values; results are live observations, not cached trees or
 atomic cross-repository snapshots. The practical HEAD/working
 comparison is not staging equivalence or a replacement for durable capture and
 checking/staging. Future migration must align their participation and scope before
@@ -86,8 +85,11 @@ Authored configuration is data; analysis handlers and Git filters are trusted ex
 HTTP protection does not change that trust model. File access remains within the
 selected workspace even when its containing Git root extends above it.
 
-Application composition owns the listener, termination hooks and active collection.
-Overlapping requests share in-flight work, not cached results, and one client
-leaving does not cancel the others. Shutdown stops admission, cancels and reaps
+Application composition owns the listener, termination hooks and active collection and analysis runs.
+Overlapping requests share in-flight base work, not cached results, and one client
+leaving cancels only its own analysis. Analysis has a 30-second total budget,
+including collection waiting; cooperative cancellation releases an awaited handler
+without preempting synchronous trusted JavaScript. App-owned source observations
+remain tracked through cancellation and subprocess reaping. Shutdown stops admission, cancels and reaps
 owned Git work, and closes connections within finite bounds. Transport and process
 resources do not outlive their application owner.

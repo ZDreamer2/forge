@@ -18,6 +18,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { verifyInstalledAnalysis } from "./workspace-consumer-analysis.ts";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 assert.equal(process.argv.length, 2, "test:workspace accepts no policy argument");
 const temporary = mkdtempSync(join(tmpdir(), "forge-consumer-"));
@@ -106,6 +108,7 @@ function sourceState(workspace: string) {
 				index: readFileSync(join(git, "index")).toString("base64"),
 				head: readFileSync(join(git, "HEAD")).toString("base64"),
 				refs: snapshot(join(git, "refs")),
+				objects: snapshot(join(git, "objects")),
 				packedRefs: existsSync(join(git, "packed-refs"))
 					? readFileSync(join(git, "packed-refs")).toString("base64")
 					: null,
@@ -377,7 +380,7 @@ export type Removed = WorkspacePolicy;
 	// Check the UI-facing source seam in the actual artifact, not as a new npm export.
 	writeFileSync(
 		join(consumer, "api-contract.ts"),
-		`import type { ApiErrorCode, WorkspaceChanges, WorkspaceIdentity } from './node_modules/@zdreamer/forge/dist/server/src/components/api-contract/index.js';
+		`import type { ApiErrorCode, ApiFailure, WorkspaceChanges, WorkspaceIdentity } from './node_modules/@zdreamer/forge/dist/server/src/components/api-contract/index.js';
 export const changes = {codebases: {app: {root: 'app', guidance: 'docs/app', type: 'service'}}, changes: []} satisfies WorkspaceChanges;
 // @ts-expect-error Concrete definitions require their root.
 export const missingRoot: WorkspaceChanges = {codebases: {app: {guidance: 'docs/app'}}, changes: []};
@@ -385,6 +388,7 @@ export const missingRoot: WorkspaceChanges = {codebases: {app: {guidance: 'docs/
 export const invalidType: WorkspaceChanges = {codebases: {app: {root: 'app', guidance: 'docs/app', type: 123}}, changes: []};
 export const identity = {workspace: {root: '/example', name: 'Example'}, repositories: []} satisfies WorkspaceIdentity;
 export const error = 'not_found' satisfies ApiErrorCode;
+export const failure = {error: {code: 'internal_error', message: 'Internal server error', handler: 'workspace:1'}} satisfies ApiFailure;
 // @ts-expect-error Node globals must not leak through the browser-safe contract.
 export type NodeGlobal = typeof process;
 `,
@@ -414,8 +418,9 @@ export type NodeGlobal = typeof process;
 	assert.equal(removedCommand.status, 1);
 	assert.match(removedCommand.stderr, /Usage: forge serve/);
 	await verifyServer(executable, consumer);
+	await verifyInstalledAnalysis({ consumer, executable, compiler, run, portReservation, installedServer, sourceState });
 	console.log(
-		"Tarball-only consumer: installed server/page, fresh read-only multirepo changes, protection, shutdown, browser contract and removed policy export/command passed.",
+		"Tarball-only consumer: installed server/page, read-only changes/analysis, native TS handlers, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
 	);
 } finally {
 	rmSync(temporary, { recursive: true, force: true });

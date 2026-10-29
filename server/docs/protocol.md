@@ -99,8 +99,7 @@ base/current order. Definitions include only referenced owners; roots such as
 
 Binary changes and mode/type changes remain entries; Git's core.fileMode/core.symlinks semantics apply.
 Gitlinks/undeclared clones and their contents are excluded; transitions between
-ordinary files and gitlinks expose only the ordinary side. Binary classification
-and line counts belong to future diff operations. Declared nested repositories
+ordinary files and gitlinks expose only the ordinary side. The light list omits binary classification and line counts; analysis exposes them. Declared nested repositories
 remain distinct participants. Missing-at-startup declarations contribute no changes;
 loss of an available repository fails collection until restart.
 
@@ -122,7 +121,7 @@ refused before object-demanding comparison to prevent silent lazy fetch. Ordinar
 trusted filters/configuration are allowed. External diff/textconv, optional writes,
 fsmonitor and hooks are disabled, and ambient Git root/index/worktree redirection
 is removed. Server commands do not stage/commit/write source indexes, refs or
-objects. Configuration is data-only; trusted filters execute code outside this effects guarantee.
+objects. YAML configuration is data-only; trusted filters and analysis handlers execute code outside this effects guarantee.
 
 This browser list does not replace Python dirt detection, capture or checking/
 staging. Future migration must align collection/check/staging participation together;
@@ -136,17 +135,83 @@ of the analysis operation below.
 
 `GET /changes/analysis`
 
-Returns the workspace changes as a server-owned tree: changed files plus their
-directories and the root, enriched by Forge, workspace, and applicable codebase
-analysis.
+Returns a fresh analyzed workspace changes tree. Collection uses the same participation,
+comparison and read-only guarantees as `/changes`. The response is:
 
-- Totals: line-change counters for every node, including directories and the root.
-- Review attention: emphasize, deemphasize, or normally hide a node and its subtree, with a reason; a nested node can override its ancestor.
-- Signals: notices or warnings attached to a node or a location within a file, with explanations. The root represents the changeset. De-emphasis does not hide signals.
+```json
+{
+  "root": ".",
+  "nodes": {
+    ".": {
+      "path": ".", "children": [],
+      "base": { "path": ".", "kind": "directory", "repository": ".", "repositoryRoot": "." },
+      "current": { "path": ".", "kind": "directory", "repository": ".", "repositoryRoot": "." },
+      "signals": [], "effectiveEmphasis": { "value": "normal" },
+      "signalCounts": { "notice": 0, "warning": 0 },
+      "rawTotals": { "added": 0, "removed": 0 },
+      "attentionTotals": { "added": 0, "removed": 0 }
+    }
+  },
+  "codebases": {},
+  "handlers": {
+    "builtin:deemphasize-directories": { "id": "builtin:deemphasize-directories" },
+    "builtin:large-markdown": { "id": "builtin:large-markdown" }
+  }
+}
+```
 
-A rename is one node at its new path that identifies the previous path. The response
-includes all changed files, including those marked as normally hidden. The tree's
-wire representation remains to be defined.
+Every child path has its own node. `nodes` is indexed by canonical workspace-relative path, including
+`.`. Nodes carry `path`, sorted `children` path lists and optional `repo`, change
+`kind`, rename `from`, `renameContentChanged`, and own `statistics`:
+`{added, removed, binary}`. Each present `base`/`current` side carries its own
+`path` and `kind` (`directory`, `file`, `symlink`), optional `repository` and
+`codebase` identity, and optional `repositoryRoot`/`codebaseRoot` labels. Side
+kinds can differ during file/directory transitions. Rename nodes occur once at
+the destination, retaining previous-side ownership; former ancestors may remain
+with zero counts. Rename content change compares source-observed blob identities,
+independently of Git similarity or line counts.
+
+`rawTotals` includes a node's own nonbinary statistics and descendants exactly
+once. `attentionTotals` excludes entries whose effective emphasis is `deemphasized`
+or `hidden`. Binary entries contribute no fabricated lines. `emphasis`, when set,
+is the node's direct `{value, reason, handler}` annotation. The last direct setting
+wins on that node; the nearest explicit setting along canonical ancestry wins for
+`effectiveEmphasis`, including a `normal` reset. Effective explicit values retain
+`reason`, producing `handler` and `origin` path; default normal has no invented
+handler. Values are `normal`, `emphasized`, `deemphasized`, `hidden`.
+
+`signals` contains direct `{severity, message, handler, location?}` payloads in
+handler order. Severity is `notice` or `warning`; an optional authored location is
+`{side: "base" | "current", line, column?}` with one-based coordinates.
+`signalCounts` includes direct and descendant counts by severity. Emphasis never
+suppresses signals or ancestor counts. All nodes, including hidden ones, remain
+in the response. Object keys such as `__proto__` are ordinary data keys.
+
+`codebases` defines referenced owners as in `/changes`. `handlers` maps each safe
+configured occurrence ID to `{id, codebase?}`; a codebase handler's owner may have
+no changed files. IDs distinguish repeated module references without exposing
+absolute module filenames. Definitions are descriptive, not additional tree nodes.
+
+Built-ins run first, then workspace handlers in list order and concrete handlers
+in registry/list order. Each trusted handler sees the whole tree and may annotate
+any node. Built-ins deemphasize root `plans/` and directories named exactly `tests`
+or `Tests`. They warn on current regular Markdown (`.md`/`.markdown`, case
+insensitive) larger than 20,480 bytes for additions, modifications and content-edited
+renames. Pure moves, deletions, symlinks and current root `plans/` paths are excluded.
+Size lookup uses current metadata, does not read file bytes or follow symlinks,
+and fails if a candidate is no longer an eligible current file within source bounds.
+
+Analysis state is independent per request even when base collection overlaps.
+The total 30-second operation budget includes collection waiting. Disconnect,
+timeout and shutdown cancel only the affected run; shared collection belongs to
+the application. Failed/cancelled analysis aborts and drains its owned source
+observations before disposal completes. Cancellation is cooperative and cannot preempt synchronous trusted
+JavaScript. Modules load at startup and refresh on process restart. Handler load or
+invocation failure fails the whole analysis with HTTP 500 and
+`{ "error": { "code": "internal_error", "message": "Internal server error", "handler": "safe-occurrence-id" } }`.
+Raw causes, stacks and module paths are omitted. Light `/changes` executes no
+handlers and remains independently available. Forge inspection does not write
+workspace/Git state; trusted executable modules are outside an effects sandbox.
 
 #### Read file diff
 
@@ -186,4 +251,4 @@ Additional directory hiding, tree expansion state, and copying paths are client 
 
 ## Open decisions
 
-- Whether workspace change analysis is strictly read-only.
+- Storage side effects for future merge-request sources remain to be defined.

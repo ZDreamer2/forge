@@ -284,3 +284,56 @@ test("CLI shares active GET/HEAD work and shutdown reaps a TERM-resistant Git ch
 		await Promise.all([rm(root, { recursive: true, force: true }), rm(tools, { recursive: true, force: true })]);
 	}
 });
+
+test("CLI aborts active analysis on shutdown and reloads modules in a fresh process", { timeout: 10000 }, async () => {
+	const { root, configuration } = await fixture();
+	const helper = await mkdtemp(join(tmpdir(), "forge-handler-marker-"));
+	const marker = join(helper, "started");
+	const handler = join(root, "docs/forge/workspace/handler.mjs");
+	await writeFile(
+		configuration,
+		"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
+	);
+	await writeFile(
+		handler,
+		`import { writeFile } from 'node:fs/promises'; export default async root => { await writeFile(${JSON.stringify(marker)}, 'started'); await new Promise(resolve => root.signal.addEventListener('abort', resolve, {once:true})); root.signal.throwIfAborted(); };`,
+	);
+	const configurationBefore = await readFile(configuration);
+	const reservation = await reservePort();
+	await reservation.close();
+	const env = { ZD_AI_FORGE_PORT: String(reservation.port) };
+	const server = run(["serve", "--workspace", root], env);
+	try {
+		await ready(server);
+		const pending = fetch(`http://127.0.0.1:${reservation.port}/api/changes/analysis`).catch(() => undefined);
+		for (let attempt = 0; attempt < 100; attempt++) {
+			try {
+				await readFile(marker);
+				break;
+			} catch {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			}
+		}
+		assert.equal(await readFile(marker, "utf8"), "started");
+		server.child.kill("SIGTERM");
+		assert.deepEqual(await bounded(server.exited), { code: 0, signal: null });
+		await pending;
+		await writeFile(handler, "export default root => root.notice('fresh process');");
+		const fresh = run(["serve", "--workspace", root], env);
+		try {
+			await ready(fresh);
+			const response = await fetch(`http://127.0.0.1:${reservation.port}/api/changes/analysis`);
+			assert.equal(response.status, 200);
+			const body = (await response.json()) as import("../../components/api-contract/index.ts").WorkspaceAnalysis;
+			assert.equal(body.nodes["."]?.signals[0]?.message, "fresh process");
+			fresh.child.kill("SIGTERM");
+			assert.deepEqual(await bounded(fresh.exited), { code: 0, signal: null });
+		} finally {
+			fresh.child.kill("SIGKILL");
+		}
+		assert.deepEqual(await readFile(configuration), configurationBefore);
+	} finally {
+		server.child.kill("SIGKILL");
+		await Promise.all([rm(root, { recursive: true, force: true }), rm(helper, { recursive: true, force: true })]);
+	}
+});

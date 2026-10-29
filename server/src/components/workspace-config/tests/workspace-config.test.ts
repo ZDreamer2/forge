@@ -35,6 +35,7 @@ test("loads ordered concrete registry, optional type and exact display name from
 			{
 				root: join(f.root, "app"),
 				guide: join(f.root, "app/docs"),
+				analysisHandlers: [],
 				type: { id: "example/shared", guide: join(f.root, "type") },
 			},
 		]);
@@ -197,6 +198,70 @@ test("rejects equal lexical roots and duplicate type IDs while keeping symlink r
 			registry.codebases.map((c) => c.root),
 			[join(f.root, "app"), join(f.root, "alias")],
 		);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test("resolves ordered handler occurrences without importing or skipping missing modules", async () => {
+	const f = await fixture();
+	try {
+		await f.write("workspace/explodes.ts", "throw new Error('must never execute during config loading');\n");
+		await f.write(
+			"workspace/forge-workspace.yaml",
+			JSON.stringify({
+				codebases: ["../app/docs/forge-codebase.yaml"],
+				codebase_types: [],
+				repositories: [],
+				analysis_handlers: ["./explodes.ts", "../external/missing # handler.mts", "./explodes.ts"],
+			}),
+		);
+		await f.write(
+			"app/docs/forge-codebase.yaml",
+			"root: ..\nanalysis_handlers: [./rule.mjs, ../../workspace/explodes.ts]\n",
+		);
+		const config = await loadWorkspaceConfig(f.config);
+		assert.deepEqual(config.analysisHandlers, [
+			{ modulePath: join(f.root, "workspace/explodes.ts"), ordinal: 1 },
+			{ modulePath: join(f.root, "external/missing # handler.mts"), ordinal: 2 },
+			{ modulePath: join(f.root, "workspace/explodes.ts"), ordinal: 3 },
+		]);
+		assert.deepEqual(config.codebases[0]?.analysisHandlers, [
+			{ modulePath: join(f.root, "app/docs/rule.mjs"), ordinal: 1 },
+			{ modulePath: join(f.root, "workspace/explodes.ts"), ordinal: 2 },
+		]);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test("rejects malformed handler references at workspace and concrete declarations", async () => {
+	const f = await fixture();
+	try {
+		for (const value of [
+			null,
+			{},
+			"./rule.ts",
+			[""],
+			[1],
+			["/absolute.ts"],
+			["pkg"],
+			["./*.ts"],
+			["./rule.cjs"],
+			["./nul\0.ts"],
+		]) {
+			await f.write(
+				"workspace/forge-workspace.yaml",
+				JSON.stringify({ codebases: [], codebase_types: [], repositories: [], analysis_handlers: value }),
+			);
+			await assert.rejects(loadWorkspaceConfig(f.config), /analysis_handlers/);
+			await f.write(
+				"workspace/forge-workspace.yaml",
+				JSON.stringify({ codebases: ["../app/docs/forge-codebase.yaml"], codebase_types: [], repositories: [] }),
+			);
+			await f.write("app/docs/forge-codebase.yaml", JSON.stringify({ root: "..", analysis_handlers: value }));
+			await assert.rejects(loadWorkspaceConfig(f.config), /analysis_handlers/);
+		}
 	} finally {
 		await f.cleanup();
 	}

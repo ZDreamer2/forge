@@ -369,6 +369,11 @@ test("scopes parent Git status to the workspace and hides outside rename sources
 		seen.push(entry);
 		return [];
 	});
+	const clipped = await collect.collectResult();
+	for (const entry of clipped.entries) {
+		assert.equal(entry.renameContentChanged, undefined);
+		assert.equal(entry.from, undefined);
+	}
 	assert.deepEqual(await collect.collect(), [change("arrived", "added"), change("inside-out", "deleted")]);
 	assert.deepEqual(seen, [
 		{ repo: ".", path: "arrived", kind: "added" },
@@ -1097,6 +1102,10 @@ for (const scenario of ["deletion recreation", "rename recreation"] as const) {
 			codebases: [],
 			git: gitProcess,
 		}).collect();
+		for (const entry of tree.entries) {
+			assert.equal(entry.renameContentChanged, undefined);
+			assert.equal(entry.from, undefined);
+		}
 		assert.deepEqual(tree.nodes.get("old.txt")?.statistics, { added: 1, removed: 2, binary: false });
 		if (scenario === "rename recreation") {
 			assert.deepEqual(tree.nodes.get("new.txt")?.statistics, { added: 4, removed: 0, binary: false });
@@ -1186,3 +1195,61 @@ setInterval(() => {}, 1000);
 		assert.deepEqual(await snapshot(root), before);
 	});
 }
+
+test("retains real raw rename identities for pure, edited, R100 reordered and binary moves without writes", async (t) => {
+	const { root } = await fixture(t);
+	const rowsFor = (name: string) => Array.from({ length: 200 }, (_, index) => `${name} distinct text row ${index}\n`);
+	const rows = rowsFor("reordered");
+	const binaryRows = Array.from({ length: 200 }, (_, index) => `binary row ${index}\0\n`);
+	const binary = Buffer.from(binaryRows.join(""));
+	for (const name of ["pure", "edited", "reordered", "mode"]) await put(root, `${name}-old.md`, rowsFor(name).join(""));
+	for (const name of ["binary-pure", "binary-edited"])
+		await put(root, `${name}-old.md`, name === "binary-pure" ? Buffer.concat([binary, Buffer.from("pure\n")]) : binary);
+	commit(root);
+	for (const name of ["pure", "edited", "reordered", "mode", "binary-pure", "binary-edited"])
+		git(root, "mv", `${name}-old.md`, `${name}-new.md`);
+	await put(root, "edited-new.md", `${rowsFor("edited").join("")}extra\n`);
+	await put(root, "reordered-new.md", [...rows.slice(100), ...rows.slice(0, 100)].join(""));
+	await chmod(join(root, "mode-new.md"), 0o755);
+	await put(
+		root,
+		"binary-edited-new.md",
+		Buffer.from([...binaryRows.slice(100), ...binaryRows.slice(0, 100)].join("")),
+	);
+	const process = createGitProcess(env);
+	const observations: Buffer[] = [];
+	const service = createWorkingChanges({
+		root,
+		codebases: [],
+		repositories: await resolveRepositories(root, [{ path: "." }], process),
+		git: async (cwd, args, options) => {
+			const result = await process(cwd, args, options);
+			if (args[0] === "diff" && args.includes("--raw")) observations.push(result.stdout);
+			return result;
+		},
+	});
+	const before = await snapshot(root);
+	const tree = await service.collect();
+	assert.deepEqual(
+		tree.entries.map(({ path, kind, renameContentChanged }) => ({ path, kind, renameContentChanged })),
+		[
+			{ path: "binary-edited-new.md", kind: "renamed", renameContentChanged: true },
+			{ path: "binary-pure-new.md", kind: "renamed", renameContentChanged: false },
+			{ path: "edited-new.md", kind: "renamed", renameContentChanged: true },
+			{ path: "mode-new.md", kind: "renamed", renameContentChanged: false },
+			{ path: "pure-new.md", kind: "renamed", renameContentChanged: false },
+			{ path: "reordered-new.md", kind: "renamed", renameContentChanged: true },
+		],
+	);
+	for (const entry of tree.entries) assert.ok((await service.currentByteSize(tree, entry)) > 0);
+	const raw = observations[0]?.toString("utf8") ?? "";
+	for (const name of ["reordered", "binary-edited"]) {
+		const match = new RegExp(
+			`:100644 100644 ([a-f0-9]{40}) ([a-f0-9]{40}) R100\\0${name}-old.md\\0${name}-new.md`,
+		).exec(raw);
+		assert.ok(match, `Expected concrete R100 pair for ${name}`);
+		assert.notEqual(match[1], match[2]);
+		assert.notEqual(match[2], "0".repeat(40));
+	}
+	assert.deepEqual(await snapshot(root), before);
+});

@@ -71,10 +71,10 @@ export async function compare(
 			const source = await inScope(item.from);
 			if (destination && source) scoped.push(item);
 			else if (destination) {
-				const { from: _from, ...rest } = item;
+				const { from: _from, renameContentChanged: _renameContentChanged, ...rest } = item;
 				scoped.push({ ...rest, kind: "added", oldMode: "000000", correction: "addition" });
 			} else if (source) {
-				const { from: _from, ...rest } = item;
+				const { from: _from, renameContentChanged: _renameContentChanged, ...rest } = item;
 				scoped.push({ ...rest, path: item.from, kind: "deleted", newMode: "000000", correction: "deletion" });
 			}
 		}

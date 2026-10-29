@@ -16,6 +16,8 @@ Repositories are declared, never discovered: a new nested clone participates onl
 
 Codebase membership is a directory boundary: a path belongs to the registered codebase whose root is its closest containing ancestor, and a deeper root wins. This unit exposes registered roots; `workspace-tree` resolves owners from them. There are no per-change membership callbacks.
 
-Handlers are the only authored code: later TypeScript modules referenced from the YAML (workspace handlers from `forge-workspace.yaml`, codebase handlers from `forge-codebase.yaml`), trusted and not sandboxed. Their authoring types become a new public export when `tree-analysis` is implemented. Report authoring mistakes clearly, but do not build defensive machinery against trusted code.
+Optional `analysis_handlers` lists on the workspace and concrete markers contain explicit YAML-relative ESM paths (`./rule.ts`, `../rules/rule.mjs`). Native `.ts`/`.mts` and `.js`/`.mjs` modules are supported. Resolution preserves list and codebase declaration order, including repeated references; a descriptor records its absolute module path and one-based list ordinal. Missing handler modules remain explicit references rather than being skipped like missing registry markers. Type guides do not register handlers.
+
+Configuration loading never imports these modules. `tree-analysis` loads their default functions at startup and retains load failures for analysis requests; malformed lists remain configuration errors. Handler ownership identifies registration and ordering, without restricting which nodes trusted code may annotate. The [analysis guide](../../tree-analysis/docs/UnitGuide.md) owns the public `@zdreamer/forge/analysis` authoring contract.
 
 This vocabulary is not a wire contract. `http-api` maps what clients need into `api-contract`.

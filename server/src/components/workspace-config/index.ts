@@ -1,6 +1,7 @@
 export { loadWorkspaceConfig, validRepositoryPath } from "./internal/load.ts";
 export type {
 	RepositoryDeclaration,
+	ResolvedAnalysisHandler,
 	ResolvedCodebase,
 	ResolvedCodebaseType,
 	WorkspaceConfig,

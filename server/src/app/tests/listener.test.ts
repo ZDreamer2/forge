@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { Agent, request } from "node:http";
 import { connect } from "node:net";
 import { test } from "node:test";
+import { createTreeAnalyzer } from "../../components/tree-analysis/index.ts";
 import { createWorkspaceTree } from "../../components/workspace-tree/index.ts";
 import { createHttpApp } from "../http.ts";
 import { createListener } from "../listener.ts";
@@ -82,6 +83,9 @@ test("real adapter preserves Host and Origin restrictions including spoofed forw
 				name: "Selected",
 				repositories: [],
 				port,
+				analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+				analyze: createTreeAnalyzer({ handlers: [] }).analyze,
+				currentByteSize: async () => 0,
 				collectChanges: async () => createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] }),
 			}).fetch(incoming),
 	});

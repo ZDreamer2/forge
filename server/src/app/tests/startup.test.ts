@@ -5,6 +5,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
+import type { WorkspaceAnalysis, WorkspaceChanges } from "../../components/api-contract/index.ts";
 import { start } from "../startup.ts";
 
 async function availablePort(): Promise<number> {
@@ -207,4 +208,128 @@ test("startup publishes explicit literal configuration name instead of checkout 
 		workspace: { root: await realpath(input.root), name },
 		repositories: [],
 	});
+});
+
+test("startup handler failures affect analysis only and never expose their private cause", async (t) => {
+	for (const failure of ["missing", "export", "invoke"] as const) {
+		const input = await fixture(t);
+		await writeFile(
+			input.configPath,
+			"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
+		);
+		if (failure !== "missing")
+			await writeFile(
+				join(input.root, "docs/forge/workspace/handler.mjs"),
+				failure === "export"
+					? "export default 1;"
+					: "export default () => { throw new Error('/private/secret detail'); };",
+			);
+		const server = await start(input.options);
+		t.after(server.close);
+		const response = await fetch(`${server.address}/api/changes/analysis`);
+		assert.equal(response.status, 500);
+		const body = (await response.json()) as { error: { code: string; handler: string } };
+		assert.equal(body.error.code, "internal_error");
+		assert.equal(typeof body.error.handler, "string");
+		assert.doesNotMatch(JSON.stringify(body), /private|secret|handler.mjs|stack/);
+		assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+		assert.equal((await fetch(`${server.address}/api/workspace`)).status, 200);
+		await server.close();
+	}
+});
+
+test("invocation diagnostics stay in bounded sanitized server logs, not HTTP errors", async (t) => {
+	for (const asynchronous of [false, true]) {
+		await t.test(asynchronous ? "async rejection" : "sync throw", async (t) => {
+			const input = await fixture(t);
+			const diagnostic = `/private/secret detail\n\t\u001b${"x".repeat(2000)}`;
+			await writeFile(
+				input.configPath,
+				"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
+			);
+			await writeFile(
+				join(input.root, "docs/forge/workspace/handler.mjs"),
+				`export default ${asynchronous ? "async " : ""}() => { throw new Error(${JSON.stringify(diagnostic)}); };`,
+			);
+			const logged = t.mock.method(console, "error", () => {});
+			const server = await start(input.options);
+			t.after(server.close);
+			const response = await fetch(`${server.address}/api/changes/analysis`);
+			assert.equal(response.status, 500);
+			assert.deepEqual(await response.json(), {
+				error: { code: "internal_error", message: "Internal server error", handler: "workspace:1" },
+			});
+			assert.equal(logged.mock.calls.length, 1);
+			const message = logged.mock.calls[0]?.arguments[0];
+			assert.equal(typeof message, "string");
+			assert.match(
+				message,
+				/^Forge workspace request failed: Analysis handler failed: workspace:1: \/private\/secret detail {3}x+$/,
+			);
+			assert.doesNotMatch(message, /\p{Cc}/u);
+			assert.equal(message.length, "Forge workspace request failed: ".length + 1600);
+			assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+			await server.close();
+		});
+	}
+});
+
+test("simultaneous analysis runs and light requests remain independent", async (t) => {
+	const input = await fixture(t);
+	await writeFile(
+		input.configPath,
+		"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
+	);
+	await writeFile(
+		join(input.root, "docs/forge/workspace/handler.mjs"),
+		"export default async root => { await new Promise(resolve => setTimeout(resolve, 20)); root.notice('one invocation'); };",
+	);
+	const server = await start(input.options);
+	t.after(server.close);
+	const [first, second, light] = await Promise.all([
+		fetch(`${server.address}/api/changes/analysis`),
+		fetch(`${server.address}/api/changes/analysis`),
+		fetch(`${server.address}/api/changes`),
+	]);
+	for (const response of [first, second]) {
+		assert.equal(response.status, 200);
+		const body = (await response.json()) as WorkspaceAnalysis;
+		assert.deepEqual(body.nodes["."]?.signalCounts, { notice: 1, warning: 0 });
+		assert.equal(body.nodes["."]?.signals.length, 1);
+	}
+	assert.equal(light.status, 200);
+	assert.equal("nodes" in ((await light.json()) as WorkspaceChanges), false);
+});
+
+test("a disconnected analysis client aborts its cooperative handler while light requests remain available", async (t) => {
+	const input = await fixture(t);
+	const started = join(input.directory, "analysis-started");
+	const cancelled = join(input.directory, "analysis-cancelled");
+	await writeFile(
+		input.configPath,
+		"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
+	);
+	await writeFile(
+		join(input.root, "docs/forge/workspace/handler.mjs"),
+		`import { writeFile } from 'node:fs/promises'; export default async root => { await writeFile(${JSON.stringify(started)}, 'started'); await new Promise(resolve => root.signal.addEventListener('abort', resolve, {once:true})); await writeFile(${JSON.stringify(cancelled)}, 'cancelled'); root.signal.throwIfAborted(); };`,
+	);
+	const server = await start(input.options);
+	t.after(server.close);
+	const client = new AbortController();
+	const request = fetch(`${server.address}/api/changes/analysis`, { signal: client.signal }).catch(() => undefined);
+	async function waitFor(path: string) {
+		for (let attempt = 0; attempt < 100; attempt++) {
+			try {
+				return await readFile(path, "utf8");
+			} catch {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+			}
+		}
+		throw new Error("Handler observation timed out");
+	}
+	assert.equal(await waitFor(started), "started");
+	client.abort();
+	await request;
+	assert.equal(await waitFor(cancelled), "cancelled");
+	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
 });

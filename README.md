@@ -89,7 +89,7 @@ is `docs/forge/workspace` inside the selected checkout. A nonempty process
 or absolute; `.env` cannot set this override. Invalid explicit choices fail without
 ancestor search or fallback. External guidance folders are allowed. The server
 reads registered concrete/type markers as data and does not require
-`on-codebase-selection.md` or execute project configuration modules.
+`on-codebase-selection.md` or execute YAML as code. Optional `analysis_handlers` references load trusted modules at startup.
 
 Set `ZD_AI_FORGE_PORT` in the process environment or selected checkout's `.env`.
 A nonempty process value takes precedence, including invalid values; an empty
@@ -131,7 +131,7 @@ present-side rename owners. No binary/line counts are exposed.
 Comparison uses one bulk HEAD/working `diff --raw --numstat -z` and non-ignored untracked listing,
 with targeted normalized reconciliation for recreated deletion/rename
 sources. Index refresh is disabled; numstat presence removes raw stat noise while
-mode/type changes, zero-count changes and binaries remain. Counts stay internal.
+mode/type changes, zero-count changes and binaries remain. The light response omits counts; the analysis response exposes raw and attention-filtered totals.
 Identical staged reversals disappear. Git owns attributes, filters and
 index flags; hidden flag edits can remain hidden, and ignored recreations absent
 from the untracked list remain deletions. Unstaged moves stay deletion/addition.
@@ -144,7 +144,7 @@ to prevent silent lazy fetch. Normal trusted clean/process filters are allowed;
 external diff/textconv, optional writes, fsmonitor and hooks are disabled. Ambient
 Git repository/index/worktree overrides do not select another checkout. Server
 commands do not stage/commit/write source indexes, refs or objects. Exceptional
-pair statistics use owned temporary indexes outside the checkout. Trusted filters
+pair statistics use owned temporary indexes outside the checkout. Trusted filters and analysis handlers
 can execute code with side effects; this is not an effects sandbox.
 
 Missing-at-startup repositories remain excluded; loss of an available repository,
@@ -163,6 +163,7 @@ address printed by the server:
 FORGE_ADDRESS=http://127.0.0.1:12345
 curl "$FORGE_ADDRESS/api/workspace"
 curl "$FORGE_ADDRESS/api/changes"
+curl "$FORGE_ADDRESS/api/changes/analysis"
 ```
 
 The server and browser page are read-only: no staging, commits, diff rendering,
@@ -209,3 +210,46 @@ This is a breaking migration from the earlier executable policy:
 - Keep an independent exact-pinned executable installation when useful. Existing
   registry `0.1.1` installations remain diagnostic-only until an approved release
   and explicit repin. No compatibility loader is provided.
+
+## Analysis handlers
+
+`GET /api/changes/analysis` returns a path-indexed tree with explicit child lists,
+raw and attention-filtered added/removed line totals, emphasis, attributed signals
+and inclusive warning/notice counts. Hidden nodes remain present. Built-ins
+reduce attention on workspace-root `plans/` and directories named `tests` or
+`Tests`, and warn on current added/modified Markdown strictly larger than 20,480
+bytes, including content-edited renames. Pure moves, deletions and current root
+`plans/` paths do not warn. Sizes are looked up lazily without reading file bytes.
+
+Register trusted modules with optional ordered `analysis_handlers` lists on
+`forge-workspace.yaml` or a concrete `forge-codebase.yaml`:
+
+```yaml
+analysis_handlers:
+  - ./analysis.ts
+```
+
+```ts
+import type { AnalysisHandler } from '@zdreamer/forge/analysis';
+
+const analyze: AnalysisHandler = (root) => {
+  for (const node of root.walk()) {
+    if (node.path === 'tests/critical') node.restoreNormalEmphasis('Review critical tests');
+  }
+};
+export default analyze;
+```
+
+Paths resolve relative to their declaring YAML. Native ESM `.ts`/`.mts` (erasable
+TypeScript syntax) and `.js`/`.mjs` modules export one default function; relative
+imports use explicit extensions. The type-only public `./analysis` entry supplies
+authoring vocabulary, without operational loader/runner APIs. No runtime helper
+import is needed. Restart the process to reload modules.
+
+Handlers run after built-ins, workspace first and then concrete codebases in registry
+order. Every handler sees and may annotate the whole workspace tree. A module
+load or invocation error fails analysis with a safe configured handler identity,
+while `/api/changes` remains available. Each request owns its annotations and
+30-second operation budget. Trusted handlers are not sandboxed, and synchronous
+JavaScript cannot be forcibly interrupted. See the [analysis authoring guide](server/src/components/tree-analysis/docs/UnitGuide.md)
+for context, source access, concurrency, lifetime and attribution semantics.

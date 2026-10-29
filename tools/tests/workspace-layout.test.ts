@@ -13,6 +13,10 @@ test("one package owns dependencies and runtime-specific source trees", () => {
 	assert.equal(manifest.name, "@zdreamer/forge");
 	assert.equal(manifest.bin.forge, "./dist/server/src/main.js");
 	assert.equal(Object.hasOwn(manifest.exports, "./workspace"), false);
+	assert.deepEqual(manifest.exports["./analysis"], {
+		types: "./dist/server/src/components/tree-analysis/internal/authoring.d.ts",
+		import: "./dist/server/src/components/tree-analysis/internal/authoring.js",
+	});
 	assert.deepEqual(manifest.files, ["dist/"]);
 	for (const tree of ["server", "ui"]) {
 		assert.equal(existsSync(join(root, tree, "package.json")), false, `${tree} is a source boundary, not a package`);

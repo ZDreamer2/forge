@@ -8,9 +8,15 @@ import {
 	type RepositoryResolution,
 	repositoryExclusions,
 } from "../../../../workspace-repositories/index.ts";
-import { createWorkspaceTree, type TreeEntry, type WorkspaceTree } from "../../../../workspace-tree/index.ts";
+import {
+	createWorkspaceTree,
+	type TreeEntry,
+	type TreeNode,
+	type WorkspaceTree,
+} from "../../../../workspace-tree/index.ts";
 import { compare } from "./comparison.ts";
 import { line } from "./comparison-records.ts";
+import { createCurrentFileSize } from "./current-file-size.ts";
 
 interface Deps {
 	readonly root: string;
@@ -28,7 +34,10 @@ function side(mode: string): { kind: "file" | "symlink" | "directory" } | undefi
 export function createWorkingChanges(deps: Deps) {
 	const repositories = deps.repositories.map((repository) => ({ ...repository }));
 	const root = resolve(deps.root);
+	const collectedTrees = new WeakMap<WorkspaceTree, ReadonlySet<TreeNode>>();
+	const currentByteSize = createCurrentFileSize({ ...deps, root, repositories, collectedTrees });
 	return {
+		currentByteSize,
 		async collect(signal?: AbortSignal): Promise<WorkspaceTree> {
 			if ((await realpath(root)) !== root) throw new Error("Workspace location changed");
 
@@ -93,7 +102,9 @@ export function createWorkingChanges(deps: Deps) {
 								...(side(item.oldMode) ? { base: side(item.oldMode) } : {}),
 								...(side(item.newMode) ? { current: side(item.newMode) } : {}),
 								statistics: item.statistics,
-								...(item.from === undefined ? {} : { from: publishedPath(item.from) }),
+								...(item.from === undefined
+									? {}
+									: { from: publishedPath(item.from), renameContentChanged: item.renameContentChanged }),
 							};
 							return change;
 						});
@@ -119,6 +130,7 @@ export function createWorkingChanges(deps: Deps) {
 				codebases: deps.codebases,
 			});
 			for (const batch of collected) for (const entry of batch ?? []) tree.insert(entry);
+			collectedTrees.set(tree, new Set(tree.entries));
 			return tree;
 		},
 	};

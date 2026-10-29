@@ -48,7 +48,7 @@ export default {
 			severity: "error",
 			from: {
 				path: "^src/components/([^/]+)/",
-				pathNot: "^src/components/(workspace-repositories|workspace-tree|tree-sources|http-api)/",
+				pathNot: "^src/components/(workspace-repositories|workspace-tree|tree-sources|tree-analysis|http-api)/",
 			},
 			to: { path: "^src/components/", pathNot: "^src/components/$1/" },
 		},
@@ -56,7 +56,15 @@ export default {
 			"workspace-repositories": ["workspace-config"],
 			"workspace-tree": ["workspace-config"],
 			"tree-sources": ["workspace-tree", "workspace-repositories", "workspace-config"],
-			"http-api": ["tree-sources", "workspace-tree", "workspace-repositories", "workspace-config", "api-contract"],
+			"tree-analysis": ["workspace-tree", "workspace-config"],
+			"http-api": [
+				"tree-analysis",
+				"tree-sources",
+				"workspace-tree",
+				"workspace-repositories",
+				"workspace-config",
+				"api-contract",
+			],
 		}).map(([component, dependencies]) => ({
 			name: `${component}-component-edges`,
 			severity: "error",

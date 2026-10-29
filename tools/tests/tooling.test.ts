@@ -217,3 +217,48 @@ test("owner-local tests can read their internals while foreign and nested intern
 		rmSync(temporary, { recursive: true, force: true });
 	}
 });
+
+test("analysis graph allows composition edges and rejects source, reverse and contract dependencies", () => {
+	const temporary = mkdtempSync(join(tmpdir(), "forge-analysis-graph-"));
+	function write(path: string, text: string) {
+		mkdirSync(dirname(join(temporary, path)), { recursive: true });
+		writeFileSync(join(temporary, path), text);
+	}
+	function cruise() {
+		return spawnSync(
+			join(root, "node_modules/.bin/depcruise"),
+			["--config", join(serverRoot, ".dependency-cruiser.mjs"), "src/**/*.ts"],
+			{ cwd: temporary, encoding: "utf8" },
+		);
+	}
+	try {
+		for (const name of ["workspace-tree", "workspace-config", "tree-sources", "api-contract"])
+			write(`src/components/${name}/index.ts`, "export type Fact = string;");
+		write(
+			"src/components/tree-analysis/index.ts",
+			"import type { Fact } from '../workspace-tree/index.ts'; import '../workspace-config/index.ts'; export type Value = Fact;",
+		);
+		write(
+			"src/components/http-api/index.ts",
+			"import type { Value } from '../tree-analysis/index.ts'; export type Result = Value;",
+		);
+		const allowed = cruise();
+		assert.equal(allowed.status, 0, allowed.stdout + allowed.stderr);
+		write(
+			"src/components/tree-analysis/internal/invalid.ts",
+			"import '../../tree-sources/index.ts'; import '../../api-contract/index.ts';",
+		);
+		write("src/components/workspace-tree/internal/invalid.ts", "import '../../tree-analysis/index.ts';");
+		write("src/components/api-contract/internal/invalid.ts", "import '../../tree-analysis/index.ts';");
+		const invalid = cruise();
+		assert.notEqual(invalid.status, 0);
+		for (const rule of [
+			"tree-analysis-component-edges",
+			"workspace-tree-component-edges",
+			"api-contract-is-independent",
+		])
+			assert.ok(invalid.stdout.includes(rule), invalid.stdout);
+	} finally {
+		rmSync(temporary, { recursive: true, force: true });
+	}
+});

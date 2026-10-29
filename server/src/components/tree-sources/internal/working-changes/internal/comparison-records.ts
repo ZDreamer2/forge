@@ -20,6 +20,12 @@ export function records(bytes: Buffer): string[] {
 	return decode(bytes.subarray(0, -1)).split("\0");
 }
 
+function renameContentChanged(oldId: string | undefined, newId: string | undefined): boolean {
+	if (!oldId || !newId || oldId.length !== newId.length || /^0+$/.test(oldId) || /^0+$/.test(newId))
+		throw new Error("Git returned invalid rename object identities");
+	return oldId !== newId;
+}
+
 /** Raw records precede numstat records; -z gives renames separate path records in both sections. */
 export function parseComparison(bytes: Buffer): ComparedChange[] {
 	const fields = records(bytes);
@@ -59,7 +65,7 @@ export function parseComparison(bytes: Buffer): ComparedChange[] {
 							: status === "R"
 								? "renamed"
 								: "modified",
-				...(status === "R" ? { from: path } : {}),
+				...(status === "R" ? { from: path, renameContentChanged: renameContentChanged(match[3], match[4]) } : {}),
 				oldMode: match[1] as string,
 				newMode: match[2] as string,
 				statistics: { added: 0, removed: 0, binary: false },
@@ -101,11 +107,13 @@ export function parseComparison(bytes: Buffer): ComparedChange[] {
 		const oldLink = oldMode === "160000";
 		const newLink = newMode === "160000";
 		if (oldLink && newLink) continue;
+		const { from: _from, renameContentChanged: _renameContentChanged, ...nonRename } = change;
 		if (oldLink) {
-			if (newMode !== "000000") changes.push({ ...change, oldMode: "000000", kind: "added", correction: "addition" });
+			if (newMode !== "000000")
+				changes.push({ ...nonRename, oldMode: "000000", kind: "added", correction: "addition" });
 		} else if (newLink) {
 			if (oldMode !== "000000")
-				changes.push({ ...change, path: source, newMode: "000000", kind: "deleted", correction: "deletion" });
+				changes.push({ ...nonRename, path: source, newMode: "000000", kind: "deleted", correction: "deletion" });
 		} else changes.push({ ...change, statistics: stats.get(change.path) ?? change.statistics });
 	}
 	return changes;
