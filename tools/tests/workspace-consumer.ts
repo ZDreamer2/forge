@@ -19,6 +19,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { verifyInstalledAnalysis } from "./workspace-consumer-analysis.ts";
+import { verifyInstalledFiles } from "./workspace-consumer-files.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 assert.equal(process.argv.length, 2, "test:workspace accepts no policy argument");
@@ -380,7 +381,7 @@ export type Removed = WorkspacePolicy;
 	// Check the UI-facing source seam in the actual artifact, not as a new npm export.
 	writeFileSync(
 		join(consumer, "api-contract.ts"),
-		`import type { ApiErrorCode, ApiFailure, WorkspaceChanges, WorkspaceIdentity } from './node_modules/@zdreamer/forge/dist/server/src/components/api-contract/index.js';
+		`import type { ApiErrorCode, ApiFailure, WorkspaceChanges, WorkspaceIdentity, FileBaseline, FileSide, FileUnsupportedReason, WorkspaceFileDiff } from './node_modules/@zdreamer/forge/dist/server/src/components/api-contract/index.js';
 export const changes = {codebases: {app: {root: 'app', guidance: 'docs/app', type: 'service'}}, changes: []} satisfies WorkspaceChanges;
 // @ts-expect-error Concrete definitions require their root.
 export const missingRoot: WorkspaceChanges = {codebases: {app: {guidance: 'docs/app'}}, changes: []};
@@ -388,6 +389,23 @@ export const missingRoot: WorkspaceChanges = {codebases: {app: {guidance: 'docs/
 export const invalidType: WorkspaceChanges = {codebases: {app: {root: 'app', guidance: 'docs/app', type: 123}}, changes: []};
 export const identity = {workspace: {root: '/example', name: 'Example'}, repositories: []} satisfies WorkspaceIdentity;
 export const error = 'not_found' satisfies ApiErrorCode;
+export const invalidRequest = 'invalid_request' satisfies ApiErrorCode;
+export const baseline = {kind: 'commit', oid: '0123456789012345678901234567890123456789'} satisfies FileBaseline;
+export const unborn = {kind: 'unborn'} satisfies FileBaseline;
+export const fileSide = {path: 'app/file.txt', kind: 'file', mode: '100644', present: true, codebase: 'app'} satisfies FileSide;
+export const unsupportedReasons = ['binary', 'encoding', 'too_large'] satisfies FileUnsupportedReason[];
+const fileChange = {path: 'app/file.txt', repo: '.', baseline, context: 3 as const, changeKind: 'modified' as const, base: fileSide, current: fileSide, statistics: {added: 1, removed: 1, binary: false}, codebases: {}};
+export const diffResults = [
+  {...fileChange, kind: 'text', patch: 'patch'},
+  {...fileChange, kind: 'text', patch: 'full patch', context: 'all'},
+  {...fileChange, kind: 'metadata_only'},
+  {...fileChange, kind: 'unsupported', reason: 'binary'},
+  {kind: 'not_changed', codebases: {}},
+] satisfies WorkspaceFileDiff[];
+// @ts-expect-error Text patches require their complete patch payload.
+export const missingPatch: WorkspaceFileDiff = {...fileChange, kind: 'text'};
+// @ts-expect-error Only bounded or complete context is supported.
+export const invalidContext: WorkspaceFileDiff = {...fileChange, kind: 'text', patch: 'patch', context: 4};
 export const failure = {error: {code: 'internal_error', message: 'Internal server error', handler: 'workspace:1'}} satisfies ApiFailure;
 // @ts-expect-error Node globals must not leak through the browser-safe contract.
 export type NodeGlobal = typeof process;
@@ -419,8 +437,9 @@ export type NodeGlobal = typeof process;
 	assert.match(removedCommand.stderr, /Usage: forge serve/);
 	await verifyServer(executable, consumer);
 	await verifyInstalledAnalysis({ consumer, executable, compiler, run, portReservation, installedServer, sourceState });
+	await verifyInstalledFiles({ consumer, executable, run, portReservation, installedServer, sourceState });
 	console.log(
-		"Tarball-only consumer: installed server/page, read-only changes/analysis, native TS handlers, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
+		"Tarball-only consumer: installed server/page, read-only changes/analysis/files, normalized patches and full context, native TS handlers, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
 	);
 } finally {
 	rmSync(temporary, { recursive: true, force: true });

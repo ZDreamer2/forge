@@ -143,7 +143,8 @@ supported; partial/promisor repositories fail before object-demanding comparison
 to prevent silent lazy fetch. Normal trusted clean/process filters are allowed;
 external diff/textconv, optional writes, fsmonitor and hooks are disabled. Ambient
 Git repository/index/worktree overrides do not select another checkout. Server
-commands do not stage/commit/write source indexes, refs or objects. Exceptional
+commands do not stage/commit/write source index, ref or object contents. Native Git
+can freshen shared-index mtimes during reads. Exceptional
 pair statistics use owned temporary indexes outside the checkout. Trusted filters and analysis handlers
 can execute code with side effects; this is not an effects sandbox.
 
@@ -166,8 +167,17 @@ curl "$FORGE_ADDRESS/api/changes"
 curl "$FORGE_ADDRESS/api/changes/analysis"
 ```
 
-The server and browser page are read-only: no staging, commits, diff rendering,
-file browsing or agent interaction. Registry `0.1.1` remains the diagnostic-only
+`GET /api/changes/file?path=<change-path>` returns a renderer-neutral patch with
+three context lines or an explicit metadata-only/unsupported outcome. Request
+`&context=all` for complete context around changed payloads, enabling omitted-context
+expansion without a separate file-content API. Both modes are bounded; all-context
+can exceed the patch cap while the short diff remains usable.
+[Patch API semantics and limits](server/docs/protocol.md#read-file-diff) describe
+Git normalization, side identities, symlink targets, metadata-only outcomes,
+per-request cancellation and live baseline identities. These requests run no handlers.
+
+The server and browser page are read-only. React diff rendering, file browsing,
+staging/commits and agent interaction remain future work. Registry `0.1.1` remains the diagnostic-only
 release; source and installed-tarball verification do not constitute publication
 or registry adoption.
 

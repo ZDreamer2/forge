@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
+export class GitOutputLimitError extends Error {}
+
 export type GitResult = { code: number; stdout: Buffer; stderr: Buffer };
 export type GitProcess = (
 	cwd: string,
@@ -10,6 +12,9 @@ export type GitProcess = (
 		signal?: AbortSignal;
 		timeoutMs?: number;
 		maxOutputBytes?: number;
+		maxStdoutBytes?: number;
+		objectDirectory?: string;
+		objectAlternates?: string;
 		input?: Buffer;
 		scratchIndex?: string;
 	},
@@ -56,7 +61,12 @@ export function createGitProcess(environment: Readonly<NodeJS.ProcessEnv>): GitP
 				],
 				{
 					cwd,
-					env: options.scratchIndex ? { ...env, GIT_INDEX_FILE: options.scratchIndex } : env,
+					env: {
+						...env,
+						...(options.scratchIndex ? { GIT_INDEX_FILE: options.scratchIndex } : {}),
+						...(options.objectDirectory ? { GIT_OBJECT_DIRECTORY: options.objectDirectory } : {}),
+						...(options.objectAlternates ? { GIT_ALTERNATE_OBJECT_DIRECTORIES: options.objectAlternates } : {}),
+					},
 					detached: true,
 					stdio: ["pipe", "pipe", "pipe"],
 				},
@@ -64,6 +74,7 @@ export function createGitProcess(environment: Readonly<NodeJS.ProcessEnv>): GitP
 			const stdout: Buffer[] = [];
 			const stderr: Buffer[] = [];
 			let size = 0;
+			let stdoutSize = 0;
 			let failure: Error | undefined;
 			let killTimer: NodeJS.Timeout | undefined;
 			let closed = false;
@@ -113,7 +124,12 @@ export function createGitProcess(environment: Readonly<NodeJS.ProcessEnv>): GitP
 					stop(new Error("Git output exceeded the collection limit"));
 				else if (!failure) chunks.push(chunk);
 			};
-			child.stdout.on("data", (chunk: Buffer) => consume(stdout, chunk));
+			child.stdout.on("data", (chunk: Buffer) => {
+				stdoutSize += chunk.length;
+				if (options.maxStdoutBytes !== undefined && stdoutSize > options.maxStdoutBytes)
+					stop(new GitOutputLimitError("Git stdout limit exceeded"));
+				else consume(stdout, chunk);
+			});
 			child.stderr.on("data", (chunk: Buffer) => consume(stderr, chunk));
 			child.stdin.on("error", (error: NodeJS.ErrnoException) => {
 				// A command can reject its arguments and close stdin before consuming the supplied bytes.

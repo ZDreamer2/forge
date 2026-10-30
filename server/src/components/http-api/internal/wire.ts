@@ -13,6 +13,7 @@ import type { WorkspaceTree } from "../../workspace-tree/index.ts";
 
 export function apiError(code: ApiErrorCode, handler?: string): ApiFailure {
 	const messages = {
+		invalid_request: "Invalid request",
 		forbidden: "Request forbidden",
 		not_found: "Not found",
 		method_not_allowed: "Method not allowed",

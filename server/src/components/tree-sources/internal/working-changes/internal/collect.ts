@@ -17,6 +17,8 @@ import {
 import { compare } from "./comparison.ts";
 import { line } from "./comparison-records.ts";
 import { createCurrentFileSize } from "./current-file-size.ts";
+import type { Descriptor } from "./file-diff.ts";
+import { createFileDiff } from "./file-diff.ts";
 
 interface Deps {
 	readonly root: string;
@@ -35,12 +37,17 @@ export function createWorkingChanges(deps: Deps) {
 	const repositories = deps.repositories.map((repository) => ({ ...repository }));
 	const root = resolve(deps.root);
 	const collectedTrees = new WeakMap<WorkspaceTree, ReadonlySet<TreeNode>>();
+	const descriptors = new WeakMap<WorkspaceTree, ReadonlyMap<string, Descriptor>>();
+
+	const fileDiff = createFileDiff({ ...deps, root, repositories, descriptors });
 	const currentByteSize = createCurrentFileSize({ ...deps, root, repositories, collectedTrees });
 	return {
 		currentByteSize,
+		fileDiff,
 		async collect(signal?: AbortSignal): Promise<WorkspaceTree> {
 			if ((await realpath(root)) !== root) throw new Error("Workspace location changed");
 
+			const pending = new Map<string, Descriptor>();
 			const collected: TreeEntry[][] = new Array(repositories.length);
 			const controller = new AbortController();
 			signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
@@ -95,6 +102,7 @@ export function createWorkingChanges(deps: Deps) {
 								: `${repository.path}/${path}`;
 						parsed.sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)));
 						const entries = parsed.map((item) => {
+							pending.set(publishedPath(item.path), { repository, change: item });
 							const change: TreeEntry = {
 								repo: repository.path,
 								path: publishedPath(item.path),
@@ -130,6 +138,7 @@ export function createWorkingChanges(deps: Deps) {
 				codebases: deps.codebases,
 			});
 			for (const batch of collected) for (const entry of batch ?? []) tree.insert(entry);
+			descriptors.set(tree, pending);
 			collectedTrees.set(tree, new Set(tree.entries));
 			return tree;
 		},

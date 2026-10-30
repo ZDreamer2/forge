@@ -333,3 +333,151 @@ test("a disconnected analysis client aborts its cooperative handler while light 
 	assert.equal(await waitFor(cancelled), "cancelled");
 	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
 });
+
+test("assembled file routes return live patches and context while isolating analysis failures", async (t) => {
+	const input = await fixture(t);
+	const git = (args: string[]) => execFileSync("git", ["-C", input.directory, ...args]);
+	await writeFile(join(input.root, "tracked.txt"), "old\n");
+	git(["add", "."]);
+	git(["-c", "user.name=Fixture", "-c", "user.email=f@example.com", "commit", "-qm", "baseline"]);
+	await writeFile(join(input.root, "tracked.txt"), "new\n");
+	await writeFile(
+		join(input.root, "handler.mjs"),
+		"export default () => { throw new Error('private handler failure') };\n",
+	);
+	await writeFile(
+		input.configPath,
+		"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: [../../../handler.mjs]\n",
+	);
+	const index = await readFile(join(input.directory, ".git/index"));
+	const server = await start(input.options);
+	t.after(server.close);
+	const diffResponse = await fetch(`${server.address}/api/changes/file?path=tracked.txt`);
+	assert.equal(diffResponse.status, 200);
+	const diff = (await diffResponse.json()) as import("../../components/api-contract/index.ts").WorkspaceFileDiff;
+	assert.equal(diff.kind, "text");
+	if (diff.kind !== "text") throw new Error("Expected text diff");
+	assert.match(diff.patch, /-old\n\+new\n/);
+	assert.equal(diff.context, 3);
+	const full = (await (
+		await fetch(`${server.address}/api/changes/file?path=tracked.txt&context=all`)
+	).json()) as typeof diff;
+	assert.equal(full.context, "all");
+	assert.equal(full.patch, diff.patch);
+	assert.equal((await fetch(`${server.address}/api/changes/analysis`)).status, 500);
+	assert.equal((await fetch(`${server.address}/api/changes/file?path=tracked.txt`, { method: "HEAD" })).status, 200);
+	await writeFile(join(input.root, "tracked.txt"), "old\n");
+	assert.equal(
+		((await (await fetch(`${server.address}/api/changes/file?path=tracked.txt`)).json()) as { kind: string }).kind,
+		"not_changed",
+	);
+	assert.deepEqual(await readFile(join(input.directory, ".git/index")), index);
+	await rm(join(input.directory, ".git"), { recursive: true });
+	const failed = await fetch(`${server.address}/api/changes/file?path=tracked.txt`);
+	assert.equal(failed.status, 500);
+	assert.deepEqual(await failed.json(), { error: { code: "internal_error", message: "Internal server error" } });
+	await server.close();
+});
+
+test("disconnecting an assembled file request drains its filter and scratch while light collection stays usable", {
+	timeout: 10_000,
+}, async (t) => {
+	const input = await fixture(t);
+	const { lstat } = await import("node:fs/promises");
+	const marker = join(input.directory, "file-filter-started.json");
+	const script = join(input.directory, "file-filter.mjs");
+	await writeFile(join(input.root, ".gitattributes"), "file.slow filter=hanging\n");
+	await writeFile(join(input.root, "file.slow"), "baseline\n");
+	const git = (args: string[]) => execFileSync("git", ["-C", input.directory, ...args]);
+	git(["add", "workspace"]);
+	git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "-qm", "baseline"]);
+	await writeFile(join(input.root, "file.slow"), "updated\n");
+	await writeFile(
+		script,
+		`import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+if (!process.env.GIT_INDEX_FILE) process.stdin.pipe(process.stdout);
+else {
+  process.on('SIGTERM', () => {});
+  const child = spawn(process.execPath, ['-e', "process.on('SIGTERM',()=>{});process.stdout.write('ready');setInterval(()=>{},1000)"], {stdio: ['ignore', 'pipe', 'ignore']});
+  child.stdout.once('data', () => writeFileSync(${JSON.stringify(marker)}, JSON.stringify({pids: [process.pid, child.pid], index: process.env.GIT_INDEX_FILE, objects: process.env.GIT_OBJECT_DIRECTORY})));
+  setInterval(() => {}, 1000);
+}
+`,
+	);
+	git(["config", "filter.hanging.clean", `${process.execPath} ${script}`]);
+	git(["config", "filter.hanging.required", "true"]);
+	const index = await readFile(join(input.directory, ".git/index"));
+	const server = await start(input.options);
+	t.after(server.close);
+	const client = new AbortController();
+	t.after(() => client.abort());
+	let observed: { pids: number[]; index: string; objects?: string } | undefined;
+	t.after(() => {
+		for (const pid of observed?.pids ?? []) {
+			try {
+				process.kill(pid, "SIGKILL");
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+			}
+		}
+	});
+	const request = fetch(`${server.address}/api/changes/file?path=file.slow`, {
+		signal: client.signal,
+	});
+	const disconnected = assert.rejects(request, /abort/i);
+	for (let attempt = 0; attempt < 200; attempt++) {
+		try {
+			observed = JSON.parse(await readFile(marker, "utf8"));
+			break;
+		} catch {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+	}
+	assert.ok(observed, "normalization filter started");
+	assert.equal(observed.pids.length, 2);
+	assert.ok(observed.index);
+	assert.equal(observed.objects, undefined);
+	// The pending patch does not own this client's collection.
+	const light = await fetch(`${server.address}/api/changes`, { signal: AbortSignal.timeout(2000) });
+	assert.equal(light.status, 200);
+	assert.deepEqual(await light.json(), {
+		codebases: {},
+		changes: [{ repo: ".", path: "file.slow", kind: "modified", codebases: [] }],
+	});
+	client.abort();
+	await disconnected;
+	let drained = false;
+	for (let attempt = 0; attempt < 200; attempt++) {
+		try {
+			await lstat(observed.index);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+			drained = true;
+			break;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	assert.ok(drained, "disconnect drained the source operation and removed its scratch index");
+	await assert.rejects(lstat(observed.index), { code: "ENOENT" });
+	for (const pid of observed.pids) {
+		try {
+			const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+			assert.match(stat.slice(stat.lastIndexOf(")") + 2), /^[ZX] /);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		}
+	}
+	git(["config", "filter.hanging.clean", "cat"]);
+	const recovered = await fetch(`${server.address}/api/changes/file?path=file.slow`, {
+		signal: AbortSignal.timeout(2000),
+	});
+	assert.equal(recovered.status, 200);
+	const recoveredDiff = (await recovered.json()) as { kind: string; patch: string };
+	assert.equal(recoveredDiff.kind, "text");
+	assert.match(recoveredDiff.patch, /-baseline\n\+updated\n/);
+	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+	assert.deepEqual(await readFile(join(input.directory, ".git/index")), index);
+	assert.equal(await readFile(join(input.root, "file.slow"), "utf8"), "updated\n");
+	await server.close();
+});

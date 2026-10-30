@@ -7,7 +7,11 @@ export type {
 	AnalysisWireNode,
 	ApiErrorCode,
 	ApiFailure,
+	FileBaseline,
+	FileSide,
+	FileUnsupportedReason,
 	WorkspaceAnalysis,
 	WorkspaceChanges,
+	WorkspaceFileDiff,
 	WorkspaceIdentity,
 } from "./internal/types.ts";

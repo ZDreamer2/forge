@@ -1,28 +1,97 @@
 # Workspace Server API
 
-API for accessing and operating on the workspace served by a Forge workspace server.
+Contract for the server-owned workspace interface, independent of runtime support
+or release status. Paths below are relative to `/api`; HTTP schemas are independent
+of workspace-authoring types and renderer models.
 
 ## Shared contract
 
-- One server instance serves one workspace. Requests do not select a workspace.
-- Operation paths below are relative to `/api`.
-- Operation file/directory paths and change entries are workspace-relative and inside the workspace root, including when the main Git repository extends above it. Identity roots are descriptive absolute metadata; they do not authorize outside file access.
-- HTTP schemas are independent of workspace-authoring types. This document specifies contracts, not which operations a particular build implements.
-
 ### HTTP access and failures
 
-The configured address is `http://127.0.0.1:<port>`. Every request MUST have Host exactly `127.0.0.1:<port>`; every present Origin MUST equal that configured address. Absent Origin is allowed for CLI requests and navigation. Foreign or `null` origins, aliases such as `localhost`, wrong ports and malformed authorities are forbidden. Forwarded headers do not replace Host or Origin. Checks apply before routing, including GET, HEAD, OPTIONS and unknown paths. No permissive CORS headers are returned; OPTIONS does not bypass these checks.
+One server serves one workspace at `http://127.0.0.1:<port>`. Every request MUST have
+Host exactly `127.0.0.1:<port>`; any Origin MUST equal that address. Absent Origin is
+allowed. Foreign/`null` origins, aliases such as `localhost`, wrong ports and malformed
+authorities are forbidden. Forwarded headers do not replace Host/Origin. Access
+checks precede all routing/method handling, including HEAD, OPTIONS and unknown paths;
+no permissive CORS headers are returned.
 
-API failures use JSON `{ "error": { "code": "...", "message": "..." } }`:
+Failures use `{ "error": { "code": "...", "message": "..." } }`:
 
 | Status | Code | Meaning |
 | --- | --- | --- |
-| 403 | `forbidden` | Request authority or origin failed access checks. |
-| 404 | `not_found` | No operation matches the path. |
-| 405 | `method_not_allowed` | A known operation does not support this method; `Allow` lists supported methods. |
-| 500 | `internal_error` | The operation could not complete. |
+| 400 | `invalid_request` | Malformed file query, duplicate or unknown parameters. |
+| 403 | `forbidden` | Failed authority/origin checks or excluded file participation. |
+| 404 | `not_found` | Unknown operation. |
+| 405 | `method_not_allowed` | Unsupported method on a known operation; `Allow` lists supported methods. |
+| 500 | `internal_error` | Operation failure. |
 
-Routing and middleware use the same envelope, including unknown API paths. Messages omit stacks, environment values and raw subprocess output. HEAD MAY follow GET with no response body; GET and HEAD remain read-only. Unsupported methods, including OPTIONS, receive 405 on known paths and 404 on unknown paths, after access checks. Startup failures produce terminal diagnostics and a nonzero exit, rather than an HTTP error.
+Routing/middleware share this envelope. Messages omit stacks, environment values
+and raw subprocess output. HEAD MAY perform GET without a response body; both are
+read-only. Other methods, including OPTIONS, receive 405 on known paths and 404 on
+unknown paths after access checks. Startup failures instead emit
+terminal diagnostics and exit nonzero.
+
+### Participation and comparison
+
+File/change paths are workspace-relative POSIX paths inside the canonical workspace,
+even when the main Git root extends above it. Absolute identity roots are descriptive,
+not access authority. Only declared repositories participate: nested declarations
+are distinct, missing-at-startup repositories stay excluded until restart, and loss
+of an available repository fails collection. Git internals, gitlinks and undeclared
+clones/contents are excluded; gitlink transitions expose only the ordinary side.
+
+Changes compare HEAD with working content plus non-ignored untracked files:
+
+- Git owns attributes, trusted filters, stat-cache/index flags and effective
+  `core.fileMode`/`core.symlinks` semantics. Staged edits restored to HEAD disappear;
+  assume-unchanged/skip-worktree edits may remain hidden.
+- Same-path non-ignored recreations of staged deletions/rename sources are reconciled
+  by normalized content/effective mode: identical restorations disappear, changed
+  ones become modifications. A recreated rename source splits the rename into a
+  destination addition and reconciled source. Ignored recreations absent from Git's
+  untracked list remain deletions.
+- Only Git-reported renames carry `from`; unstaged moves remain deletion/addition.
+  Both rename sides are scoped: crossing moves become in-scope additions/deletions,
+  without outside paths. Unborn HEAD uses an empty baseline; scoped unresolved
+  conflicts fail collection even if the diff would be empty.
+- Binary, mode/type and zero-line-count changes remain entries. UTF-8 filenames
+  preserve tabs/newlines/spaces; invalid filename encoding, Git/read/filter or
+  normalization failures return `internal_error` without partial results.
+
+This is practical Git comparison, not exhaustive physical/staging equivalence or
+authority for broader dirt capture, checking or staging scopes.
+
+### Ownership definitions
+
+Changes responses include response-local `codebases`:
+`{ "<id>": { "root": "path", "guidance": "path", "type"?: "registered-type-id" } }`.
+IDs/roots are normalized concrete workspace-relative roots (`.` allowed), not reusable
+guidance/type IDs. Guidance is workspace-relative and may point outside it without
+authorizing file access. Only referenced definitions are included.
+
+Ownership resolves lexically per present side: the closest containing registered
+root wins; unmatched paths have no owner. Rename membership deduplicates base/current
+owners in that order. All response object keys, including `__proto__`, are ordinary data.
+
+### Observation, effects and lifecycle
+
+Results are live observations without atomic cross-repository/request snapshots.
+Overlapping GET/HEAD requests share active base collection, cleared on settlement;
+later requests collect afresh. Disconnecting one client does not cancel shared work.
+Collection has finite command/output/total bounds. Analysis and file requests each
+have a 30-second total budget including collection wait, independent cancellation,
+and abort/drain of owned source work on failure, disconnect, timeout or shutdown.
+Shutdown closes HTTP, stops admission, cancels/reaps owned Git/filter descendants
+and removes temporary resources after settlement. Cooperative cancellation cannot
+preempt synchronous trusted JavaScript.
+
+Complete local Git repositories are supported; partial/promisor repositories are
+refused before object-demanding work to prevent lazy fetch. Trusted filters/configuration
+remain active; external diff/textconv, optional writes, fsmonitor and hooks are disabled.
+Ambient Git root/index/worktree redirection is ignored. Server commands preserve
+source/index/ref/object contents; native Git can freshen shared-index mtimes during
+reads. YAML configuration is data-only. Trusted filters and analysis handlers execute
+outside the read-only effects guarantee.
 
 ## Operations
 
@@ -32,7 +101,7 @@ Routing and middleware use the same envelope, including unknown API paths. Messa
 
 `GET /workspace`
 
-Returns a startup snapshot:
+Returns the startup snapshot, replaced only on restart:
 
 ```json
 {
@@ -44,9 +113,12 @@ Returns a startup snapshot:
 }
 ```
 
-`workspace.root` is the canonical absolute selected checkout. `workspace.name` is its resolved display name: optional YAML `display_name` when authored, otherwise the canonical root's basename (or the root itself if it has no basename). An explicit name MUST be a nonempty string; it is preserved exactly. Clients MUST render names as literal text without HTML interpretation. Repositories retain configuration declaration order; `path` is the normalized declaration ID (`.` or a workspace-relative POSIX path). An available repository has canonical absolute `gitRoot`, which MAY be above the workspace for `.`; a missing repository omits it. Configuration internals and environment values are not returned. The snapshot is replaced on restart, with no per-request discovery or reload.
-
-#### Resolve codebase context for paths
+`name` is authored nonempty YAML `display_name`, preserved exactly, otherwise the
+canonical root's basename (or root itself). Clients MUST render it as literal text.
+Repositories retain declaration order; `path` is `.` or a normalized workspace-relative
+ID. Available repositories include canonical absolute `gitRoot` (possibly above the
+workspace for `.`); missing ones omit it. Configuration internals/environment values
+are not returned. Requests do not select workspaces or reload/discover participation.
 
 ### Workspace changes
 
@@ -54,201 +126,134 @@ Returns a startup snapshot:
 
 `GET /changes`
 
-Compares HEAD with working content across declared participating repositories,
-plus non-ignored untracked files. Git owns attributes, trusted filters, stat-cache
-and index-flag semantics. Staged edits restored to HEAD disappear. Same-path
-non-ignored recreations of staged deletions/rename sources are reconciled by
-normalized content and effective mode: identical restorations disappear; changed
-ones are modified. A recreated rename source splits that rename into a destination
-addition and a reconciled source. Ignored recreations absent from Git's untracked
-list remain deletions; hidden assume-unchanged/skip-worktree edits may stay hidden.
-This is practical Git comparison, not exhaustive physical or staging equivalence.
-Unstaged moves remain deletion plus addition; only Git-reported renames carry a
-source. Unborn HEAD uses an empty baseline; participating unresolved conflicts
-fail the whole request even if a diff would be empty.
+Returns `{codebases, changes: [...]}` under the shared comparison/ownership rules. Each
+change has `repo`, `path`, `kind`, `codebases: string[]`, and rename-only `from`.
 
-Returns a response-local definition index and changes:
-
-```json
-{
-  "codebases": { "src/service": { "root": "src/service", "guidance": "docs/service", "type": "service" } },
-  "changes": [
-    { "repo": ".", "path": "src/file.ts", "kind": "modified", "codebases": ["src/service"] }
-  ]
-}
-```
-
-| Change field | Value |
+| Field | Meaning |
 | --- | --- |
-| `repo` | Normalized declared repository ID, as in workspace identity. |
-| `path` | Workspace-relative POSIX current path, or previous path for deletion. |
-| `kind` | `added`, `modified`, `deleted` or `renamed`. Type changes normalize to modified; defensive copy records normalize to added. |
-| `from` | Workspace-relative previous path, required only for renamed. |
-| `codebases` | Unique normalized workspace-relative concrete roots; empty membership is valid. |
+| `repo` | Declared repository ID from workspace identity. |
+| `path` | Current path, or previous path for deletion. |
+| `kind` | `added`, `modified`, `deleted`, `renamed`; type changes become modified, defensive copies become added. |
+| `from` | Previous path, required only for renamed. |
+| `codebases` | Unique present-side concrete owner IDs; empty is valid. |
 
-Top-level `codebases` maps each referenced concrete root to
-`{ "root": "path", "guidance": "path", "type"?: "registered-type-id" }`.
-The root is `.` or a workspace-relative POSIX path; guidance is relative to the
-workspace and may point outside it. Types identify adopted shared guidance, not
-concrete membership. Registry roots resolve lexically, independently for each
-present side, with the closest containing root winning. An unmatched path has
-empty membership. A rename includes both present-side owners, deduplicated in
-base/current order. Definitions include only referenced owners; roots such as
-`__proto__` remain ordinary data keys. Empty success is
-`{ "codebases": {}, "changes": [] }`.
-
-Binary changes and mode/type changes remain entries; Git's core.fileMode/core.symlinks semantics apply.
-Gitlinks/undeclared clones and their contents are excluded; transitions between
-ordinary files and gitlinks expose only the ordinary side. The light list omits binary classification and line counts; analysis exposes them. Declared nested repositories
-remain distinct participants. Missing-at-startup declarations contribute no changes;
-loss of an available repository fails collection until restart.
-
-Both rename endpoints are scoped before publishing. A crossing move becomes an
-in-scope addition/deletion, never an outside `from`. Membership includes applicable
-in-scope sides and distinguishes codebase IDs from reusable guidance folders.
-NUL-delimited UTF-8 filenames preserve tabs/newlines/spaces; invalid UTF-8 fails
-explicitly. Git, read and normalization/filter failures
-fail the whole request with `internal_error`, with no partial success.
-
-Collections are live observations without atomic cross-repository snapshots.
-Overlapping GET/HEAD share active collection, cleared on settlement; later requests
-collect afresh. A client disconnect does not cancel other clients' shared work.
-Collection has finite command/output/total bounds; shutdown cancels/reaps owned
-Git/filter descendants and closes HTTP. App owns sharing/lifecycle, not a job system.
-
-Support is complete local Git repositories; partial/promisor repositories are
-refused before object-demanding comparison to prevent silent lazy fetch. Ordinary
-trusted filters/configuration are allowed. External diff/textconv, optional writes,
-fsmonitor and hooks are disabled, and ambient Git root/index/worktree redirection
-is removed. Server commands do not stage/commit/write source indexes, refs or
-objects. YAML configuration is data-only; trusted filters and analysis handlers execute code outside this effects guarantee.
-
-This browser list does not replace Python dirt detection, capture or checking/
-staging. Future migration must align collection/check/staging participation together;
-never stage the broader discovered/whole-repository scope using only this narrow list.
-
-This list carries no tree structure, totals or review metadata. Clients do not
-reconstruct structural meaning from it; the server-owned changes tree is the subject
-of the analysis operation below.
+Empty success is `{ "codebases": {}, "changes": [] }`. This light projection runs
+no handlers and omits statistics, hierarchy, totals and review metadata; clients use
+the analyzed tree for structural meaning.
 
 #### Analyze workspace changes
 
 `GET /changes/analysis`
 
-Returns a fresh analyzed workspace changes tree. Collection uses the same participation,
-comparison and read-only guarantees as `/changes`. The response is:
+Returns `{root: ".", nodes, codebases, handlers}`. Every node, including hidden ones,
+has an entry in the path-indexed `nodes` table. Each node carries:
 
-```json
-{
-  "root": ".",
-  "nodes": {
-    ".": {
-      "path": ".", "children": [],
-      "base": { "path": ".", "kind": "directory", "repository": ".", "repositoryRoot": "." },
-      "current": { "path": ".", "kind": "directory", "repository": ".", "repositoryRoot": "." },
-      "signals": [], "effectiveEmphasis": { "value": "normal" },
-      "signalCounts": { "notice": 0, "warning": 0 },
-      "rawTotals": { "added": 0, "removed": 0 },
-      "attentionTotals": { "added": 0, "removed": 0 }
-    }
-  },
-  "codebases": {},
-  "handlers": {
-    "builtin:deemphasize-directories": { "id": "builtin:deemphasize-directories" },
-    "builtin:large-markdown": { "id": "builtin:large-markdown" }
-  }
-}
-```
+| Fields | Shape/meaning |
+| --- | --- |
+| `path`, `children` | Canonical path and sorted child-path list. |
+| `repo?`, `kind?`, `from?` | Change identity as above; directory ancestors need no own change. |
+| `renameContentChanged?` | Rename content identity differs, based on source-observed blobs rather than similarity/line counts. |
+| `statistics?` | Own `{added, removed, binary}` counts. |
+| `base?`, `current?` | Present-side `{path, kind, repository?, codebase?, repositoryRoot?, codebaseRoot?}`; kind is `directory`, `file` or `symlink`. |
+| `emphasis?` | Direct `{value, handler, reason?}` annotation. |
+| `effectiveEmphasis` | Inherited `{value, handler?, reason?, origin?}`; default is `{value: "normal"}`. |
+| `signals` | Direct signals in handler order. |
+| `signalCounts` | Inclusive `{notice, warning}` counts. |
+| `rawTotals`, `attentionTotals` | Inclusive `{added, removed}` line totals. |
 
-Every child path has its own node. `nodes` is indexed by canonical workspace-relative path, including
-`.`. Nodes carry `path`, sorted `children` path lists and optional `repo`, change
-`kind`, rename `from`, `renameContentChanged`, and own `statistics`:
-`{added, removed, binary}`. Each present `base`/`current` side carries its own
-`path` and `kind` (`directory`, `file`, `symlink`), optional `repository` and
-`codebase` identity, and optional `repositoryRoot`/`codebaseRoot` labels. Side
-kinds can differ during file/directory transitions. Rename nodes occur once at
-the destination, retaining previous-side ownership; former ancestors may remain
-with zero counts. Rename content change compares source-observed blob identities,
-independently of Git similarity or line counts.
+Side kinds/owners are independent through renames and file/directory transitions.
+A rename occurs once at its destination; previous ancestors can remain with zero
+counts. Side root fields label directory boundaries with the corresponding
+repository/codebase ID. File/directory nodes count their own change and descendants.
+`rawTotals` counts every nonbinary change exactly once; binaries contribute no
+fabricated lines.
+`attentionTotals` excludes effectively deemphasized/hidden entries.
 
-`rawTotals` includes a node's own nonbinary statistics and descendants exactly
-once. `attentionTotals` excludes entries whose effective emphasis is `deemphasized`
-or `hidden`. Binary entries contribute no fabricated lines. `emphasis`, when set,
-is the node's direct `{value, reason, handler}` annotation. The last direct setting
-wins on that node; the nearest explicit setting along canonical ancestry wins for
-`effectiveEmphasis`, including a `normal` reset. Effective explicit values retain
-`reason`, producing `handler` and `origin` path; default normal has no invented
-handler. Values are `normal`, `emphasized`, `deemphasized`, `hidden`.
+Emphasis values are `normal`, `emphasized`, `deemphasized`, `hidden`. The last direct
+setting wins on a node; the nearest explicit setting on the node or its ancestry
+determines effective emphasis, including a normal reset. Explicit inheritance retains
+reason, producing handler ID and origin path; default normal invents none.
 
-`signals` contains direct `{severity, message, handler, location?}` payloads in
-handler order. Severity is `notice` or `warning`; an optional authored location is
-`{side: "base" | "current", line, column?}` with one-based coordinates.
-`signalCounts` includes direct and descendant counts by severity. Emphasis never
-suppresses signals or ancestor counts. All nodes, including hidden ones, remain
-in the response. Object keys such as `__proto__` are ordinary data keys.
+Signals are `{severity: "notice" | "warning", message, handler, location?}`;
+`location` is `{side: "base" | "current", line, column?}` with one-based coordinates.
+Emphasis never suppresses signals or ancestor counts. `codebases` uses the shared
+definitions; `handlers` maps safe occurrence IDs to `{id, codebase?}`, distinguishing
+repeated module references without exposing absolute module paths. Referenced handler
+owners can have no changed files; definitions do not create tree nodes.
 
-`codebases` defines referenced owners as in `/changes`. `handlers` maps each safe
-configured occurrence ID to `{id, codebase?}`; a codebase handler's owner may have
-no changed files. IDs distinguish repeated module references without exposing
-absolute module filenames. Definitions are descriptive, not additional tree nodes.
+Built-ins run first, then workspace handlers in list order and concrete handlers in
+registry/list order. All trusted handlers see the whole tree and can annotate any
+node. Built-ins:
 
-Built-ins run first, then workspace handlers in list order and concrete handlers
-in registry/list order. Each trusted handler sees the whole tree and may annotate
-any node. Built-ins deemphasize root `plans/` and directories named exactly `tests`
-or `Tests`. They warn on current regular Markdown (`.md`/`.markdown`, case
-insensitive) larger than 20,480 bytes for additions, modifications and content-edited
-renames. Pure moves, deletions, symlinks and current root `plans/` paths are excluded.
-Size lookup uses current metadata, does not read file bytes or follow symlinks,
-and fails if a candidate is no longer an eligible current file within source bounds.
+- Deemphasize root `plans/` and directories named exactly `tests` or `Tests`.
+- Warn on current regular Markdown (`.md`/`.markdown`, case-insensitive) larger than
+  20,480 bytes for additions, modifications and content-edited renames, except root
+  `plans/`. Metadata-only size probes read no bytes or symlinks and fail if the
+  candidate disappears, changes kind or leaves source bounds.
 
-Analysis state is independent per request even when base collection overlaps.
-The total 30-second operation budget includes collection waiting. Disconnect,
-timeout and shutdown cancel only the affected run; shared collection belongs to
-the application. Failed/cancelled analysis aborts and drains its owned source
-observations before disposal completes. Cancellation is cooperative and cannot preempt synchronous trusted
-JavaScript. Modules load at startup and refresh on process restart. Handler load or
-invocation failure fails the whole analysis with HTTP 500 and
-`{ "error": { "code": "internal_error", "message": "Internal server error", "handler": "safe-occurrence-id" } }`.
-Raw causes, stacks and module paths are omitted. Light `/changes` executes no
-handlers and remains independently available. Forge inspection does not write
-workspace/Git state; trusted executable modules are outside an effects sandbox.
+Analysis annotations/state are independent per request even when collection overlaps.
+Modules load at startup and refresh on restart. Handler load/invocation failure
+returns HTTP 500 with `{ "error": { "code": "internal_error", "message": "Internal server error", "handler": "safe-occurrence-id" } }`;
+raw causes/stacks/module paths stay private. Light `/changes` remains independently
+available. Shared deadline/cancellation/effects rules apply.
 
 #### Read file diff
 
-Future operation: takes a changed file's workspace-relative path and returns a per-file Git-style unified patch and separate change metadata. The baseline and staging reconciliation remain to be defined independently of this practical Git change list. The patch includes file headers, all text changes, and limited unchanged context, preserving missing-final-newline markers.
+`GET /changes/file?path=<canonical-change-path>[&context=3|all]`
 
-Added files compare against an empty baseline; deleted files compare against empty current content. Renames identify both paths and compare the previous HEAD content with the current content. Binary changes are identified explicitly rather than returned as text hunks. Metadata-only changes, such as pure renames or file-mode changes, remain identifiable even when there are no text hunks.
+Selects a freshly collected change without handlers. Default `context=3` returns
+three unchanged lines around hunks; `all` returns complete represented context around
+changed payloads for expansion. Both retain the collector's final reconciled sides,
+applicable attributes, trusted filters and diff algorithm. There is no separate
+full-file endpoint or renderer-specific model.
 
-Clients load complete old/new text through `Read file content` when expanding omitted context or switching to full-file viewing. Patch parsing and renderer-specific models belong to the client, not the wire contract.
+An unchanged/disappeared selection returns `{kind: "not_changed", codebases: {}}`.
+Other results carry `path`, `repo`, `changeKind`, rename-only `from`, `statistics`,
+`codebases`, `context` (`3` or `"all"`), `base`, `current` and resolved `baseline`
+(`{kind: "commit", oid}` or `{kind: "unborn"}`). Statistics/definitions follow the
+shared shapes. Each side is `{path, kind, mode, present, codebase?}` with effective
+Git mode and `directory`/`file`/`symlink` kind. Absence is distinct from an empty file.
 
-Oversized text diffs produce an explicit unsupported-content result rather than a silently truncated patch. The size limit remains to be selected during implementation.
+| `kind` | Additional result |
+| --- | --- |
+| `text` | Complete Git-style unified review `patch`, with quoted workspace-relative headers, change metadata and missing-newline markers. |
+| `metadata_only` | No text hunks: e.g. empty additions/deletions, pure renames or mode-only changes. All context does not invent unchanged text. |
+| `unsupported` | `reason`: `binary`, `encoding` or `too_large`; the latter includes `limitBytes`. No partial patch. |
 
-### Workspace files
+HEAD blobs are never clean-filtered again. Whole additions also follow applicable
+clean/EOL rules; raw disk-byte preservation is not promised. Represented CR/LF, BOM
+and final-newline payload bytes survive. Symlinks expose target text, never referents,
+including `core.symlinks=false` placeholders; current symlink ancestors are never
+traversed. Directory transitions compare only file-like payloads, with directory
+sides and separate descendants retained. Type transitions use byte-pair hunks/counts
+and independent kind metadata, without guaranteeing executable `git apply` semantics.
 
-#### Read file content
+#### Patch context and limits
 
-Takes a workspace-relative path and selects either current working-copy content or HEAD content from the containing participating repository. Returns the whole text file for full-file viewing, including unchanged files.
-
-For a rename's HEAD content, callers use the previous path. A file absent from the selected version is reported as missing, including added files at HEAD and deleted files in the working copy. Missing content is distinct from an existing empty file; clients use an absent side when constructing an added/deleted file comparison.
-
-Text preserves line endings and whether the final line ends with a newline. Read failures are reported as failures rather than empty or missing content. Binary, unsupported-encoding, and oversized files produce an explicit unsupported-content result with the reason. The size limit remains to be selected during implementation.
-
-#### List directory entries
-
-Takes a workspace-relative directory path, with the workspace root as the default, and returns its immediate children with names and entry kinds. Directories are expanded on demand rather than returned as a recursive workspace tree.
-
-Includes tracked and non-ignored working-copy files and the directories needed to reach them, across participating repositories. Git internals are excluded. Symbolic links are identified as links rather than traversed.
-
-Additional directory hiding, tree expansion state, and copying paths are client concerns.
+- Decode queries once. Require one nonempty canonical workspace-relative POSIX
+  `path`; only optional `context=3|all` is allowed. Unknown/duplicate parameters,
+  absolute/platform escapes, NUL, empty/dot/dot-dot or `.git` segments are invalid.
+  Literal spaces, tabs, newlines, `#`, `%`, `?` and Unicode survive. Supplied roots,
+  refs or OIDs cannot authorize access.
+- Limit final patches to 4 MiB before JSON escaping and raw current regular input
+  to 8 MiB. Returned text is strict UTF-8 without NUL, respecting Git binary
+  classification. Validation covers returned hunks/context, not all unshown bytes.
+  Complete context can refuse for size/encoding/binary bytes while short context
+  succeeds; clients retain the short diff and show expansion failure. Never truncate
+  successful output. These bounds exclude native Git/filter allocations before stdout;
+  application output/buffers, temporary resources and lifetime remain bounded.
+- Fix the baseline once per operation. Context reloads are fresh observations, not
+  pinned earlier working bytes; clients own refresh generations and reject incompatible
+  initial/expanded results. A required side disappearing/changing kind or an available
+  participant/Git/read/filter failure returns `internal_error`, not missing content.
+  Unknown paths cannot authorize file reads. The shared 30-second budget, independent
+  cancellation, draining and read-only rules apply.
 
 ## Future capabilities
 
-### Review checkpoints and progress
-
-### Agent interaction
-
-### Workspace actions
-
-## Open decisions
-
-- Storage side effects for future merge-request sources remain to be defined.
+Directory listing, path-to-codebase context, review checkpoints/progress, agent
+interaction and workspace actions remain future contracts. Directory listing is
+intended to return immediate tracked/non-ignored children (workspace root default),
+including required ancestor directories across participants and excluding Git internals;
+links are identified without traversal. Display hiding/expansion/copying are client
+concerns. Storage side effects for future merge-request sources remain unresolved.

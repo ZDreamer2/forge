@@ -11,6 +11,8 @@ test("identity snapshots repository declarations without collecting or exposing 
 		{ path: ".", status: "available" as const, gitRoot: "/parent", secret: "excluded" },
 	];
 	const routes = createWorkspaceRoutes({
+		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		fileDiff: async () => ({ kind: "not_changed" }),
 		root: "/parent/selected",
 		name: "Selected",
 		repositories,
@@ -50,6 +52,8 @@ test("flat projection uses present-side concrete roots, safe keys and response-l
 	tree.insert({ repo: ".", path: "unmatched.txt", kind: "added", current: { kind: "file" } });
 	let collections = 0;
 	const routes = createWorkspaceRoutes({
+		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		fileDiff: async () => ({ kind: "not_changed" }),
 		root,
 		name: "Selected",
 		repositories: [],
@@ -112,6 +116,8 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 	});
 	let calls = 0;
 	const routes = createWorkspaceRoutes({
+		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		fileDiff: async () => ({ kind: "not_changed" }),
 		root,
 		name: "selected",
 		repositories: [],
@@ -144,4 +150,57 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 		changes: [{ repo: ".", path: "__proto__/tests/a.md", kind: "added", codebases: ["__proto__"] }],
 	});
 	assert.equal(calls, 2);
+});
+
+test("file queries decode once, validate context and preserve literal names", async () => {
+	const seen: unknown[][] = [];
+	const routes = createWorkspaceRoutes({
+		root: "/selected",
+		name: "Selected",
+		repositories: [],
+		analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		analyze: createTreeAnalyzer({ handlers: [] }).analyze,
+		currentByteSize: async () => 0,
+		collectChanges: async () => createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] }),
+		fileDiff: async (_tree, path, signal, context) => {
+			assert.ok(signal instanceof AbortSignal);
+			seen.push([path, context]);
+			return { kind: "not_changed" };
+		},
+	});
+	for (const query of [
+		"",
+		"path=",
+		"path=a&path=b",
+		"path=a&ref=HEAD",
+		"path=/a",
+		"path=a//b",
+		"path=a/../b",
+		"path=.git/config",
+		"path=a%00b",
+		"path=C%3A/a",
+		"path=a%5Cb",
+		"path=a&context=",
+		"path=a&context=0",
+		"path=a&context=4",
+		"path=a&context=ALL",
+		"path=a&context=3&context=all",
+		"path=a&side=head",
+	])
+		assert.equal((await routes.request(`/changes/file?${query}`)).status, 400, query);
+	assert.deepEqual(seen, []);
+	for (const path of ["__proto__", "tab\tnewline\n雪 %2e #?.txt"]) {
+		for (const context of [undefined, "3", "all"]) {
+			const query = new URLSearchParams({ path, ...(context ? { context } : {}) });
+			assert.equal((await routes.request(`/changes/file?${query}`)).status, 200);
+			assert.deepEqual(seen.splice(0), [[path, context === "all" ? "all" : 3]]);
+		}
+	}
+	assert.equal((await routes.request("/files/content?path=a&side=current")).status, 404);
+	for (const method of ["POST", "OPTIONS", "DELETE"]) {
+		const response = await routes.request("/changes/file", { method });
+		assert.equal(response.status, 405);
+		assert.equal(response.headers.get("allow"), "GET, HEAD");
+	}
 });

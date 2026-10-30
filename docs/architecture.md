@@ -64,7 +64,10 @@ configuration; composition supplies their dependencies.
 Current implementation includes configuration, repository participation, the canonical
 workspace tree, working changes, ordered analysis handlers and identity/flat/analyzed
 changes HTTP routes. The machine-checked component edges match these owners.
-Sources supply narrow current-file byte sizes; full content readers remain deferred.
+Sources supply metadata byte sizes and bounded per-change patches with short/full context.
+Private source descriptors retain the resolved baseline and reconciled side identities;
+HTTP maps those domain results to the browser-safe contract. Git produces payload
+hunks directly; no independent full-file content reader is needed for this viewer.
 
 ## Authority, trust and lifecycle
 
@@ -80,14 +83,15 @@ comparison is not staging equivalence or a replacement for durable capture and
 checking/staging. Future migration must align their participation and scope before
 sharing authority.
 
-Workspace inspection is read-only with respect to source files and Git metadata.
+Workspace inspection preserves source files and Git index/ref/object contents.
+Native Git can freshen shared-index mtimes during reads.
 Authored configuration is data; analysis handlers and Git filters are trusted executable code, not an effects sandbox;
 HTTP protection does not change that trust model. File access remains within the
 selected workspace even when its containing Git root extends above it.
 
-Application composition owns the listener, termination hooks and active collection and analysis runs.
+Application composition owns the listener, termination hooks and active collection, analysis and file-request runs.
 Overlapping requests share in-flight base work, not cached results, and one client
-leaving cancels only its own analysis. Analysis has a 30-second total budget,
+leaving cancels only its own analysis or file request. Each has a 30-second total budget,
 including collection waiting; cooperative cancellation releases an awaited handler
 without preempting synchronous trusted JavaScript. App-owned source observations
 remain tracked through cancellation and subprocess reaping. Shutdown stops admission, cancels and reaps

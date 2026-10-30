@@ -21,3 +21,10 @@ nodes; finalized totals, effective emphasis and inclusive signal counts carry th
 server's structural meaning to clients. The [API contract](../../../../docs/protocol.md)
 owns the wire semantics and safe handler-error envelope. GET and HEAD remain
 read-only toward workspace and Git state; trusted modules are not sandboxed.
+
+The file route validates literal canonical paths and optional short/all context,
+then maps source-owned side metadata and ownership into the public patch result.
+Its app-owned budget is independent of analysis. Collection remains shared;
+only patch acquisition is registered for abort and drain. Excluded participation
+maps to forbidden; operational failures remain sanitized internal errors.
+The API contract owns exact wire shapes, context semantics and limits.

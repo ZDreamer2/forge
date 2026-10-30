@@ -7,6 +7,8 @@ import { createHttpApp } from "../http.ts";
 test("HTTP page and API operations have consistent routing failures", async () => {
 	let collections = 0;
 	const app = createHttpApp({
+		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		fileDiff: async () => ({ kind: "not_changed" }),
 		root: "/selected",
 		name: "Selected",
 		repositories: [],
@@ -31,7 +33,7 @@ test("HTTP page and API operations have consistent routing failures", async () =
 			assert.deepEqual(await missing.json(), { error: { code: "not_found", message: "Not found" } });
 		}
 	}
-	for (const path of ["/", "/api/workspace", "/api/changes", "/api/changes/analysis"]) {
+	for (const path of ["/", "/api/workspace", "/api/changes", "/api/changes/analysis", "/api/changes/file"]) {
 		for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
 			const unsupported = await app.request(path, { method, headers });
 			assert.equal(unsupported.status, 405);
@@ -66,6 +68,8 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 	let collections = 0;
 	const reported: Error[] = [];
 	const app = createHttpApp({
+		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		fileDiff: async () => ({ kind: "not_changed" }),
 		root: "/selected",
 		name: "Selected",
 		repositories: [],
@@ -84,7 +88,15 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 		reached = true;
 		throw new Error("secret subprocess and environment values");
 	});
-	for (const path of ["/", "/explode", "/api/workspace", "/api/changes", "/api/changes/analysis", "/api/unknown"]) {
+	for (const path of [
+		"/",
+		"/explode",
+		"/api/workspace",
+		"/api/changes",
+		"/api/changes/analysis",
+		"/api/changes/file",
+		"/api/unknown",
+	]) {
 		for (const headers of [{ host: "foreign:43210" }, { host: "127.0.0.1:43210", origin: "http://foreign:43210" }]) {
 			for (const method of ["GET", "HEAD", "OPTIONS"]) {
 				const denied = await app.request(path, { method, headers });

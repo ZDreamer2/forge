@@ -9,7 +9,7 @@ import {
 	type IndexEntry,
 } from "../../../../../lib/git/index.ts";
 import { parseComparison, records } from "./comparison-records.ts";
-import type { ComparedChange } from "./types.ts";
+import type { ComparedChange, ReconciledChange } from "./types.ts";
 
 function statistics(bytes: Buffer): ComparedChange["statistics"] {
 	const fields = records(bytes);
@@ -29,11 +29,12 @@ export async function wholeAddition(
 	path: string,
 	signal?: AbortSignal,
 	effectiveMode?: string,
-): Promise<ComparedChange> {
+): Promise<ReconciledChange> {
 	const stat = await lstat(resolve(root, path));
 	return {
 		path,
 		kind: "added",
+		comparison: { kind: "whole-addition" },
 		oldMode: "000000",
 		newMode:
 			effectiveMode && effectiveMode !== "000000"
@@ -56,10 +57,11 @@ export async function wholeDeletion(
 	path: string,
 	oldMode: string,
 	signal?: AbortSignal,
-): Promise<ComparedChange> {
+): Promise<ReconciledChange> {
 	return {
 		path,
 		kind: "deleted",
+		comparison: { kind: "scratch-index", entries: [] },
 		oldMode,
 		newMode: "000000",
 		statistics: statistics(await deletedPairStatistics(git, root, baseline, [path], signal)),
@@ -73,8 +75,8 @@ export async function correctPairs(
 	input: readonly ComparedChange[],
 	untracked: Set<string>,
 	signal?: AbortSignal,
-): Promise<ComparedChange[]> {
-	let changes: ComparedChange[] = [];
+): Promise<ReconciledChange[]> {
+	let changes: ReconciledChange[] = [];
 	for (const item of input) {
 		if (item.from !== undefined && untracked.has(item.from)) {
 			changes.push(await wholeDeletion(git, root, baseline, item.from, item.oldMode, signal));
@@ -83,7 +85,10 @@ export async function correctPairs(
 			changes.push(await wholeAddition(git, root, item.path, signal, item.newMode));
 		else if (item.correction === "deletion")
 			changes.push(await wholeDeletion(git, root, baseline, item.path, item.oldMode, signal));
-		else changes.push(item);
+		else {
+			const { correction: _correction, ...facts } = item;
+			changes.push({ ...facts, comparison: { kind: "source-index" } });
+		}
 	}
 	const ambiguous = changes.filter((item) => item.kind === "deleted" && untracked.has(item.path));
 	const entries: IndexEntry[] = [];
@@ -119,7 +124,16 @@ export async function correctPairs(
 		const replacements = parseComparison(await compareIndexEntries(git, root, entries, signal));
 		const paths = new Set(entries.map(({ path }) => path));
 		changes = changes.filter(({ path, kind }) => !(kind === "deleted" && paths.has(path)));
-		changes.push(...replacements);
+		// Reconciliation may include recreated ancestor attributes as well as this file.
+		// Retain that shared index metadata so later patches use the identical fallback.
+		changes.push(
+			...replacements.map(
+				({ correction: _correction, ...facts }): ReconciledChange => ({
+					...facts,
+					comparison: { kind: "scratch-index", entries },
+				}),
+			),
+		);
 		for (const path of paths) untracked.delete(path);
 	}
 	return changes;

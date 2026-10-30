@@ -3,7 +3,7 @@ export type WorkspaceIdentity = {
 	repositories: ({ path: string; status: "available"; gitRoot: string } | { path: string; status: "missing" })[];
 };
 
-export type ApiErrorCode = "forbidden" | "not_found" | "method_not_allowed" | "internal_error";
+export type ApiErrorCode = "invalid_request" | "forbidden" | "not_found" | "method_not_allowed" | "internal_error";
 
 export type ApiFailure = {
 	error: { code: ApiErrorCode; message: string; handler?: string };
@@ -60,3 +60,33 @@ export type WorkspaceAnalysis = {
 	codebases: WorkspaceChanges["codebases"];
 	handlers: Record<string, AnalysisHandlerDefinition>;
 };
+
+export type FileBaseline = { kind: "commit"; oid: string } | { kind: "unborn" };
+export type FileUnsupportedReason = "binary" | "encoding" | "too_large";
+export type FileSide = {
+	path: string;
+	kind: "file" | "symlink" | "directory";
+	mode: string;
+	present: boolean;
+	codebase?: string;
+};
+export type WorkspaceFileDiff = {
+	codebases: WorkspaceChanges["codebases"];
+} & (
+	| { kind: "not_changed" }
+	| ({
+			path: string;
+			repo: string;
+			baseline: FileBaseline;
+			context: 3 | "all";
+			changeKind: "added" | "modified" | "deleted" | "renamed";
+			from?: string;
+			base: FileSide;
+			current: FileSide;
+			statistics: { added: number; removed: number; binary: boolean };
+	  } & (
+			| { kind: "text"; patch: string }
+			| { kind: "metadata_only"; patch?: string }
+			| { kind: "unsupported"; reason: FileUnsupportedReason; limitBytes?: number }
+	  ))
+);

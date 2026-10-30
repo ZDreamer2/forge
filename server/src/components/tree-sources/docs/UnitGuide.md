@@ -1,18 +1,27 @@
 # tree-sources Guide
 
-Builds base workspace trees from sources of workspace state. Each source produces a tree recording its two sides. Content readers for analysis and file/diff operations will accompany sources when those capabilities arrive.
+Builds base workspace trees from sources of workspace state. Each source produces a tree recording its two sides. The working source also owns bounded per-change patch acquisition.
 
 ## Notes
 
 `index.ts` exposes the `working-changes` source factory. It builds a canonical
 workspace tree using startup repository participation and fresh path-boundary
-observations for each collection. Raw Git modes and numstat counts survive into
-the tree; exceptional recreated or clipped pairs receive statistics for their final
-sides. Owned scratch indexes compare existing HEAD objects against actual working
+observations for each collection. Effective Git modes and resolved baselines remain in private source descriptors;
+the tree carries side kinds and statistics. Exceptional recreated or clipped pairs
+receive statistics for their final sides. Owned scratch indexes compare existing HEAD objects against actual working
 paths without normalizing baseline bytes again or writing source Git metadata.
 
-Full content readers and the other sources below are deferred until they have consumers;
-current analysis needs only metadata byte sizes alongside the base tree.
+Patch acquisition uses those descriptors and the applicable repository attributes,
+filters and algorithm directly. Existing pairs seed an owned scratch index with
+an existing baseline blob; normalized new-file pairs need only an owned constant
+empty blob. Ordinary pairs retain applicable source-index ancestor attributes when
+working attribute files are absent. Reconciled pairs retain their collector-selected
+index policy. Raw, reconciled and collected facts have distinct types; only finalized
+collected descriptors reach patch acquisition, with a mandatory resolved baseline
+and explicit source-index, scratch-index or whole-addition context. Whole additions preserve the collector's no-index command semantics,
+including clean/EOL attributes. No current normalized text buffers or synthetic
+pair trees are materialized. Independent content readers and the other sources
+below remain deferred.
 
 Sources are nested units under `internal/`, exposed through this component's surface:
 
@@ -42,3 +51,8 @@ Rename entries retain a content-change fact from the comparison's nonzero raw
 blob identities. Similarity scores and binary/numeric line counts cannot establish
 whether a move changed content. Boundary clipping and recreated-source splitting
 discard rename-only facts when the final entries become additions or deletions.
+
+File patch reads validate the current reconciled leaf before/after Git acquisition,
+using strict traversal and no-follow regular-file metadata. An absent collected
+side is not replaced by an ignored physical recreation. Short/all context shares
+one acquisition path and finite output bounds; wire details belong to the protocol.

@@ -1,10 +1,20 @@
 import { Hono } from "hono";
 import type { AnalysisNode, AnalysisResult } from "../../tree-analysis/index.ts";
+import { type createWorkingChanges, SourceForbiddenError } from "../../tree-sources/index.ts";
 import type { RepositoryResolution } from "../../workspace-repositories/index.ts";
 import type { WorkspaceTree } from "../../workspace-tree/index.ts";
+import { parseFileQuery } from "./file-query.ts";
+import { workspaceFileDiff } from "./file-wire.ts";
 import { apiError, workspaceAnalysis, workspaceChanges, workspaceIdentity } from "./wire.ts";
 
-type Deps = {
+export type WorkspaceRouteDeps = {
+	fileRequests: {
+		run: <T>(
+			work: (signal: AbortSignal, own: <R>(pending: Promise<R>) => Promise<R>) => Promise<T>,
+			signal?: AbortSignal,
+		) => Promise<T>;
+	};
+	fileDiff: ReturnType<typeof createWorkingChanges>["fileDiff"];
 	root: string;
 	name: string;
 	repositories: readonly RepositoryResolution[];
@@ -34,7 +44,9 @@ export function createWorkspaceRoutes({
 	analysis,
 	analyze,
 	currentByteSize,
-}: Deps) {
+	fileRequests,
+	fileDiff,
+}: WorkspaceRouteDeps) {
 	const identity = workspaceIdentity(root, name, repositories);
 	const routes = new Hono();
 	routes.get("/workspace", (context) => context.json(identity));
@@ -55,7 +67,22 @@ export function createWorkspaceRoutes({
 		}, context.req.raw.signal);
 		return context.json(workspaceAnalysis(root, result));
 	});
-	for (const path of ["/workspace", "/changes", "/changes/analysis"]) {
+	routes.get("/changes/file", async (context) => {
+		const query = parseFileQuery(context.req.url);
+		if (!query) return context.json(apiError("invalid_request"), 400);
+		try {
+			const result = await fileRequests.run(async (signal, own) => {
+				const tree = await collectChanges();
+				signal.throwIfAborted();
+				return own(fileDiff(tree, query.path, signal, query.context));
+			}, context.req.raw.signal);
+			return context.json(workspaceFileDiff(root, result));
+		} catch (error) {
+			if (error instanceof SourceForbiddenError) return context.json(apiError("forbidden"), 403);
+			throw error;
+		}
+	});
+	for (const path of ["/workspace", "/changes", "/changes/analysis", "/changes/file"]) {
 		routes.all(path, (context) => {
 			context.header("Allow", "GET, HEAD");
 			return context.json(apiError("method_not_allowed"), 405);

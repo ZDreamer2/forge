@@ -1,28 +1,11 @@
 import { Hono } from "hono";
 import { createDiagnosticRoutes } from "../components/diagnostic-ui/index.ts";
 import { apiError, createWorkspaceRoutes } from "../components/http-api/index.ts";
-import { AnalysisHandlerError, type AnalysisNode, type AnalysisResult } from "../components/tree-analysis/index.ts";
-import type { RepositoryResolution } from "../components/workspace-repositories/index.ts";
-import type { TreeNode, WorkspaceTree } from "../components/workspace-tree/index.ts";
+import { AnalysisHandlerError } from "../components/tree-analysis/index.ts";
 import { AccessRejectedError, createRequestGuard } from "../lib/loopback-access/index.ts";
 
-type Deps = {
-	root: string;
-	name: string;
-	repositories: readonly RepositoryResolution[];
+type Deps = import("../components/http-api/index.ts").WorkspaceRouteDeps & {
 	port: number;
-	collectChanges: () => Promise<WorkspaceTree>;
-	analysis: {
-		run: <T>(
-			work: (signal: AbortSignal, own: <R>(pending: Promise<R>) => Promise<R>) => Promise<T>,
-			signal?: AbortSignal,
-		) => Promise<T>;
-	};
-	analyze: (
-		tree: WorkspaceTree,
-		options: { signal: AbortSignal; currentByteSize: (node: AnalysisNode, signal: AbortSignal) => Promise<number> },
-	) => Promise<AnalysisResult>;
-	currentByteSize: (tree: WorkspaceTree, node: TreeNode, signal: AbortSignal) => Promise<number>;
 	reportError?: (error: Error) => void;
 };
 
@@ -35,6 +18,8 @@ export function createHttpApp({
 	analysis,
 	analyze,
 	currentByteSize,
+	fileRequests,
+	fileDiff,
 	reportError,
 }: Deps) {
 	const app = new Hono();
@@ -50,7 +35,17 @@ export function createHttpApp({
 	app.route("/", createDiagnosticRoutes());
 	app.route(
 		"/api",
-		createWorkspaceRoutes({ root, name, repositories, collectChanges, analysis, analyze, currentByteSize }),
+		createWorkspaceRoutes({
+			root,
+			name,
+			repositories,
+			collectChanges,
+			analysis,
+			analyze,
+			currentByteSize,
+			fileRequests,
+			fileDiff,
+		}),
 	);
 	app.notFound((context) => context.json(apiError("not_found"), 404));
 	return app;

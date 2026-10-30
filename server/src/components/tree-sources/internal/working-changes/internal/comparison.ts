@@ -1,7 +1,7 @@
 import { type GitProcess, gitFailure } from "../../../../../lib/git/index.ts";
 import { line, parseComparison, records } from "./comparison-records.ts";
 import { correctPairs, wholeAddition } from "./pair-statistics.ts";
-import type { ComparedChange } from "./types.ts";
+import type { CollectedChange, ComparedChange, ResolvedBaseline } from "./types.ts";
 
 export async function compare(
 	git: GitProcess,
@@ -9,7 +9,7 @@ export async function compare(
 	scope: readonly string[],
 	inScope: (path: string) => Promise<boolean>,
 	signal?: AbortSignal,
-): Promise<ComparedChange[]> {
+): Promise<CollectedChange[]> {
 	const run = async (args: readonly string[], input?: Buffer) => {
 		const result = await git(root, args, { signal, ...(input === undefined ? {} : { input }) });
 		if (result.code !== 0) throw gitFailure(args[0] ?? "comparison", result);
@@ -43,7 +43,7 @@ export async function compare(
 		baseline = line(await run(["hash-object", "-t", "tree", "--stdin"], Buffer.alloc(0)));
 	}
 	if (!/^[0-9a-f]{40,64}$/.test(baseline)) throw new Error("Invalid baseline object ID");
-	let changes = parseComparison(
+	const changes = parseComparison(
 		await run([
 			"diff",
 			"--raw",
@@ -81,7 +81,8 @@ export async function compare(
 	}
 	// HEAD bytes are already normalized; a scratch index compares the actual worktree
 	// against those objects without feeding the baseline through a clean filter again.
-	changes = await correctPairs(git, root, baseline, scoped, untracked, signal);
-	for (const path of untracked) changes.push(await wholeAddition(git, root, path, signal));
-	return changes;
+	const reconciled = await correctPairs(git, root, baseline, scoped, untracked, signal);
+	for (const path of untracked) reconciled.push(await wholeAddition(git, root, path, signal));
+	const resolvedBaseline: ResolvedBaseline = { kind: head.code === 0 ? "commit" : "unborn", oid: baseline };
+	return reconciled.map((item) => ({ ...item, baseline: resolvedBaseline }));
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseComparison } from "../internal/comparison-records.ts";
+import type { CollectedChange, ComparedChange } from "../internal/types.ts";
 
 const oldId = "1".repeat(40);
 const newId = "2".repeat(40);
@@ -30,4 +31,33 @@ test("gitlink normalization removes rename-only facts", () => {
 		assert.equal(change?.renameContentChanged, undefined);
 		assert.equal(change?.kind, modes.startsWith("160000") ? "added" : "deleted");
 	}
+});
+
+test("collected descriptors require a resolved baseline and explicit comparison context", () => {
+	const raw: ComparedChange = {
+		path: "file",
+		kind: "modified",
+		oldMode: "100644",
+		newMode: "100644",
+		statistics: { added: 1, removed: 1, binary: false },
+	};
+	const collected: CollectedChange = {
+		...raw,
+		baseline: { kind: "unborn", oid: "resolved-empty-tree" },
+		comparison: { kind: "scratch-index", entries: [] },
+	};
+	assert.equal(collected.baseline.oid, "resolved-empty-tree");
+
+	function rejectedDescriptors() {
+		// @ts-expect-error Raw facts are not ready for file acquisition.
+		const unfinished: CollectedChange = raw;
+		// @ts-expect-error Unborn baselines still need their resolved comparison object.
+		void ({ ...collected, baseline: { kind: "unborn" } } satisfies CollectedChange);
+		// @ts-expect-error Scratch context explicitly carries its entries, including an empty list.
+		void ({ ...collected, comparison: { kind: "scratch-index" } } satisfies CollectedChange);
+		// @ts-expect-error Index selection is never implicit on a finalized descriptor.
+		void ({ ...collected, comparison: undefined } satisfies CollectedChange);
+		void unfinished;
+	}
+	void rejectedDescriptors;
 });

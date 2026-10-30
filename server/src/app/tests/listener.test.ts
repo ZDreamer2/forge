@@ -79,6 +79,8 @@ test("real adapter preserves Host and Origin restrictions including spoofed forw
 		port: 0,
 		fetch: (incoming) =>
 			createHttpApp({
+				fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+				fileDiff: async () => ({ kind: "not_changed" }),
 				root: "/selected",
 				name: "Selected",
 				repositories: [],

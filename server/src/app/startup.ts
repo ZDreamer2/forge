@@ -7,6 +7,7 @@ import { createGitProcess } from "../lib/git/index.ts";
 import { createAnalysis } from "./analysis.ts";
 import { createCollection } from "./collection.ts";
 import { loadConfig } from "./config.ts";
+import { createFileRequests } from "./file-requests.ts";
 import { createHttpApp } from "./http.ts";
 import { createListener } from "./listener.ts";
 
@@ -41,11 +42,14 @@ export async function start(options: Options) {
 	}
 	const analyzer = createTreeAnalyzer({ handlers });
 	const analysis = createAnalysis();
+	const fileRequests = createFileRequests();
 	const collection = createCollection({ collect: (signal) => changes.collect(signal) });
 	const app = createHttpApp({
 		...snapshot,
 		collectChanges: collection.collect,
 		analysis,
+		fileRequests,
+		fileDiff: changes.fileDiff,
 		analyze: analyzer.analyze,
 		currentByteSize: changes.currentByteSize,
 		port: config.port,
@@ -71,7 +75,9 @@ export async function start(options: Options) {
 		if (disposal === undefined) {
 			process.off("SIGINT", terminate);
 			process.off("SIGTERM", terminate);
-			disposal = Promise.all([analysis.close(), collection.close(), listener.close()]).then(() => {});
+			disposal = Promise.all([analysis.close(), fileRequests.close(), collection.close(), listener.close()]).then(
+				() => {},
+			);
 		}
 		return disposal;
 	}
