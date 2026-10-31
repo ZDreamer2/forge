@@ -1,0 +1,43 @@
+.overview {
+	max-width: 64rem;
+	margin: 0 auto;
+	padding: clamp(1rem, 4vw, 3rem);
+	display: grid;
+	gap: 1.5rem;
+}
+
+.header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
+.brand {
+	font-size: 0.8rem;
+	font-weight: 700;
+	letter-spacing: 0.2em;
+	color: #526175;
+}
+
+.path,
+.name {
+	overflow-wrap: anywhere;
+}
+
+.totals {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+	gap: 1.5rem;
+}
+
+.totals dt {
+	color: #526175;
+}
+
+.totals dd {
+	margin: 0.25rem 0 0;
+	font-size: 1.75rem;
+	font-weight: 600;
+}

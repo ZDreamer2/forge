@@ -243,9 +243,9 @@ and independent kind metadata, without guaranteeing executable `git apply` seman
   successful output. These bounds exclude native Git/filter allocations before stdout;
   application output/buffers, temporary resources and lifetime remain bounded.
 - Fix the baseline once per operation. Context reloads are fresh observations, not
-  pinned earlier working bytes; clients own refresh generations and reject incompatible
-  initial/expanded results. A required side disappearing/changing kind or an available
-  participant/Git/read/filter failure returns `internal_error`, not missing content.
+  pinned earlier working bytes; clients own freshness and reject incompatible
+  initial/expanded results. A required side disappearing/changing kind or an
+  available participant/Git/read/filter failure returns `internal_error`, not missing content.
   Unknown paths cannot authorize file reads. The shared 30-second budget, independent
   cancellation, draining and read-only rules apply.
 

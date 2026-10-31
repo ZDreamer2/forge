@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Reuse existing service tools and the owning installation's aggregate gate."""
+
+import json
+from pathlib import Path
+import sys
+
+
+def main() -> int:
+    try:
+        input_text = sys.stdin.read()
+        payload = json.loads(input_text)
+        scripts = Path(payload["root"]) / "ai/bc-plugins/dev/forge/codebases/ts-service/scripts"
+        sys.dont_write_bytecode = True
+        sys.path.insert(0, str(scripts))
+        from ts_service_diff_check import main as check
+
+        return check(input_text)
+    except (ImportError, OSError, KeyError, TypeError, ValueError) as error:
+        print(f"on-diff-check: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

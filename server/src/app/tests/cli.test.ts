@@ -146,14 +146,7 @@ test("CLI uses selected .env, serves fresh read-only changes and releases port o
 						{ path: "absent", status: "missing" },
 					],
 				});
-				const page = await fetch(address);
-				assert.equal(page.status, 200);
-				assert.match(await page.text(), /<script>/);
-				const pageHead = await fetch(address, { method: "HEAD" });
-				assert.equal(pageHead.status, 200);
-				assert.equal(await pageHead.text(), "");
 				assert.equal((await fetch(`${address}/unknown`)).status, 404);
-				assert.equal((await fetch(address, { method: "POST" })).status, 405);
 				assert.equal((await fetch(address, { headers: { origin: "http://foreign" } })).status, 403);
 				const foreignStatus = await new Promise<number | undefined>((resolve, reject) => {
 					const probe = request(address, { headers: { host: "foreign" } }, (response) => {

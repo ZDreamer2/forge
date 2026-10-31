@@ -5,6 +5,7 @@ const contract = "^server/src/components/api-contract/";
 // Installation boundaries complement, rather than replace, server-local zone rules.
 export default {
 	forbidden: [
+		{ name: "browser-imports-resolve", severity: "error", from: { path: "^ui/src/" }, to: { couldNotResolve: true } },
 		{
 			name: "source-not-to-installation-entrypoints",
 			severity: "error",
@@ -45,6 +46,7 @@ export default {
 	],
 	options: {
 		...base.options,
+		tsConfig: { fileName: "tsconfig.json" },
 		enhancedResolveOptions: {
 			...base.options.enhancedResolveOptions,
 			extensions: [".tsx", ...base.options.enhancedResolveOptions.extensions],

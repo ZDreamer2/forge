@@ -1,14 +1,11 @@
 # architecture.meta.md
 
-Specification for creating and editing [Forge application architecture](architecture.md). Defines purpose, usage patterns, and constraints.
+Editing context for [application architecture](architecture.md).
 
 ## architecture.md goals and principles
 
-- Gives maintainers a high-level map for assigning responsibilities and judging changes to dependencies, authority and lifetimes. It explains consequential boundaries and their rationale, rather than cataloging the source tree.
-- Distinguishes one package/installation from its server and frontend codebases. Shared distribution does not merge runtime environments, implementation ownership or verification scopes.
-- Preserves the server's authority over the selected workspace, the server-owned browser-safe API contract and the separation of authored policy from wire vocabulary. These boundaries prevent clients from reconstructing competing workspace models or importing server internals.
-- The component map is the baseline that server work builds toward. While code lags behind it, a short current-implementation note names the actual components and edges the machine-checked allowlist enforces; migration updates the code, allowlist and note together. Per-component design context belongs to each component's `docs/UnitGuide.md`, not this map.
-- Records architectural decisions at the level that changes when responsibilities or significant dependencies change. Helpers, file moves, command flags and algorithm steps belong to their owning code, tests or operating documentation, not a second implementation description.
+- Helps maintainers assign responsibilities and judge dependency, authority and lifetime changes. It records consequential boundaries, not an implementation inventory.
+- Keeps the component map aligned with machine-checked edges. Per-component design belongs in UnitGuides; operating and wire details have separate owners.
 
 ## AiDocFormat
 
@@ -16,27 +13,20 @@ Specification for creating and editing [Forge application architecture](architec
 
 ## MUST read before editing architecture.md
 
-- [StartSimple methodology](AI_DOC_PLUGIN/Theory/StartSimple.md) - Keeps the map focused on established architectural needs instead of anticipatory layers or implementation inventories.
+- [StartSimple](AI_DOC_PLUGIN/Theory/StartSimple.md) - Grounds additions in demonstrated architectural needs.
 
-## MAY read for additional context before editing architecture.md
+## MAY read for additional context
 
-- [HTTP API contract](../server/docs/protocol.md) - Relevant when changing client/server obligations, observable lifecycle or workspace-operation side effects; owns precise wire semantics.
-- [Application README](../README.md) - Relevant when changing package or operating boundaries; owns current runtime support, source layout, configuration and commands.
-- [Server planning entry](../server/docs/forge/on-plan.md) - Relevant when reconciling an application-specific responsibility with shared service conventions. Machine-checked edges and library confinement are in `server/.dependency-cruiser.mjs` and `.dependency-cruiser.mjs`.
+- [API contract](../server/docs/protocol.md) - For observable semantics and effects.
+- [README](../README.md) - For configuration and commands.
+- [Server planning](../server/docs/forge/on-plan.md) - For service conventions; graph rules live in the installation and server dependency-cruiser configs.
 
 ## architecture.md typical use context
 
-### 💡 Distinct usage patterns for architecture.md
+### Distinct usage patterns
 
-#### Loaded during application planning
+Application planning loads this map before affected implementation guides; maintainers also consult it directly for ownership changes.
 
-Application planning entry -> architecture map -> affected API or codebase guidance when needed.
+### Role during use
 
-#### Direct reference for a responsibility change
-
-`Assess where a new workspace capability belongs using docs/architecture.md in the Forge application repository.`
-
-### Role architecture.md serves during use
-
-- Shared orientation for server/frontend maintainers deciding ownership and allowed interactions.
-- Rationale for architectural constraints without duplicating contracts, setup instructions or source implementation.
+Decision context for component boundaries and allowed interactions, without requiring operating or implementation detail.

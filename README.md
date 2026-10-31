@@ -1,13 +1,19 @@
+---
+edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
+---
+
 # @zdreamer/forge
 
-Provisional Forge workspace application. The unreleased source supports a
-foreground read-only workspace server and a minimal browser diagnostic, using the
-shared `forge-workspace.yaml` registry. Registry release `0.1.1` remains the older
-policy diagnostic; it has no server. Executable: `forge`. Licensed under [MIT](LICENSE).
+Read-only workspace server and React overview using the shared
+`forge-workspace.yaml` registry. The overview shows workspace identity, changed-entry
+count and separately labelled all-change and attention line totals.
+Executable: `forge`. Licensed under [MIT](LICENSE).
+
+Registry `0.1.2` is the published server baseline; the React overview is unreleased.
 
 The `0.x` configuration contract is provisional. Breaking changes require a minor
-release with migration notes. No release or registry adoption is implied by source
-acceptance. See [release operations](https://github.com/ZDreamer2/forge/blob/main/docs/releasing.md).
+release with migration notes. Source acceptance, publication and hosting adoption
+are separate. See [release operations](https://github.com/ZDreamer2/forge/blob/main/docs/releasing.md).
 
 ## Source layout
 
@@ -16,60 +22,50 @@ and runtime responsibilities; they are not workspace packages:
 
 ```text
 server/src/    CLI, HTTP composition, domain components, public API contract and libs
-ui/src/        reserved standalone React application root (no React/Vite scaffold yet)
+ui/src/        standalone React application, providers and browser data access
 docs/          application architecture and installation guidance
 tools/         tooling/release and installed-consumer checks
-dist/          normal TypeScript output, preserving server/src paths
+dist/          server TypeScript output and Vite-built ui/ assets
 ```
 
-The server retains its service conventions and local entries at
-`server/docs/forge/`. UI implementation and its browser tooling remain future work;
-the existing vanilla diagnostic is still server-owned. There are no member
-manifests or duplicated dependency declarations. [Architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md)
-owns source dependencies and build boundaries. The application-owned
+[Architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md)
+owns application boundaries; the
 [HTTP API contract](https://github.com/ZDreamer2/forge/blob/main/server/docs/protocol.md)
-specifies wire behavior independently of the currently implemented operations.
+owns wire behavior. Concrete server and UI guides live under their respective
+`docs/forge/` directories.
 
 ## Develop
 
-Use Node 24.21.0 (`.nvmrc`) and Corepack pnpm 11.15.1:
+Use Node 24.21.0 (`.nvmrc`) and Corepack pnpm 11.15.1 from this independent
+installation root. Select that Node before running Corepack. Setup is explicit:
 
 ```sh
 corepack pnpm install --frozen-lockfile
-corepack pnpm --config.verify-deps-before-run=error run check
-corepack pnpm --config.verify-deps-before-run=error run build
-corepack pnpm --config.verify-deps-before-run=error run test:workspace
+corepack pnpm --config.verify-deps-before-run=error exec playwright install chromium
 ```
 
-For server-only acceptance, run
-`corepack pnpm --config.verify-deps-before-run=error run check:server` from this
-root. It includes server/contract typechecks, server-scoped Biome checks,
-architectural dependency rules and server tests.
+Install Chromium's OS dependencies separately where required (`playwright install-deps
+chromium`). Checks install neither packages nor browsers.
 
-The independent installation uses published `@zdreamer/forge-ts-service@0.1.1`
-presets, their exact-pinned tool peers, the seven-day third-party release-age
-floor, and explicit SWC script permission. `.cache/pnpm` is the portable default;
-a hosting checkout can override the store during installation.
+```sh
+corepack pnpm --config.verify-deps-before-run=error run check
+```
 
-Tests live in lowercase `tests/` folders beside their owner: `server/src/app/tests/`
-for assembly and CLI behavior, a component/lib/nested unit's own `tests/` for its
-contract and internals, and `tools/tests/` for package tooling and tarball acceptance.
-Test-only support and fixtures stay with these tests. Production builds exclude
-entire `tests/` folders; test placement and private import boundaries are checked.
-Tooling's temporary deliberately invalid source fixtures retain the paths required
-to exercise real checkers and are removed after each check. The reserved frontend
-keeps its separate naming convention.
+Root `check` covers server and UI source checks, frontend behavior/build, then
+packed installed API and Chromium acceptance. It builds and packs once; CI uses
+this same gate and retains the checked artifact.
 
-`test:workspace` checks the browser-safe API contract and installed executable
-through an isolated YAML-configured tarball consumer, without publishing or running
-install scripts. It accepts no policy argument and verifies the removed authoring
-export cannot be imported. Run
-aggregate commands at the repository root: the gate delegates service-local checks
-to `server/`, including its public API contract's browser-safety checks, and verifies
-cross-runtime boundaries at the root.
-Build is a clean followed by ordinary TypeScript compilation, without output
-flattening or import rewriting. Root `bin` and `exports` select the emitted paths;
-use the command/public export instead of depending on physical dist paths.
+Focused scripts use `corepack pnpm --config.verify-deps-before-run=error run <name>`:
+
+- `check:server`: server/contract checks and tests, without a UI build or `dist/`.
+- `test:ui`: frontend behavior suites.
+- `check:ui`: frontend structure/collection/type/lint/behavior and production build.
+- `build`: clean server compilation and Vite emission to `dist/ui/`.
+- `test:workspace`: self-contained build, pack and installed API/browser acceptance.
+
+Keep exact pins, the seven-day third-party release-age floor and explicit lifecycle
+permissions. `.cache/pnpm` is the portable store default; any host override needs
+to match between install and check.
 
 ## Run the source server
 
@@ -79,83 +75,38 @@ After building, run from this repository:
 node dist/server/src/main.js serve --workspace /absolute/path/to/checkout
 ```
 
-The CLI form is `forge serve --workspace <path>` once a server-capable release
-is installed. Relative workspace paths resolve against the invocation directory;
-the selected directory is canonicalized as the authoritative checkout.
+The installed CLI form is `forge serve --workspace <path>`. Relative workspace
+paths resolve against the invocation directory; the selected directory is
+canonicalized as the authoritative checkout.
 
-Startup loads exactly `<guidance-folder>/forge-workspace.yaml`. The default folder
-is `docs/forge/workspace` inside the selected checkout. A nonempty process
-`ZD_AI_FORGE_WORKSPACE_GUIDE` selects a different folder, relative to that checkout
-or absolute; `.env` cannot set this override. Invalid explicit choices fail without
-ancestor search or fallback. External guidance folders are allowed. The server
-reads registered concrete/type markers as data and does not require
-`on-codebase-selection.md` or execute YAML as code. Optional `analysis_handlers` references load trusted modules at startup.
+Startup reads `docs/forge/workspace/forge-workspace.yaml` inside the selected
+checkout. A nonempty process `ZD_AI_FORGE_WORKSPACE_GUIDE` selects another guidance
+folder, relative to the checkout or absolute; `.env` cannot override it. Invalid
+explicit choices fail without fallback.
 
-Set `ZD_AI_FORGE_PORT` in the process environment or selected checkout's `.env`.
-A nonempty process value takes precedence, including invalid values; an empty
-process value falls back to `.env`. Ports use one to five ASCII decimal digits
-and range from 1024 through 65535. There is no default, allocation or occupied-port
-fallback. The narrow `.env` syntax supports whole-line comments, optional
-`export`, whitespace and surrounding quotes; last assignment wins and malformed
-lines are ignored. It performs no interpolation, multiline or escape expansion;
-only the port setting is imported. A missing `.env` is allowed, while unreadable
-or invalid-encoding files fail startup.
+Set `ZD_AI_FORGE_PORT` in the process environment or the checkout's `.env`.
+A nonempty process value takes precedence; ports are decimal integers from 1024
+through 65535, with no default or occupied-port fallback. Only the port is read
+from `.env`, without interpolation; unreadable or invalid-encoding files fail startup.
 
-After listener readiness, the foreground process prints its package version,
-JSON-quoted executable and authoritative workspace paths, then
-`http://127.0.0.1:<port>` on its own line. It prints no environment values.
-Open that address to see workspace/repository identity and current changed files,
-including Git-reported rename sources and concrete
-codebase memberships. Workspace names, paths and guidance are displayed literally
-as text. The browser title uses `🛠️ <workspace name>` from server identity;
-it starts as `Forge` and returns to `Forge` when the identity request fails.
-The page shows loading, empty and error states; Refresh retries failed requests and clears the
-previous change list while loading. Successful workspace identity is retained
-when a request fails. Refresh reads current changes but does not reload startup
-configuration or repository participation. There is no polling.
+Once ready, the foreground process prints its version, executable/workspace paths
+and loopback address. Open that address for the overview. Refresh rereads identity
+and analysis independently, retaining usable data and marking failed refreshes
+stale. Restart reloads configuration and repository participation. Stop with
+SIGINT or SIGTERM.
 
-`GET /api/workspace` returns the workspace root, resolved display name and declared
-available/missing repositories in declaration order. Invalid existing repositories, Git/access
-failures and configuration errors refuse startup. Requests require that
-exact Host and, when present, Origin; CLI requests may omit Origin. Restart to
-reload configuration and repository identity. Stop with SIGINT or
-SIGTERM; shutdown closes the listener and releases the port.
+GET/HEAD `/` and exact `/assets/` resources are served from the installed package,
+independently of the invocation directory. Unknown paths and missing assets return
+404 without an HTML fallback. All requests require the printed Host and, when
+present, Origin; use `127.0.0.1`, not `localhost`.
 
-`GET /api/changes` returns
-`{ codebases: { root: { root: "path", guidance: "path", type?: "id" } }, changes: [...] }`. Changes carry repo,
-workspace-relative path, added/modified/deleted/renamed kind, optional rename
-`from` and unique codebase ID arrays. Definitions occur once per response;
-identities are registered workspace-relative concrete roots and include both
-present-side rename owners. No binary/line counts are exposed.
-
-Comparison uses one bulk HEAD/working `diff --raw --numstat -z` and non-ignored untracked listing,
-with targeted normalized reconciliation for recreated deletion/rename
-sources. Index refresh is disabled; numstat presence removes raw stat noise while
-mode/type changes, zero-count changes and binaries remain. The light response omits counts; the analysis response exposes raw and attention-filtered totals.
-Identical staged reversals disappear. Git owns attributes, filters and
-index flags; hidden flag edits can remain hidden, and ignored recreations absent
-from the untracked list remain deletions. Unstaged moves stay deletion/addition.
-Unborn HEAD is supported; conflicts fail even with no diff. This is practical Git
-comparison, not exhaustive physical equivalence or a replacement for dirt detection.
-
-The observed command baseline is Git 2.34.1. Complete local repositories are
-supported; partial/promisor repositories fail before object-demanding comparison
-to prevent silent lazy fetch. Normal trusted clean/process filters are allowed;
-external diff/textconv, optional writes, fsmonitor and hooks are disabled. Ambient
-Git repository/index/worktree overrides do not select another checkout. Server
-commands do not stage/commit/write source index, ref or object contents. Native Git
-can freshen shared-index mtimes during reads. Exceptional
-pair statistics use owned temporary indexes outside the checkout. Trusted filters and analysis handlers
-can execute code with side effects; this is not an effects sandbox.
-
-Missing-at-startup repositories remain excluded; loss of an available repository,
-Git failures fail the whole request. Paths
-stay inside the workspace even when its Git root extends above it. Declared
-nested repositories are distinct; undeclared clones and Git internals are excluded.
-Results are live observations, without atomic cross-repository snapshots.
-Overlapping requests share one active collection, with no result cache. A
-30-second collection deadline bounds waiting; shutdown aborts and reaps active
-Git children before completion. The browser allows 35 seconds per request, then restores retry.
+Changes compare HEAD with working content, including non-ignored untracked files.
+Declared repositories participate; missing-at-startup repositories stay excluded
+until restart. Results are live observations. See the
+[shared API contract](server/docs/protocol.md#shared-contract) for comparison,
+ownership, access and lifecycle semantics. Inspection preserves source and Git
+index/ref/object contents; trusted Git filters and analysis handlers are executable
+code outside that effects guarantee.
 
 For a direct check while the server runs, replace the example address with the
 address printed by the server:
@@ -167,19 +118,9 @@ curl "$FORGE_ADDRESS/api/changes"
 curl "$FORGE_ADDRESS/api/changes/analysis"
 ```
 
-`GET /api/changes/file?path=<change-path>` returns a renderer-neutral patch with
-three context lines or an explicit metadata-only/unsupported outcome. Request
-`&context=all` for complete context around changed payloads, enabling omitted-context
-expansion without a separate file-content API. Both modes are bounded; all-context
-can exceed the patch cap while the short diff remains usable.
-[Patch API semantics and limits](server/docs/protocol.md#read-file-diff) describe
-Git normalization, side identities, symlink targets, metadata-only outcomes,
-per-request cancellation and live baseline identities. These requests run no handlers.
-
-The server and browser page are read-only. React diff rendering, file browsing,
-staging/commits and agent interaction remain future work. Registry `0.1.1` remains the diagnostic-only
-release; source and installed-tarball verification do not constitute publication
-or registry adoption.
+The API also exposes [bounded file patches](server/docs/protocol.md#read-file-diff).
+The current overview is read-only; changes-tree navigation and diff rendering
+remain future work.
 
 ## Workspace configuration and migration
 
@@ -218,18 +159,14 @@ This is a breaking migration from the earlier executable policy:
 - Remove uses of `forge inspect-workspace` and the optional `test:workspace`
   policy argument. The supported source CLI is `forge serve --workspace <path>`.
 - Keep an independent exact-pinned executable installation when useful. Existing
-  registry `0.1.1` installations remain diagnostic-only until an approved release
-  and explicit repin. No compatibility loader is provided.
+  registry installations of the earlier diagnostic remain unchanged until an approved
+  release and explicit repin. No compatibility loader is provided.
 
 ## Analysis handlers
 
-`GET /api/changes/analysis` returns a path-indexed tree with explicit child lists,
-raw and attention-filtered added/removed line totals, emphasis, attributed signals
-and inclusive warning/notice counts. Hidden nodes remain present. Built-ins
-reduce attention on workspace-root `plans/` and directories named `tests` or
-`Tests`, and warn on current added/modified Markdown strictly larger than 20,480
-bytes, including content-edited renames. Pure moves, deletions and current root
-`plans/` paths do not warn. Sizes are looked up lazily without reading file bytes.
+The [analyzed tree](server/docs/protocol.md#analyze-workspace-changes) supplies raw
+and attention totals, emphasis and attributed signals. Built-in and configured
+handlers annotate the same canonical tree.
 
 Register trusted modules with optional ordered `analysis_handlers` lists on
 `forge-workspace.yaml` or a concrete `forge-codebase.yaml`:
@@ -256,10 +193,8 @@ imports use explicit extensions. The type-only public `./analysis` entry supplie
 authoring vocabulary, without operational loader/runner APIs. No runtime helper
 import is needed. Restart the process to reload modules.
 
-Handlers run after built-ins, workspace first and then concrete codebases in registry
-order. Every handler sees and may annotate the whole workspace tree. A module
-load or invocation error fails analysis with a safe configured handler identity,
-while `/api/changes` remains available. Each request owns its annotations and
-30-second operation budget. Trusted handlers are not sandboxed, and synchronous
-JavaScript cannot be forcibly interrupted. See the [analysis authoring guide](server/src/components/tree-analysis/docs/UnitGuide.md)
-for context, source access, concurrency, lifetime and attribution semantics.
+Handlers run after built-ins, workspace first and then concrete codebases in
+registry order. They can annotate the whole tree. A handler failure fails analysis
+while `/api/changes` remains available. See the
+[analysis authoring guide](server/src/components/tree-analysis/docs/UnitGuide.md)
+for source capabilities, attribution and execution limits.

@@ -1,0 +1,11 @@
+{
+	"extends": "@zdreamer/forge-ts-react-frontend/tsconfig",
+	"compilerOptions": {
+		"types": ["vite/client"],
+		"paths": {
+			"@forge/api-contract": ["../server/src/components/api-contract/index.ts"]
+		}
+	},
+	"include": ["src/**/*.ts", "src/**/*.tsx"],
+	"exclude": ["src/**/Tests/**"]
+}

@@ -77,7 +77,7 @@ export default {
 			from: {
 				path: "^src/",
 				pathNot:
-					"^src/(app/(?:http\\.ts|tests/http\\.test\\.ts)|components/(http-api|diagnostic-ui)/|lib/loopback-access/)",
+					"^src/(app/(?:http\\.ts|tests/http\\.test\\.ts)|components/(http-api|ui-assets)/|lib/loopback-access/)",
 			},
 			to: { path: "(^|/)hono/" },
 		},

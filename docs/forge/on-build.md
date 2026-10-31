@@ -1,10 +1,14 @@
+---
+edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
+---
+
 # Forge application installation verification
 
-Run the pinned installation's aggregate commands from the repository root as
-specified in the [README](../../README.md#develop). They cover the server and its browser-safe API contract,
-cross-runtime boundaries, package/release checks and normal TypeScript compilation.
-The server and UI are distinct codebases within one package.
+Run root `check` with the pinned installation. It covers server/UI source checks
+and packed installed API/Chromium acceptance. The
+[README](../../README.md#develop) owns commands and explicit dependency/browser
+setup; checks install nothing.
 
-[Server verification](../../server/docs/forge/on-build.md) retains the required
-source, installed-tarball and live checks. There is no React application or browser
-build yet; the server's diagnostic remains the browser regression target.
+[Server guidance](../../server/docs/forge/on-build.md) covers API/Git/lifecycle
+verification; [UI guidance](../../ui/docs/forge/on-build.md) binds frontend checks
+to this host. Use the aggregate gate for shared installation changes.

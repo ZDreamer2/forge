@@ -62,16 +62,19 @@ test("cross-environment boundaries reject runtime and type-only violations", () 
 		);
 	}
 	try {
+		write(
+			"tsconfig.json",
+			JSON.stringify({
+				compilerOptions: { paths: { "@forge/api-contract": ["./server/src/components/api-contract/index.ts"] } },
+			}),
+		);
 		write("server/src/components/api-contract/internal/types.ts", "export type Value = string;");
 		write("server/src/components/api-contract/index.ts", "export type { Value } from './internal/types.ts';");
 		write(
 			"server/src/main.ts",
 			"import type { Value } from './components/api-contract/index.ts'; export type Server = Value;",
 		);
-		write(
-			"ui/src/App.tsx",
-			"import type { Value } from '../../server/src/components/api-contract/index.ts'; export type Ui = Value;",
-		);
+		write("ui/src/App.tsx", "import type { Value } from '@forge/api-contract'; export type Ui = Value;");
 		const valid = cruise();
 		assert.equal(valid.status, 0, valid.stdout + valid.stderr);
 		write("tools/build.ts", "export const tooling = true;");

@@ -1,11 +1,13 @@
+import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
-import { createDiagnosticRoutes } from "../components/diagnostic-ui/index.ts";
 import { apiError, createWorkspaceRoutes } from "../components/http-api/index.ts";
 import { AnalysisHandlerError } from "../components/tree-analysis/index.ts";
+import { createUiAssetRoutes } from "../components/ui-assets/index.ts";
 import { AccessRejectedError, createRequestGuard } from "../lib/loopback-access/index.ts";
 
 type Deps = import("../components/http-api/index.ts").WorkspaceRouteDeps & {
 	port: number;
+	uiDirectory?: string;
 	reportError?: (error: Error) => void;
 };
 
@@ -21,6 +23,7 @@ export function createHttpApp({
 	fileRequests,
 	fileDiff,
 	reportError,
+	uiDirectory = fileURLToPath(new URL("../../../ui/", import.meta.url)),
 }: Deps) {
 	const app = new Hono();
 	app.onError((error, context) => {
@@ -32,7 +35,7 @@ export function createHttpApp({
 		);
 	});
 	app.use("*", createRequestGuard({ port }));
-	app.route("/", createDiagnosticRoutes());
+	app.route("/", createUiAssetRoutes({ directory: uiDirectory }));
 	app.route(
 		"/api",
 		createWorkspaceRoutes({

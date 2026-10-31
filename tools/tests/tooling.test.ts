@@ -112,7 +112,7 @@ test("HTTP libraries and component edges follow the architecture map", () => {
 				"import { parse } from 'yaml'; export const value = parse('{}'); export type Value = string;",
 			"src/components/tree-sources/index.ts": "export type { Value } from '../workspace-config/index.ts';",
 			"src/components/http-api/internal/routes.ts": "import { Hono } from 'hono'; export const app = new Hono();",
-			"src/components/diagnostic-ui/internal/routes.ts": "import { Hono } from 'hono'; export const app = new Hono();",
+			"src/components/ui-assets/internal/routes.ts": "import { Hono } from 'hono'; export const app = new Hono();",
 			"src/lib/loopback-access/internal/guard.ts":
 				"import type { MiddlewareHandler } from 'hono'; export type Guard = MiddlewareHandler;",
 			"src/app/http.ts": "import { Hono } from 'hono'; export const app = new Hono();",
@@ -135,7 +135,7 @@ test("HTTP libraries and component edges follow the architecture map", () => {
 		assert.doesNotMatch(valid.stdout, /could not resolve/);
 		write(
 			"src/components/workspace-config/internal/invalid.ts",
-			"import '../../diagnostic-ui/internal/routes.ts'; import { Hono } from 'hono'; export const app = new Hono();",
+			"import '../../ui-assets/internal/routes.ts'; import { Hono } from 'hono'; export const app = new Hono();",
 		);
 		write(
 			"src/app/invalid.ts",
@@ -144,9 +144,9 @@ test("HTTP libraries and component edges follow the architecture map", () => {
 		write("src/components/unlisted/index.ts", "export type Value = string;");
 		write(
 			"src/components/tree-sources/internal/invalid.ts",
-			"import '../../diagnostic-ui/internal/routes.ts'; import '../../unlisted/index.ts';",
+			"import '../../ui-assets/internal/routes.ts'; import '../../unlisted/index.ts';",
 		);
-		write("src/components/diagnostic-ui/internal/invalid.ts", "import '../../workspace-config/index.ts';");
+		write("src/components/ui-assets/internal/invalid.ts", "import '../../workspace-config/index.ts';");
 		const invalid = cruise();
 		assert.notEqual(invalid.status, 0);
 		for (const rule of [

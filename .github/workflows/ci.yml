@@ -50,14 +50,12 @@ jobs:
           JS
       - name: Install frozen dependencies
         run: corepack pnpm install --frozen-lockfile
+      - name: Install pinned Chromium and OS dependencies
+        run: corepack pnpm --config.verify-deps-before-run=error exec playwright install --with-deps chromium
       - name: Typecheck, lint, test and verify clean package installation
-        run: |
-          corepack pnpm --config.verify-deps-before-run=error run check
-          corepack pnpm --config.verify-deps-before-run=error run test:workspace
-      - name: Pack the checked source
-        run: |
-          mkdir -p "$RUNNER_TEMP/npm-package"
-          npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP/npm-package" > "$RUNNER_TEMP/npm-package/pack.json"
+        env:
+          FORGE_CHECKED_PACKAGE_DIR: ${{ runner.temp }}/npm-package
+        run: corepack pnpm --config.verify-deps-before-run=error run check
       - name: Upload npm package for inspection or release
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

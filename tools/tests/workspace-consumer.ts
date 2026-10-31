@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
+	copyFileSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
@@ -20,9 +21,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { verifyInstalledAnalysis } from "./workspace-consumer-analysis.ts";
 import { verifyInstalledFiles } from "./workspace-consumer-files.ts";
+import { verifyInstalledUi } from "./workspace-consumer-ui.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-assert.equal(process.argv.length, 2, "test:workspace accepts no policy argument");
+const args = process.argv.slice(2);
+assert.ok(args.length === 0 || (args.length === 1 && args[0] === "--built"), "test:workspace accepts only --built");
+// biome-ignore lint/style/noProcessEnv: CI explicitly chooses where its checked artifact is retained.
+const artifactDirectory = process.env.FORGE_CHECKED_PACKAGE_DIR;
+assert.ok(!artifactDirectory || artifactDirectory.startsWith("/"), "Artifact directory must be absolute");
 const temporary = mkdtempSync(join(tmpdir(), "forge-consumer-"));
 function run(command: string, args: string[], cwd: string) {
 	const result = spawnSync(command, args, { cwd, encoding: "utf8", timeout: 120_000 });
@@ -174,6 +180,7 @@ async function installedServer(executable: string, cwd: string, workspace: strin
 
 async function verifyServer(executable: string, consumer: string) {
 	const workspace = join(consumer, "fixture");
+	const workspaceName = `Fixture <workspace> & "name" ${"x".repeat(180)}`;
 	mkdirSync(join(workspace, "docs/forge/workspace"), { recursive: true });
 	mkdirSync(join(workspace, "nested"));
 	for (const path of ["app", "other", "docs/<guidance>/app", "docs/<guidance>/other", "nested/docs", "docs/type"]) {
@@ -193,7 +200,7 @@ async function verifyServer(executable: string, consumer: string) {
 	writeFileSync(join(workspace, "nested/binary.dat"), Buffer.from([0, 1, 2]));
 	writeFileSync(
 		join(workspace, "docs/forge/workspace/forge-workspace.yaml"),
-		`display_name: 'Fixture <workspace> & "name"'
+		`display_name: ${JSON.stringify(workspaceName)}
 repositories: [., nested, not-cloned]
 codebases:
   - ../../../docs/<guidance>/app/forge-codebase.yaml
@@ -226,7 +233,7 @@ codebase_types: [../../../docs/type/forge-codebase-type.yaml]
 			const identity = await request("/api/workspace");
 			assert.equal(identity.status, 200);
 			assert.deepEqual(await identity.json(), {
-				workspace: { root: workspace, name: 'Fixture <workspace> & "name"' },
+				workspace: { root: workspace, name: workspaceName },
 				repositories: [
 					{ path: ".", status: "available", gitRoot: workspace },
 					{ path: "nested", status: "available", gitRoot: join(workspace, "nested") },
@@ -237,24 +244,36 @@ codebase_types: [../../../docs/type/forge-codebase-type.yaml]
 			assert.equal(page.status, 200);
 			assert.match(page.headers.get("content-type") ?? "", /text\/html/);
 			const html = await page.text();
-			assert.match(html, /<button\b/i);
-			assert.match(html, /refresh/i);
-			assert.match(html, /<script\b/i);
-			let scripts = html;
-			for (const match of html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)) {
-				const path = match[1];
-				assert.ok(path?.startsWith("/") && !path.startsWith("//"));
-				assert.ok(path);
-				const script = await request(path);
-				assert.equal(script.status, 200);
-				scripts += await script.text();
+			assert.match(html, /<div id="root"><\/div>/);
+			const assetPaths = [...html.matchAll(/(?:src|href)=["'](\/assets\/[^"']+)["']/g)].map((match) => match[1]);
+			assert.ok(
+				assetPaths.some((path) => path?.endsWith(".js")),
+				"Delivered module entry is required",
+			);
+			assert.ok(
+				assetPaths.some((path) => path?.endsWith(".css")),
+				"Delivered styles are required",
+			);
+			for (const path of assetPaths) {
+				assert.ok(path && /^\/assets\/[\w.-]+-[-\w]+\.(js|css)$/.test(path));
+				const asset = await request(path);
+				assert.equal(asset.status, 200);
+				assert.match(asset.headers.get("content-type") ?? "", path.endsWith(".js") ? /javascript/ : /text\/css/);
+				assert.ok((await asset.text()).length > 0);
+				const head = await request(path, { method: "HEAD" });
+				assert.equal(head.status, 200);
+				assert.equal(await head.text(), "");
 			}
-			assert.match(scripts, /\/api\/workspace/);
-			assert.match(scripts, /\/api\/changes/);
+			assert.equal((await request("/assets/missing-123.js")).status, 404);
 			const head = await request("/", { method: "HEAD" });
 			assert.equal(head.status, 200);
 			assert.equal(await head.text(), "");
-			for (const path of ["/", "/api/workspace", "/api/changes"]) {
+			for (const path of [
+				"/",
+				...assetPaths.filter((path): path is string => path !== undefined),
+				"/api/workspace",
+				"/api/changes",
+			]) {
 				assert.equal((await request(path, { headers: { origin: "https://foreign.invalid" } })).status, 403);
 				assert.equal(await foreignHostStatus(server.address, path), 403);
 				const unsupported = await request(path, { method: "POST" });
@@ -266,6 +285,7 @@ codebase_types: [../../../docs/type/forge-codebase-type.yaml]
 			assert.deepEqual(await unknown.json(), { error: { code: "not_found", message: "Not found" } });
 			assert.deepEqual(sourceState(workspace), beforeStartup);
 			if (signal === "SIGTERM") {
+				await verifyInstalledUi({ address: server.address, workspace, workspaceName, sourceState });
 				assert.deepEqual(await (await request("/api/changes")).json(), { codebases: {}, changes: [] });
 				assert.deepEqual(sourceState(workspace), beforeStartup);
 				writeFileSync(join(workspace, "app/tracked.txt"), "staged\n");
@@ -335,7 +355,8 @@ codebase_types: [../../../docs/type/forge-codebase-type.yaml]
 
 try {
 	// Build explicitly: installation/packing never executes package lifecycle scripts.
-	run("corepack", ["pnpm", "--config.verify-deps-before-run=error", "run", "build"], root);
+	if (!args.includes("--built"))
+		run("corepack", ["pnpm", "--config.verify-deps-before-run=error", "run", "build"], root);
 	const packed = JSON.parse(run("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", temporary], root));
 	const consumer = join(temporary, "consumer");
 	mkdirSync(consumer);
@@ -360,7 +381,13 @@ try {
 	assert.equal(installedManifest.version, manifest.version);
 	assert.equal(installedManifest.license, "MIT");
 	assert.ok(existsSync(join(installed, "dist/server/src/components/api-contract/index.d.ts")));
-	assert.ok(packed[0].files.every((file: { path: string }) => !/(?:^|\/)tests\/|\.test\./.test(file.path)));
+	assert.ok(
+		packed[0].files.every(
+			(file: { path: string }) => !/(?:^|\/)(?:tests|Tests|tools|plans)\/|\.test\.|\.map$/.test(file.path),
+		),
+	);
+	assert.ok(existsSync(join(installed, "dist/ui/index.html")));
+	assert.ok(readdirSync(join(installed, "dist/ui/assets")).some((name) => name.endsWith(".css")));
 	assert.equal(existsSync(join(installed, "dist/protocol")), false);
 	assert.match(
 		readFileSync(join(installed, "dist/server/src/components/http-api/internal/wire.d.ts"), "utf8"),
@@ -438,8 +465,13 @@ export type NodeGlobal = typeof process;
 	await verifyServer(executable, consumer);
 	await verifyInstalledAnalysis({ consumer, executable, compiler, run, portReservation, installedServer, sourceState });
 	await verifyInstalledFiles({ consumer, executable, run, portReservation, installedServer, sourceState });
+	if (artifactDirectory) {
+		mkdirSync(artifactDirectory, { recursive: true });
+		copyFileSync(join(temporary, packed[0].filename), join(artifactDirectory, packed[0].filename));
+		writeFileSync(join(artifactDirectory, "pack.json"), `${JSON.stringify(packed, null, 2)}\n`);
+	}
 	console.log(
-		"Tarball-only consumer: installed server/page, read-only changes/analysis/files, normalized patches and full context, native TS handlers, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
+		"Tarball-only consumer: installed server/React/CSS/Chromium, read-only changes/analysis/files, normalized patches and full context, native TS handlers, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
 	);
 } finally {
 	rmSync(temporary, { recursive: true, force: true });

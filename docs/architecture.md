@@ -3,8 +3,7 @@
 Forge interprets one authoritative workspace checkout and exposes it to browser and
 CLI clients. Workspace interpretation and operations belong to the server; clients
 own presentation rather than reconstructing repository participation or codebase
-membership. Runtime-dependent project checks may delegate elsewhere without moving
-that authority away from the checkout.
+membership.
 
 ## Application boundaries
 
@@ -13,22 +12,18 @@ aggregate acceptance and distribution. Its source boundaries are:
 
 - `server/`: workspace authority, its public API contract, HTTP access and process
   lifecycle.
-- `ui/`: the standalone React frontend, currently reserved. The working vanilla
-  diagnostic remains server-owned; it is not the React application.
+- `ui/`: the standalone React overview, owning browser presentation, data access,
+  providers and recovery. Vite bundles it into the distributed package.
 
 Server and frontend are distinct codebases with different runtime and verification
-requirements despite sharing an installation. The UI consumes the server's public
-`api-contract` entry, never server internals. This contract is browser-safe vocabulary
-without Node globals, implementation dependencies or UI frameworks; it is owned by
-the server, not a third codebase. Server domain results are mapped into wire shapes;
-neither domain internals nor workspace configuration become browser APIs.
+requirements despite sharing an installation. The UI imports only the server's
+public `api-contract` entry: browser-safe wire vocabulary mapped from domain
+results, with no server implementation or configuration exposed.
 Workspace configuration is the `forge-workspace.yaml` registry Python Forge also
-reads; the earlier `workspace.ts` policy and its public `./workspace` authoring
-export are removed by migration, without a legacy path.
+reads.
 
-The [HTTP API contract](../server/docs/protocol.md) owns observable behavior and
-unresolved API semantics. The [README](../README.md) owns source layout, supported capabilities,
-configuration, package entry paths and development commands.
+The [HTTP API contract](../server/docs/protocol.md) owns observable behavior;
+the [README](../README.md) owns configuration and development commands.
 
 ## Server components
 
@@ -40,60 +35,47 @@ its design context.
 | --- | --- | --- |
 | `workspace-config` | Trusted authored workspace knowledge: registered codebases, declared repositories, display name, handler references | None |
 | `workspace-repositories` | Observed participating repositories: startup resolution, status, path participation | workspace-config |
-| `workspace-tree` | Tree vocabulary and data: nodes, sides, owners, repository/codebase roots, fixed review metadata, building and derived values | workspace-config |
+| `workspace-tree` | Canonical tree vocabulary, ownership and derived review data | workspace-config |
 | `tree-sources` | Builds base trees from sources of workspace state, with bounded source capabilities | workspace-tree, workspace-repositories, workspace-config |
 | `tree-analysis` | Runs ordered trusted handlers over a run-local tree facade and finalizes review metadata | workspace-tree, workspace-config |
 | `http-api` | Domain endpoints: selects a source, builds and analyzes its tree, maps results to the wire contract | tree-sources, tree-analysis, workspace-tree, workspace-repositories, workspace-config, api-contract |
 | `api-contract` | Browser-safe wire vocabulary consumed by server and UI; contract changes also require consumer verification | None |
-| `diagnostic-ui` | Minimal diagnostic page; its browser code consumes the HTTP API | None |
+| `ui-assets` | Delivers installed HTML and bundled assets through protected HTTP routes | None |
 
 The workspace tree is the shared base. Sources produce trees; analysis enriches any
 tree without knowing its source; `http-api` is the only component combining them.
 Authored knowledge (`workspace-config`) stays separate from observed Git state
 (`workspace-repositories`, `tree-sources`). Clients receive structural meaning,
-ownership, totals and review metadata from the server rather than deriving them.
+ownership, line totals and review metadata from the server; the UI may derive
+display projections from that vocabulary.
 
-`app` reads process configuration, constructs instances, mounts routes, assembles
-protected HTTP access and owns shared in-flight work and startup/shutdown. `lib/git`
-owns bounded Git process and cancellation mechanics and plain Git operations that
-need no workspace knowledge; `lib/loopback-access` owns the Host/Origin guard. HTTP
-knowledge stays in `http-api`, diagnostic routes, loopback middleware and HTTP
-assembly. Domain components do not construct each other or read process
-configuration; composition supplies their dependencies.
+`app` constructs components and owns HTTP assembly and process configuration.
+`lib/git` owns bounded Git processes and cancellation; `lib/loopback-access` owns
+the Host/Origin guard. Domain components receive dependencies from composition.
 
-Current implementation includes configuration, repository participation, the canonical
-workspace tree, working changes, ordered analysis handlers and identity/flat/analyzed
-changes HTTP routes. The machine-checked component edges match these owners.
-Sources supply metadata byte sizes and bounded per-change patches with short/full context.
-Private source descriptors retain the resolved baseline and reconciled side identities;
-HTTP maps those domain results to the browser-safe contract. Git produces payload
-hunks directly; no independent full-file content reader is needed for this viewer.
+## Installed browser host
+
+The server serves bundled UI and API from one protected origin. Assets resolve
+relative to the installed package, independent of the invocation directory.
+Static delivery has no workspace-data responsibility.
 
 ## Authority, trust and lifecycle
 
 Authored configuration and repository participation are loaded at startup and
-replaced on restart. The server probes declared repositories rather than scanning for additional clones;
-missing-at-startup repositories remain excluded, while loss of an available
-repository fails collection instead of silently reducing the result.
+replaced on restart. Missing-at-startup repositories stay excluded; loss of an
+available repository fails collection instead of silently reducing the result.
 
-Refresh observes current Git state within that startup context. Overlapping requests may share base collection, while each analysis request owns
-its facade, annotations and final derived values; results are live observations, not cached trees or
-atomic cross-repository snapshots. The practical HEAD/working
-comparison is not staging equivalence or a replacement for durable capture and
-checking/staging. Future migration must align their participation and scope before
-sharing authority.
+Refresh observes current Git state within that startup context. Overlapping
+requests share in-flight base collection, while each analysis or file request owns
+its derived state and cancellation. Results are live observations without atomic
+cross-repository snapshots. Collection scope does not authorize broader dirt
+capture, checking or staging.
 
-Workspace inspection preserves source files and Git index/ref/object contents.
-Native Git can freshen shared-index mtimes during reads.
-Authored configuration is data; analysis handlers and Git filters are trusted executable code, not an effects sandbox;
-HTTP protection does not change that trust model. File access remains within the
-selected workspace even when its containing Git root extends above it.
+Inspection preserves source and Git index/ref/object contents. Authored YAML is
+data; analysis handlers and Git filters are trusted executable code outside that
+effects guarantee. File access stays within the selected workspace even when its
+Git root extends above it. Precise effects and limits belong to the API contract.
 
-Application composition owns the listener, termination hooks and active collection, analysis and file-request runs.
-Overlapping requests share in-flight base work, not cached results, and one client
-leaving cancels only its own analysis or file request. Each has a 30-second total budget,
-including collection waiting; cooperative cancellation releases an awaited handler
-without preempting synchronous trusted JavaScript. App-owned source observations
-remain tracked through cancellation and subprocess reaping. Shutdown stops admission, cancels and reaps
-owned Git work, and closes connections within finite bounds. Transport and process
-resources do not outlive their application owner.
+Application composition owns the listener and active operations. One client leaving
+cancels only its own work; shutdown stops admission, cancels/reaps owned processes
+and releases resources within finite bounds.

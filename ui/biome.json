@@ -1,0 +1,7 @@
+{
+	"root": false,
+	"extends": ["@zdreamer/forge-ts-react-frontend/biome"],
+	"files": {
+		"includes": ["**", "!src/Routes/routeTree.gen.ts"]
+	}
+}

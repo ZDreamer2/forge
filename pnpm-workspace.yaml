@@ -3,7 +3,14 @@ packages: []
 minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - "@zdreamer/forge-ts-service"
+  - "@zdreamer/forge-ts-react-frontend"
 onlyBuiltDependencies: []
 allowBuilds:
   "@swc/core": true
+  msw: false
 storeDir: .cache/pnpm
+
+# The frontend preset is verified against the service-owned Biome version.
+peerDependencyRules:
+  allowedVersions:
+    "@zdreamer/forge-ts-react-frontend>@biomejs/biome": "2.5.7"

@@ -4,7 +4,7 @@ Specification for creating and editing [Forge UI plan-review context](on-plan-re
 
 ## on-plan-review.md goals and principles
 
-- Keeps review focused on established application boundaries and truthful verification claims while frontend infrastructure is absent.
+- Keeps review scoped to application boundaries and evidence appropriate to frontend or installed-host claims.
 
 ## AiDocFormat
 

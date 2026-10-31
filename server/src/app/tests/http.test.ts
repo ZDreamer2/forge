@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { createTreeAnalyzer } from "../../components/tree-analysis/index.ts";
 import { createWorkspaceTree } from "../../components/workspace-tree/index.ts";
 import { createHttpApp } from "../http.ts";
 
-test("HTTP page and API operations have consistent routing failures", async () => {
+test("HTTP page and API operations have consistent routing failures", async (t) => {
+	const uiDirectory = await mkdtemp(join(tmpdir(), "forge-http-assets-"));
+	t.after(() => rm(uiDirectory, { recursive: true, force: true }));
+	await mkdir(join(uiDirectory, "assets"));
+	await writeFile(
+		join(uiDirectory, "index.html"),
+		'<div id="root"></div><script type="module" src="/assets/index-abcd.js"></script>',
+	);
+	await writeFile(join(uiDirectory, "assets/index-abcd.js"), "export {};\n");
 	let collections = 0;
 	const app = createHttpApp({
+		uiDirectory,
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),
 		root: "/selected",
@@ -26,14 +38,21 @@ test("HTTP page and API operations have consistent routing failures", async () =
 	assert.equal(response.status, 200);
 	assert.deepEqual(await response.json(), { workspace: { root: "/selected", name: "Selected" }, repositories: [] });
 	assert.equal(response.headers.get("access-control-allow-origin"), null);
-	for (const path of ["/workspace", "/changes", "/api/unknown"]) {
+	for (const path of ["/workspace", "/changes", "/api/unknown", "/assets/missing.js", "/assets/%2fsecret.js"]) {
 		for (const method of ["GET", "OPTIONS"]) {
 			const missing = await app.request(path, { method, headers });
 			assert.equal(missing.status, 404);
 			assert.deepEqual(await missing.json(), { error: { code: "not_found", message: "Not found" } });
 		}
 	}
-	for (const path of ["/", "/api/workspace", "/api/changes", "/api/changes/analysis", "/api/changes/file"]) {
+	for (const path of [
+		"/",
+		"/assets/index-abcd.js",
+		"/api/workspace",
+		"/api/changes",
+		"/api/changes/analysis",
+		"/api/changes/file",
+	]) {
 		for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
 			const unsupported = await app.request(path, { method, headers });
 			assert.equal(unsupported.status, 405);
@@ -46,7 +65,7 @@ test("HTTP page and API operations have consistent routing failures", async () =
 	}
 	const page = await app.request("/", { headers });
 	assert.equal(page.status, 200);
-	assert.match(await page.text(), /Forge workspace/);
+	assert.match(await page.text(), /<div id="root"><\/div><script type="module"/);
 	const pageHead = await app.request("/", { method: "HEAD", headers });
 	assert.equal(pageHead.status, 200);
 	assert.equal(await pageHead.text(), "");
@@ -64,10 +83,19 @@ test("HTTP page and API operations have consistent routing failures", async () =
 	assert.equal(collections, 2);
 });
 
-test("access rejection precedes all paths and unexpected failures reveal no diagnostics", async () => {
+test("access rejection precedes all paths and unexpected failures reveal no diagnostics", async (t) => {
+	const uiDirectory = await mkdtemp(join(tmpdir(), "forge-http-assets-"));
+	t.after(() => rm(uiDirectory, { recursive: true, force: true }));
+	await mkdir(join(uiDirectory, "assets"));
+	await writeFile(
+		join(uiDirectory, "index.html"),
+		'<div id="root"></div><script type="module" src="/assets/index-abcd.js"></script>',
+	);
+	await writeFile(join(uiDirectory, "assets/index-abcd.js"), "export {};\n");
 	let collections = 0;
 	const reported: Error[] = [];
 	const app = createHttpApp({
+		uiDirectory,
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),
 		root: "/selected",
@@ -90,6 +118,8 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 	});
 	for (const path of [
 		"/",
+		"/assets/index-abcd.js",
+		"/assets/missing.js",
 		"/explode",
 		"/api/workspace",
 		"/api/changes",
