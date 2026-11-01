@@ -1,2 +1,4 @@
+id: bico/forge-server
 root: ../..
-type: g.bt.su/bico/ai-agent-plugins/dev/forge/codebases/ts-service
+parents:
+  - g.bt.su/bico/ai-agent-plugins/dev/forge/codebases/ts-service
