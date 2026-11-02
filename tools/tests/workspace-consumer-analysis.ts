@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import type { AnalysisWireNode, WorkspaceAnalysis } from "../../server/src/components/api-contract/index.ts";
+import type {
+	AnalysisWireNode,
+	ApiFailure,
+	WorkspaceAnalysis,
+} from "../../server/src/components/api-contract/index.ts";
 
 function requiredNode(result: WorkspaceAnalysis, path: string): AnalysisWireNode {
 	const node = result.nodes[path];
@@ -58,6 +62,13 @@ export async function verifyInstalledAnalysis({
 		`import type { ForgeExtension } from '@zdreamer/forge/extension';
 export default {
   api: 1,
+  classifyNode(ctx) {
+    if (/\\.(md|markdown)$/i.test(ctx.node.path)) ctx.classify('docs');
+    if (/\\.json$/i.test(ctx.node.path)) ctx.classify('config');
+    if (/\\.woff2$/i.test(ctx.node.path)) ctx.classify('assets');
+    const directory = ctx.node.base?.kind === 'directory' || ctx.node.current?.kind === 'directory';
+    if (ctx.node.path.split('/').slice(0, directory ? undefined : -1).some(part => /^(test|tests|__tests__)$/i.test(part))) ctx.classify('tests');
+  },
   async annotateNode(ctx) {
     const node = ctx.node;
     if (node.base?.kind === 'directory' || node.current?.kind === 'directory') {
@@ -89,6 +100,7 @@ export default {
 	write("nested/file.txt", "baseline\n");
 	const text = Array.from({ length: 500 }, (_, i) => `Markdown line ${i}: ${"x".repeat(45)}\n`).join("");
 	for (const name of ["pure.md", "edited.md", "into.md", "plans/out.md"]) write(name, text);
+	write("deleted.md", "Unique deleted document\n");
 	write("tests/critical/file.md", "baseline\n");
 	write("tests/other.md", "baseline\n");
 	const modulePath = "docs/forge/workspace/forge-extension/forge-extension.ts";
@@ -96,7 +108,14 @@ export default {
 import { message } from './internal/message.ts';
 export default {
   api: 1,
+  classifyNode(ctx) {
+    if (ctx.node.path === 'boundary.md') ctx.classify('code', 'Explicit workspace override');
+  },
   annotateNode(ctx) {
+    if (ctx.node.path === '.') {
+      const descendant = [...ctx.node.walk()].find(node => node.path === 'tests/other.md');
+      if (descendant?.classification.value !== 'tests') throw new Error('classification must finish before root annotation');
+    }
     if (ctx.guide.id !== 'workspace') throw new Error('namespaced workspace identity required');
     if (ctx.node.path === 'tests/critical') ctx.node.restoreNormalEmphasis('Review critical tests');
     if (ctx.node.path === 'tests/critical/file.md') ctx.node.notice(message);
@@ -108,7 +127,11 @@ export default {
 	write(
 		"reusable/forge-extension/forge-extension.ts",
 		`import type { ForgeExtension } from '@zdreamer/forge/extension';
-export default {api: 1, annotateNode(ctx) { if (ctx.node.path === 'other-files/moved.md') ctx.node.notice('shared-parent'); }} satisfies ForgeExtension;
+export default {
+  api: 1,
+  classifyNode(ctx) { if (ctx.node.path === 'other-files/moved.md') ctx.classify('config', 'Shared parent assignment'); },
+  annotateNode(ctx) { if (ctx.node.path === 'other-files/moved.md') ctx.node.notice('shared-parent'); },
+} satisfies ForgeExtension;
 `,
 	);
 	for (const [guide, id] of [
@@ -120,6 +143,12 @@ export default {api: 1, annotateNode(ctx) { if (ctx.node.path === 'other-files/m
 			`import type { ForgeExtension } from '@zdreamer/forge/extension';
 export default {
   api: 1,
+  classifyNode(ctx) {
+    if (ctx.node.path === 'other-files/moved.md') {
+      if (ctx.node.from !== 'tests/cross.md') throw new Error('Canonical rename target required');
+      ctx.classify('${id === "foreign-guide" ? "tests" : "assets"}', '${id} assignment');
+    }
+  },
   annotateNode(ctx) {
     if (ctx.guide.id !== 'codebase:${id}') throw new Error('namespaced guide identity required');
     if (ctx.node.path === 'tests/critical/file.md') {
@@ -158,6 +187,9 @@ export default {
 	run("git", ["add", "tests/cross.md", "other-files/moved.md"], workspace);
 	write("tests/critical/file.md", text);
 	write("tests/other.md", text);
+	unlinkSync(join(workspace, "deleted.md"));
+	write("settings.JSON", "{}\n");
+	write("logo.WOFF2", "fixture font\n");
 	write("boundary.md", "x".repeat(20_480));
 	write("large.MARKDOWN", "x".repeat(20_481));
 	write("plans/ignored.md", text);
@@ -167,6 +199,7 @@ export default {
 		join(consumer, "extension-authoring.ts"),
 		`import type {
   AnalysisNode, ForgeExtension, TreeAnnotationContext, TreeAnnotationHook, TreeSourceFacts,
+  TreeClassificationContext, TreeClassificationHook,
 } from '@zdreamer/forge/extension';
 // @ts-expect-error Operational factories are private.
 import type { createTreeAnalyzer } from '@zdreamer/forge/extension';
@@ -180,6 +213,25 @@ import type { WorkspaceConfig } from '@zdreamer/forge/extension';
 import type { ForgeExtension as PrivateExtension } from '@zdreamer/forge/dist/server/src/components/guide-extensions/internal/authoring.js';
 export default {
   api: 1,
+  classifyNode(context: TreeClassificationContext) {
+    const guide: 'workspace' | \`codebase:\${string}\` = context.guide.id;
+    context.classify('code', guide);
+    context.classify('tests');
+    context.classify('docs');
+    context.classify('config');
+    context.classify('assets');
+    context.signal.throwIfAborted();
+    // @ts-expect-error Categories are a closed vocabulary.
+    context.classify('documentation');
+    // @ts-expect-error Classifiers cannot mutate canonical facts.
+    context.node.path = 'changed';
+    // @ts-expect-error Classifiers have no tree navigation.
+    context.node.parent;
+    // @ts-expect-error Classifiers have no source observation.
+    context.source;
+    // @ts-expect-error Classifiers cannot annotate.
+    context.node.warn('wrong phase');
+  },
   async annotateNode(context: TreeAnnotationContext) {
     const guide: 'workspace' | \`codebase:\${string}\` = context.guide.id;
     const node: AnalysisNode = context.node;
@@ -187,6 +239,14 @@ export default {
     if (node.current?.kind === 'file') await source.currentByteSize(node);
     context.signal.throwIfAborted();
     node.notice(guide);
+    const category: 'code' | 'tests' | 'docs' | 'config' | 'assets' = node.classification.value;
+    node.parent?.notice(category);
+    // @ts-expect-error Annotations cannot assign classifications.
+    context.classify('code');
+    // @ts-expect-error Annotations cannot replace classifications.
+    node.classification = { value: 'code' };
+    // @ts-expect-error Classification observations are readonly.
+    node.classification.value = 'code';
     // Whole-tree navigation and cross-node annotation remain available.
     node.parent?.notice('Folder policy derived from a child');
     for (const descendant of node.walk()) descendant.notice('Subtree policy');
@@ -200,12 +260,23 @@ export default {
     context.exec('command');
   },
 } satisfies ForgeExtension;
+export const standaloneClassifier: TreeClassificationHook = context => {
+  context.classify('code');
+  // @ts-expect-error Classifier context inference is not any.
+  context.nonexistent;
+};
 export const standaloneHook: TreeAnnotationHook = context => {
   // @ts-expect-error Context inference is not any.
   context.nonexistent;
 };
 export const inferredContext = {
   api: 1,
+  classifyNode(context) {
+    const explicit: TreeClassificationContext = context;
+    explicit.classify('docs');
+    // @ts-expect-error Aggregate contract infers the classifier context.
+    context.nonexistent;
+  },
   annotateNode(context) {
     const explicit: TreeAnnotationContext = context;
     // @ts-expect-error Aggregate contract also provides a concrete context.
@@ -245,6 +316,18 @@ export const unknownHook = {
 		}),
 	);
 	run(compiler, ["-p", join(consumer, "tsconfig.analysis.json")], consumer);
+	run(
+		process.execPath,
+		[
+			"--input-type=module",
+			"-e",
+			`import assert from 'node:assert/strict';
+assert.deepEqual(Object.keys(await import('@zdreamer/forge/extension')), []);
+await assert.rejects(import('@zdreamer/forge/dist/server/src/components/tree-analysis/index.js'), {code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'});
+`,
+		],
+		consumer,
+	);
 	const reservation = await portReservation();
 	await reservation.close();
 	let server = await installedServer(executable, consumer, workspace, reservation.port);
@@ -260,6 +343,40 @@ export const unknownHook = {
 			tests: { id: "foreign-guide", root: "tests", guidance: "owner" },
 			"other-files": { id: "other-guide", root: "other-files", guidance: "other" },
 		});
+		assert.ok(result.handlers["workspace#classifyNode"]);
+		assert.ok(result.handlers["codebase:forge-base#classifyNode"]);
+		assert.deepEqual(requiredNode(result, ".").classification, { value: "code" });
+		for (const [path, value] of [
+			["tests", "tests"],
+			["tests/other.md", "tests"],
+			["moved.md", "docs"],
+			["deleted.md", "docs"],
+			["settings.JSON", "config"],
+			["logo.WOFF2", "assets"],
+		] as const) {
+			const classification = requiredNode(result, path).classification;
+			assert.equal(classification.value, value, path);
+			assert.ok(classification.handler);
+			assert.equal(result.handlers[classification.handler]?.id, "codebase:forge-base#classifyNode");
+		}
+		assert.deepEqual(requiredNode(result, "boundary.md").classification, {
+			value: "code",
+			reason: "Explicit workspace override",
+			handler: "workspace#classifyNode",
+		});
+		const renamed = requiredNode(result, "other-files/moved.md");
+		assert.equal(renamed.base?.codebase, "tests");
+		assert.equal(renamed.current?.codebase, "other-files");
+		assert.deepEqual(renamed.classification, {
+			value: "assets",
+			reason: "other-guide assignment",
+			handler: "codebase:other-guide#classifyNode",
+		});
+		const identities = Object.keys(result.handlers);
+		const firstAnnotation = identities.findIndex((id) => id.endsWith("#annotateNode"));
+		assert.ok(firstAnnotation > 0);
+		assert.ok(identities.slice(0, firstAnnotation).every((id) => id.endsWith("#classifyNode")));
+		assert.ok(identities.slice(firstAnnotation).every((id) => id.endsWith("#annotateNode")));
 		assert.ok(result.handlers["workspace#annotateNode"]);
 		assert.ok(result.handlers["codebase:forge-base#annotateNode"]);
 		for (const identity of Object.values(result.handlers)) assert.equal(Object.hasOwn(identity, "codebase"), false);
@@ -331,22 +448,40 @@ export const unknownHook = {
 		assert.equal(failure.status, 500);
 		const envelope = (await failure.json()) as { error: { code: string; handler?: string } };
 		assert.equal(envelope.error.code, "internal_error");
-		assert.ok(envelope.error.handler);
+		assert.equal(envelope.error.handler, "workspace#annotateNode");
 		assert.doesNotMatch(JSON.stringify(envelope), /private|secret|\.ts/);
 		assert.equal((await request("/api/changes")).status, 200);
 		assert.deepEqual(sourceState(workspace), beforeFailure);
+		write(
+			modulePath,
+			"export default {api: 1, classifyNode() { throw new Error('/private/secret classifier failure'); }, annotateNode() { throw new Error('annotation must not run'); }};\n",
+		);
+		await server.stop("SIGTERM");
+		server = await installedServer(executable, consumer, workspace, reservation.port);
+		const beforeClassifierFailure = sourceState(workspace);
+		const classifierFailure = await request("/api/changes/analysis");
+		assert.equal(classifierFailure.status, 500);
+		const classifierEnvelope = (await classifierFailure.json()) as ApiFailure;
+		assert.equal(classifierEnvelope.error.code, "internal_error");
+		assert.equal(classifierEnvelope.error.handler, "workspace#classifyNode");
+		assert.doesNotMatch(JSON.stringify(classifierEnvelope), /private|secret|\.ts/);
+		assert.equal((await request("/api/changes")).status, 200);
+		assert.deepEqual(sourceState(workspace), beforeClassifierFailure);
 		write(marker, "repositories: [., nested]\ncodebases: []\n");
 		write(modulePath, "export default {api: 1};\n");
 		await server.stop("SIGTERM");
 		server = await installedServer(executable, consumer, workspace, reservation.port);
 		const conventionFree = (await (await request("/api/changes/analysis")).json()) as WorkspaceAnalysis;
 		assert.deepEqual(conventionFree.handlers, {});
+		for (const node of Object.values(conventionFree.nodes)) assert.deepEqual(node.classification, { value: "code" });
 		assert.equal(requiredNode(conventionFree, "tests/other.md").effectiveEmphasis.value, "normal");
 		assert.deepEqual(requiredNode(conventionFree, "large.MARKDOWN").signals, []);
 		write(modulePath, "export default 123;\n");
 		await server.stop("SIGTERM");
 		server = await installedServer(executable, consumer, workspace, reservation.port);
-		assert.equal((await request("/api/changes/analysis")).status, 500);
+		const loadFailure = await request("/api/changes/analysis");
+		assert.equal(loadFailure.status, 500);
+		assert.equal(((await loadFailure.json()) as ApiFailure).error.handler, "workspace#classifyNode");
 		assert.equal((await request("/api/changes")).status, 200);
 	} finally {
 		await server.stop("SIGKILL");

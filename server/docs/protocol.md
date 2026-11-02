@@ -160,6 +160,7 @@ has an entry in the path-indexed `nodes` table. Each node carries:
 | `statistics?` | Own `{added, removed, binary}` counts. |
 | `base?`, `current?` | Present-side `{path, kind, repository?, codebase?, repositoryRoot?, codebaseRoot?}`; kind is `directory`, `file` or `symlink`. |
 | `emphasis?` | Direct `{value, handler, reason?}` annotation. |
+| `classification` | Node-local `{value, reason?, handler?}`; value is `code`, `tests`, `docs`, `config` or `assets`. |
 | `effectiveEmphasis` | Inherited `{value, handler?, reason?, origin?}`; default is `{value: "normal"}`. |
 | `signals` | Direct signals in handler order. |
 | `signalCounts` | Inclusive `{notice, warning}` counts. |
@@ -173,6 +174,13 @@ repository ID or codebase root key. File/directory nodes count their own change 
 fabricated lines.
 `attentionTotals` excludes effectively deemphasized/hidden entries.
 
+Classification is required even on structural directories and root. Without an
+explicit assignment it is `{value: "code"}`, with no handler or reason. Otherwise,
+the last assignment supplies the value, handler ID and optional reason; explicit
+`code` remains attributed. Classification never inherits or creates changed entries.
+A renamed entry has one category at its destination; a deletion uses its old path.
+Light change/file responses carry no classification.
+
 Emphasis values are `normal`, `emphasized`, `deemphasized`, `hidden`. The last direct
 setting wins on a node; the nearest explicit setting on the node or its ancestry
 determines effective emphasis, including a normal reset. Explicit inheritance retains
@@ -183,20 +191,22 @@ Signals are `{severity: "notice" | "warning", message, handler, location?}`;
 Emphasis never suppresses signals or ancestor counts. `codebases` uses the shared
 definitions; side `codebase`/`codebaseRoot` references are owner root keys.
 `handlers` maps safe guide/hook IDs to `{id}`, for example
-`codebase:forge-base#annotateNode` or `workspace#annotateNode`. It contains each
+`codebase:forge-base#classifyNode` or `workspace#annotateNode`. It contains each
 actually invoked identity once, in first-invocation order. Handler provenance has
 no owner reference; adopting a parent creates no synthetic owner definition.
 
-Annotations come from applicable guide extensions; hooks can annotate any node.
-Without adopted policies, all emphasis is normal and signals are empty.
-The [analysis contract](../src/components/tree-analysis/docs/UnitGuide.md) owns
-hook ordering and execution semantics.
+Classification completes across the whole tree before annotation starts, so
+annotations can inspect every node's final category. Without adopted policies,
+classification is `code`, emphasis is normal and signals are empty. The
+[analysis contract](../src/components/tree-analysis/docs/UnitGuide.md) owns hook
+capabilities, ordering and execution semantics.
 
 Analysis annotations/state are independent per request even when collection overlaps.
 Modules load at startup and refresh on restart. An applicable guide load error or hook invocation failure
-returns HTTP 500 with `{ "error": { "code": "internal_error", "message": "Internal server error", "handler": "codebase:example#annotateNode" } }`;
-the handler field identifies the applicable guide's `annotateNode` hook in both
-cases. Unrelated broken participants do not block analysis. Contradictory owner
+returns HTTP 500 with `{ "error": { "code": "internal_error", "message": "Internal server error", "handler": "codebase:example#classifyNode" } }`.
+Invocation failures identify the actual hook. Retained load errors identify the
+first phase's `#classifyNode`, including when a broken export's hook set cannot be
+determined. Unrelated broken participants do not block analysis. Contradictory owner
 ordering returns `internal_error` without a handler field. Failures return no partial
 analysis; raw causes/stacks/module paths stay private. Light `/changes` remains independently
 available. Shared deadline/cancellation/effects rules apply.

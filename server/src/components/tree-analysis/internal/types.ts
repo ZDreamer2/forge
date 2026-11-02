@@ -1,7 +1,9 @@
 import type { AnalysisHandlerIdentity, FinalAnalysisTree } from "../../workspace-tree/index.ts";
 import type { TreeAnnotationHook } from "./annotation-hook.ts";
-export interface AnnotationContribution {
+import type { TreeClassificationHook } from "./classification-hook.ts";
+export interface AnalysisContribution {
 	readonly id: `codebase:${string}` | "workspace";
+	readonly classifyNode?: TreeClassificationHook;
 	readonly annotateNode?: TreeAnnotationHook;
 	readonly error?: Error;
 }

@@ -4,14 +4,14 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 
 # tree-analysis Guide
 
-Runs trusted guide annotation hooks over a per-request facade of a workspace tree.
+Runs trusted guide classification and annotation hooks over a per-request facade of a workspace tree.
 Composition supplies loaded contributions; this component imports no extension
-modules. Base facts remain shared with light requests, while annotations and source
+modules. Base facts remain shared with light requests, while classification, annotations and source
 observations belong to one run. `http-api` supplies source access and cancellation.
 The [shared extension contract](../../../../../../../../ai/bc-plugins/dev/forge/docs/theory/codebases/guide-part/extension/forge-extension.md)
 owns authoring, guide identity and module compatibility.
 
-## Scheduling and annotation
+## Scheduling and capabilities
 
 Visit canonical nodes in deterministic preorder, including root, inferred directories,
 deletions and symlinks. For each node, merge independent workspace, base-owner and
@@ -20,23 +20,30 @@ priority between eligible guides. Shared guides run once per node. Ownership com
 from actual sides, including both rename endpoints; unassigned nodes use workspace
 ancestry alone. Contradictory cross-owner order fails analysis atomically.
 
-Each applicable `annotateNode` finishes before the next invocation. Context exposes
-current `node`, namespaced `guide.id`, `signal` and `source`. Whole-tree navigation
-and cross-node annotations remain available; repeated calls require authors to avoid
-unintended duplicate effects. Each write receives `<guide>#annotateNode` provenance.
-The result inventory records actually invoked identities once, in first-use order,
-without codebase ownership. Node-side owner facts retain stable ID, root and guide.
+Complete a classification traversal across the whole tree before starting the
+annotation traversal. Each phase uses the same node preorder and applicable guide
+order; every hook finishes before the next invocation. Contributions can provide
+either hook, both or neither. The result inventory records actually invoked
+identities once, in first-use order, without codebase ownership.
 
-Nodes provide readonly facts, parent/children navigation and synchronous preorder
-`walk()` including self. Rename topology follows the destination path. Hooks read
-direct annotations; derived metadata is finalized only after successful execution.
-`deemphasize`, `restoreNormalEmphasis`, `emphasize` and `hide` set emphasis; later
-writes win on a node, and the nearest explicit ancestor controls inheritance. A normal
-reset restores attention beneath hidden/deemphasized ancestry. `warn` and `notice`
-accumulate visible signals with optional one-based side/line/column locations.
+`classifyNode` receives readonly current canonical node facts, namespaced `guide.id`,
+`signal` and `classify(value, reason?)`. This capability assigns only that target,
+with `<guide>#classifyNode` provenance; it expires when its invocation settles or
+the run is cancelled. The context has no navigation, source observations or
+annotation methods. The [workspace-tree contract](../../workspace-tree/docs/UnitGuide.md#metadata)
+owns category values, fallback, assignment semantics and runtime validation.
 
-No policy is intrinsic to the engine. Without adopted hooks, emphasis stays normal
-and signals remain empty; Forge-base owns its planning/test and Markdown policies.
+`annotateNode` context exposes current `node`, namespaced `guide.id`, `signal` and
+`source`. Nodes provide readonly facts, parent/children navigation and synchronous
+preorder `walk()` including self. Hooks can inspect completed classification and
+annotate any reachable node, so repeated invocations can duplicate cross-node
+effects. Each write receives `<guide>#annotateNode` provenance. Node-side owner facts
+retain stable ID, root and guide. Derived emphasis/totals are finalized only after
+both phases succeed.
+
+No policy is intrinsic to the engine. Without adopted hooks, classification stays
+Code, emphasis stays normal and signals remain empty; Forge-base owns its path
+classification, planning/test emphasis and Markdown-warning policies.
 
 ## Source facts and lifecycle
 
@@ -47,8 +54,12 @@ fans out across the tree. Cancellation stops queued reads and later effects.
 
 An applicable retained load error or invocation failure rejects the whole analysis;
 light requests remain usable. Safe guide/hook identities reach clients, while raw
-causes remain in server diagnostics. Cancellation races async work, observes late
-rejection and prevents later invocations and finalization. Run capabilities become
+causes remain in server diagnostics. Invocation errors identify the actual hook;
+retained load errors use the first phase's `#classifyNode` identity even when the
+broken export's hook set is unknown. A classifier failure, including an invalid
+runtime category, prevents annotation and exposes no partial analysis.
+Cancellation races async work, observes late rejection and prevents later
+invocations and finalization. Run capabilities become
 invalid after completion or cancellation.
 
 Startup-loaded functions can serve concurrent requests. Authors keep state local,

@@ -16,16 +16,17 @@ ESM supports explicit local imports. Ordinary Node module caching applies; resta
 refreshes the loaded registry.
 
 Entries default-export a plain object with `api: 1` and optional callable
-`annotateNode`. Unknown members, unsupported revisions, malformed exports and import
-failures become retained per-guide errors. Composition logs their raw diagnostics
+`classifyNode` and `annotateNode`. Unknown members, unsupported revisions, malformed
+exports and import failures become retained per-guide errors. Composition logs their raw diagnostics
 and passes contributions to `tree-analysis`; that owner decides applicability at
 request time. A broken unrelated participant does not block analysis.
 
 The npm `@zdreamer/forge/extension` subpath targets compiled
 `internal/authoring.ts`, exposing named type-only exports: `ForgeExtension`, supported
-hook/context types and required tree vocabulary. The component's `index.ts` instead
-exposes engine loader operations and types. Packed checks exercise this separation.
+hook/context types and required readonly tree and classification vocabulary. The
+component's `index.ts` instead exposes engine loader operations and types.
 
 This component depends on `workspace-config` for guide discovery and
-`tree-analysis` for the annotation contract. `tree-analysis` never imports this
-aggregate; app composition passes loaded hooks to it.
+[tree-analysis](../../tree-analysis/docs/UnitGuide.md) for hook contracts, phase
+scheduling and capability lifetimes. That component never imports this aggregate;
+app composition passes loaded hooks to it.

@@ -131,3 +131,76 @@ test("owner facts retain stable identity and isolate ancestry and executable dec
 	assert.notEqual(first.nodes.get("a.ts")?.current?.codebase, owner);
 	assert.deepEqual(owner.parents, ["shared"]);
 });
+
+test("classification is node-local, attributed, last-write wins and isolated between runs", () => {
+	const base = fixture();
+	let identity = { id: "workspace#classifyNode" };
+	const deps = { currentHandler: () => identity, checkActive: () => {} };
+	const a = createAnalysisTree(base, deps);
+	const b = createAnalysisTree(base, deps);
+	const target = a.nodes.get("tests");
+	assert.ok(target);
+	assert.deepEqual(target.classification, { value: "code" });
+	a.classify(target, "tests", "directory");
+	assert.deepEqual(target.classification, { value: "tests", reason: "directory", handler: identity });
+	assert.deepEqual(target.children[0]?.classification, { value: "code" });
+	identity = { id: "codebase:local#classifyNode" };
+	a.classify(target, "code");
+	assert.deepEqual(target.classification, { value: "code", handler: identity });
+	assert.deepEqual(b.nodes.get("tests")?.classification, { value: "code" });
+	assert.equal("classification" in (base.nodes.get("tests") ?? {}), false);
+	assert.throws(() => a.classify(b.root, "docs"), /this run/);
+	// @ts-expect-error Runtime callers must not install unknown categories.
+	assert.throws(() => a.classify(target, "invalid"), /Invalid classification/);
+	assert.deepEqual(target.classification, { value: "code", handler: identity });
+	assert.equal("classify" in target, false);
+	const final = finalizeAnalysis(a);
+	assert.deepEqual(final.nodes.get(".")?.rawTotals, { added: 19, removed: 10 });
+	assert.deepEqual(final.nodes.get(".")?.attentionTotals, { added: 19, removed: 10 });
+	assert.deepEqual(final.nodes.get(".")?.signalCounts, { notice: 0, warning: 0 });
+	function readonly(node: AnalysisNode) {
+		// @ts-expect-error Annotation observes classification without assigning it.
+		node.classification = { value: "tests" };
+		// @ts-expect-error Classification fields are readonly as well.
+		node.classification.value = "docs";
+	}
+	void readonly;
+});
+
+test("classifier facts originate before annotation capabilities are attached", () => {
+	const tree = createAnalysisTree(fixture(), { currentHandler: () => ({ id: "test" }), checkActive: () => {} });
+	const node = tree.nodes.get("destination/moved");
+	assert.ok(node);
+	// A future annotation method must not silently expand the classifier contract.
+	Object.assign(node, {
+		futureAnnotation() {
+			throw new Error("annotation capability");
+		},
+	});
+	const facts = tree.classificationFacts(node);
+	assert.deepEqual(facts, {
+		repo: ".",
+		path: "destination/moved",
+		from: "former/moved",
+		kind: "renamed",
+		renameContentChanged: true,
+		base: node.base,
+		current: node.current,
+		statistics: node.statistics,
+	});
+	assert.equal(facts.current, node.current);
+	assert.equal(facts.statistics, node.statistics);
+	for (const capability of [
+		"futureAnnotation",
+		"parent",
+		"children",
+		"walk",
+		"warn",
+		"classification",
+		"emphasis",
+		"signals",
+	])
+		assert.equal(capability in facts, false, capability);
+	assert.equal(tree.classificationFacts(node), facts);
+	assert.throws(() => tree.classificationFacts({ ...node }), /this run/);
+});

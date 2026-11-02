@@ -82,7 +82,18 @@ export interface AnalysisSide extends Omit<TreeSide, "codebase" | "codebaseRoot"
 	readonly codebase?: CodebaseFacts;
 	readonly codebaseRoot?: CodebaseFacts;
 }
-export interface AnalysisNode extends Omit<Readonly<TreeNode>, "base" | "current"> {
+export type ClassificationValue = "code" | "tests" | "docs" | "config" | "assets";
+export interface Classification {
+	readonly value: ClassificationValue;
+	readonly reason?: string;
+	readonly handler?: AnalysisHandlerIdentity;
+}
+export interface ClassificationNode extends Omit<Readonly<TreeNode>, "base" | "current"> {
+	readonly base?: AnalysisSide;
+	readonly current?: AnalysisSide;
+}
+export interface AnalysisNode extends ClassificationNode {
+	readonly classification: Classification;
 	readonly base?: AnalysisSide;
 	readonly current?: AnalysisSide;
 	readonly parent?: AnalysisNode;
@@ -105,6 +116,8 @@ export interface FinalAnalysisNode {
 	readonly signalCounts: { readonly notice: number; readonly warning: number };
 }
 export interface AnalysisTree {
+	classificationFacts(node: AnalysisNode): ClassificationNode;
+	classify(node: AnalysisNode, value: ClassificationValue, reason?: string): void;
 	readonly root: AnalysisNode;
 	readonly nodes: ReadonlyMap<string, AnalysisNode>;
 }

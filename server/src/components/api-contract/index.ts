@@ -1,4 +1,5 @@
 export type {
+	AnalysisClassification,
 	AnalysisEmphasis,
 	AnalysisHandlerDefinition,
 	AnalysisSetting,
@@ -7,6 +8,7 @@ export type {
 	AnalysisWireNode,
 	ApiErrorCode,
 	ApiFailure,
+	ClassificationValue,
 	FileBaseline,
 	FileSide,
 	FileUnsupportedReason,

@@ -22,7 +22,7 @@ export function createInvocationOrder(config: WorkspaceConfig) {
 		}
 		return mergeGuideSequences(
 			chains,
-			`annotation node ${JSON.stringify(node.path)} (workspace, base, current owners)`,
+			`analysis node ${JSON.stringify(node.path)} (workspace, base, current owners)`,
 		).map(guideIdentity);
 	};
 }

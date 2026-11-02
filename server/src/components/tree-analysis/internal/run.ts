@@ -8,10 +8,10 @@ import {
 } from "../../workspace-tree/index.ts";
 import { createInvocationOrder } from "./invocation-order.ts";
 import { createSourceFacts } from "./source-facts.ts";
-import { AnalysisHandlerError, type AnalysisResult, type AnnotationContribution } from "./types.ts";
+import { type AnalysisContribution, AnalysisHandlerError, type AnalysisResult } from "./types.ts";
 export interface TreeAnalyzerDeps {
 	readonly config: WorkspaceConfig;
-	readonly extensions: readonly AnnotationContribution[];
+	readonly extensions: readonly AnalysisContribution[];
 }
 export interface AnalysisRunOptions {
 	readonly signal: AbortSignal;
@@ -45,25 +45,43 @@ export function createTreeAnalyzer(deps: TreeAnalyzerDeps) {
 			const source = createSourceFacts({ tree, signal: options.signal, checkActive, read: options.currentByteSize });
 			const invoked = new Map<string, AnalysisHandlerIdentity>();
 			try {
-				for (const node of tree.root.walk()) {
-					for (const id of order(node)) {
-						checkActive();
-						const extension = registry.get(id);
-						if (!extension) continue;
-						const identity = { id: `${id}#annotateNode` };
-						if (extension.error) throw new AnalysisHandlerError(identity, extension.error);
-						if (!extension.annotateNode) continue;
-						current = identity;
-						invoked.set(identity.id, identity);
-						try {
-							const returned = extension.annotateNode({ node, guide: { id }, signal: options.signal, source });
-							if (returned) await abortable(Promise.resolve(returned), options.signal);
+				// Annotation can inspect any relative, so classification must finish for
+				// the whole tree before the first annotation invocation.
+				for (const phase of ["classifyNode", "annotateNode"] as const) {
+					for (const node of tree.root.walk()) {
+						for (const id of order(node)) {
 							checkActive();
-						} catch (cause) {
-							options.signal.throwIfAborted();
-							throw new AnalysisHandlerError(identity, cause);
-						} finally {
-							current = undefined;
+							const extension = registry.get(id);
+							if (!extension) continue;
+							const identity = { id: `${id}#${phase}` };
+							if (extension.error) throw new AnalysisHandlerError(identity, extension.error);
+							if (!extension[phase]) continue;
+							current = identity;
+							invoked.set(identity.id, identity);
+							let invoking = true;
+							try {
+								const returned =
+									phase === "classifyNode"
+										? extension.classifyNode?.({
+												node: tree.classificationFacts(node),
+												guide: { id },
+												signal: options.signal,
+												classify(value, reason) {
+													checkActive();
+													if (!invoking) throw new Error("Classification invocation is no longer active");
+													tree.classify(node, value, reason);
+												},
+											})
+										: extension.annotateNode?.({ node, guide: { id }, signal: options.signal, source });
+								if (returned) await abortable(Promise.resolve(returned), options.signal);
+								checkActive();
+							} catch (cause) {
+								options.signal.throwIfAborted();
+								throw new AnalysisHandlerError(identity, cause);
+							} finally {
+								invoking = false;
+								current = undefined;
+							}
 						}
 					}
 				}

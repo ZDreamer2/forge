@@ -19,11 +19,14 @@ function validate(value: unknown): ForgeExtension {
 	)
 		throw new TypeError("Guide extension requires a default-exported plain object");
 	for (const key of Reflect.ownKeys(value))
-		if (key !== "api" && key !== "annotateNode") throw new TypeError(`Unknown guide extension member: ${String(key)}`);
+		if (key !== "api" && key !== "annotateNode" && key !== "classifyNode")
+			throw new TypeError(`Unknown guide extension member: ${String(key)}`);
 	const extension = value as Record<string, unknown>;
 	if (extension.api !== 1) throw new TypeError("Guide extension requires supported api revision 1");
 	if (Object.hasOwn(extension, "annotateNode") && typeof extension.annotateNode !== "function")
 		throw new TypeError("Guide extension annotateNode must be callable");
+	if (Object.hasOwn(extension, "classifyNode") && typeof extension.classifyNode !== "function")
+		throw new TypeError("Guide extension classifyNode must be callable");
 	return extension as unknown as ForgeExtension;
 }
 
@@ -50,6 +53,7 @@ export async function loadGuideExtensions(config: WorkspaceConfig): Promise<read
 			const extension = validate((await import(pathToFileURL(join(unit, "forge-extension.ts")).href)).default);
 			extensions.push({
 				id,
+				...(extension.classifyNode === undefined ? {} : { classifyNode: extension.classifyNode }),
 				...(extension.annotateNode === undefined ? {} : { annotateNode: extension.annotateNode }),
 			});
 		} catch (cause) {

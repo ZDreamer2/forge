@@ -3,9 +3,9 @@ import { test } from "node:test";
 import type { RootedCodebase, WorkspaceConfig } from "../../workspace-config/index.ts";
 import { createWorkspaceTree, type TreeEntry } from "../../workspace-tree/index.ts";
 import {
+	type AnalysisContribution,
 	AnalysisHandlerError,
 	type AnalysisNode,
-	type AnnotationContribution,
 	createTreeAnalyzer,
 	type TreeAnnotationContext,
 } from "../index.ts";
@@ -34,9 +34,9 @@ function fixture(entries: Partial<TreeEntry>[] = [], registry = config()) {
 	return tree;
 }
 function extension(
-	annotateNode: NonNullable<AnnotationContribution["annotateNode"]>,
-	id: AnnotationContribution["id"] = "workspace",
-): AnnotationContribution {
+	annotateNode: NonNullable<AnalysisContribution["annotateNode"]>,
+	id: AnalysisContribution["id"] = "workspace",
+): AnalysisContribution {
 	return { id, annotateNode };
 }
 const options = () => ({ signal: new AbortController().signal, currentByteSize: async () => 42 });
@@ -63,7 +63,7 @@ test("preorder includes structural, deleted, symlink and transition nodes; hooks
 				node.notice(id);
 				calls.push(`${node.path}:${id}:end`);
 			},
-			id as AnnotationContribution["id"],
+			id as AnalysisContribution["id"],
 		),
 	);
 	const tree = fixture(
@@ -105,7 +105,7 @@ test("rename merges independent workspace/base/current ancestries without freezi
 			fixture([{ path: "new/a", from: "old/a", kind: "renamed", base: { kind: "file" } }], registry),
 			options(),
 		),
-		/annotation node "new\/a".*old.*new/s,
+		/analysis node "new\/a".*old.*new/s,
 	);
 	// Workspace chooses b before otherwise independent a. The base owner's true
 	// ancestry a -> b must win; composing workspace+current first would lose it.
@@ -133,7 +133,7 @@ test("rename merges independent workspace/base/current ancestries without freezi
 
 test("rooted parents are invoked through adoption, and unrelated load failures become applicable on refresh", async () => {
 	const registry = config([owner("parent"), owner("a", ["parent"]), owner("broken")]);
-	const extensions: AnnotationContribution[] = [
+	const extensions: AnalysisContribution[] = [
 		extension(({ node }) => node.notice("parent"), "codebase:parent"),
 		{ id: "codebase:broken", error: new Error("secret module") },
 	];
@@ -154,7 +154,7 @@ test("rooted parents are invoked through adoption, and unrelated load failures b
 		analyzer.analyze(tree, options()),
 		(e) =>
 			e instanceof AnalysisHandlerError &&
-			e.handler.id === "codebase:broken#annotateNode" &&
+			e.handler.id === "codebase:broken#classifyNode" &&
 			!e.message.includes("secret"),
 	);
 });
@@ -337,4 +337,187 @@ test("abort races observe late hook rejection and prevent subsequent nodes", asy
 	held.reject(new Error("late"));
 	await new Promise((resolve) => setImmediate(resolve));
 	assert.equal(calls, 1);
+});
+
+test("classification completes in preorder and chain order before annotation sees final descendants", async () => {
+	const shared = { id: "shared", guide: "/shared", parents: [] };
+	const registry = config([shared, owner("old", ["shared"]), owner("new", ["shared"])], ["shared"]);
+	const tree = fixture(
+		[
+			{ path: "new/moved.MD", from: "old/old.ts", kind: "renamed", base: { kind: "file" } },
+			{ path: "new/deleted", kind: "deleted", base: { kind: "file" }, current: undefined },
+			{ path: "new/link", current: { kind: "symlink" } },
+			{ path: "new/mixed", base: { kind: "directory" }, current: { kind: "file" } },
+			{ path: "new/mixed/child" },
+		],
+		registry,
+	);
+	const classified: string[] = [];
+	let firstAnnotation = true;
+	const extensions: AnalysisContribution[] = ["codebase:shared", "workspace", "codebase:old", "codebase:new"].map(
+		(id) => ({
+			id: id as AnalysisContribution["id"],
+			async classifyNode(ctx) {
+				classified.push(`${ctx.node.path}:${id}:start`);
+				assert.equal("children" in ctx.node, false);
+				assert.equal("warn" in ctx.node, false);
+				assert.equal("source" in ctx, false);
+				assert.equal("classification" in ctx.node, false);
+				await Promise.resolve();
+				ctx.classify(id === "codebase:new" ? "code" : "docs", id);
+				classified.push(`${ctx.node.path}:${id}:end`);
+			},
+			annotateNode({ node }) {
+				if (firstAnnotation) {
+					assert.equal(node.path, ".");
+					assert.equal(
+						node.children.find((n) => n.path === "new")?.children.find((n) => n.path === "new/moved.MD")?.classification
+							.value,
+						"code",
+					);
+					for (const relative of node.walk()) assert.ok(relative.classification.handler);
+					firstAnnotation = false;
+				}
+			},
+		}),
+	);
+	const analyzer = createTreeAnalyzer({ config: registry, extensions });
+	const [a, b] = await Promise.all([analyzer.analyze(tree, options()), analyzer.analyze(tree, options())]);
+	for (const result of [a, b]) {
+		assert.deepEqual(
+			result.handlers.map((h) => h.id),
+			[
+				"codebase:shared#classifyNode",
+				"workspace#classifyNode",
+				"codebase:new#classifyNode",
+				"codebase:old#classifyNode",
+				"codebase:shared#annotateNode",
+				"workspace#annotateNode",
+				"codebase:new#annotateNode",
+				"codebase:old#annotateNode",
+			],
+		);
+		const moved = result.nodes.get("new/moved.MD")?.node;
+		assert.equal(moved?.base?.codebase?.id, "old");
+		assert.equal(moved?.current?.codebase?.id, "new");
+		assert.deepEqual(moved?.classification, {
+			value: "code",
+			reason: "codebase:new",
+			handler: { id: "codebase:new#classifyNode" },
+		});
+		assert.equal(result.nodes.get("new/deleted")?.node.current, undefined);
+		assert.equal(result.nodes.get("new/link")?.node.current?.kind, "symlink");
+		assert.equal(result.nodes.get("new")?.node.current?.codebaseRoot?.id, "new");
+		assert.equal(result.nodes.get(".")?.node.current?.repositoryRoot, ".");
+		assert.equal(result.nodes.get("new/mixed")?.node.children.length, 1);
+	}
+	// Re-run alone to establish sequential execution independently of concurrent runs.
+	classified.length = 0;
+	await analyzer.analyze(tree, options());
+	for (let i = 0; i < classified.length; i += 2)
+		assert.equal(classified[i]?.replace(":start", ":end"), classified[i + 1]);
+	assert.deepEqual(
+		classified.filter((c) => c.startsWith("new/moved.MD:") && c.endsWith(":start")),
+		[
+			"new/moved.MD:codebase:shared:start",
+			"new/moved.MD:workspace:start",
+			"new/moved.MD:codebase:old:start",
+			"new/moved.MD:codebase:new:start",
+		],
+	);
+	assert.equal("classification" in (tree.nodes.get("new/moved.MD") ?? {}), false);
+});
+
+test("saved classifier assignments expire between invocations, annotation and completion", async () => {
+	let previous: import("../index.ts").TreeClassificationContext | undefined;
+	const retained: import("../index.ts").TreeClassificationContext[] = [];
+	const result = await createTreeAnalyzer({
+		config: config(),
+		extensions: [
+			{
+				id: "workspace",
+				classifyNode(ctx) {
+					if (previous) assert.throws(() => previous?.classify("assets"), /invocation is no longer active/);
+					ctx.classify("tests");
+					previous = ctx;
+					retained.push(ctx);
+				},
+				annotateNode({ node }) {
+					for (const ctx of retained) assert.throws(() => ctx.classify("assets"), /invocation is no longer active/);
+					assert.equal(node.classification.value, "tests");
+				},
+			},
+		],
+	}).analyze(fixture([{}]), options());
+	for (const ctx of retained) assert.throws(() => ctx.classify("assets"), /run is no longer active/);
+	assert.equal(result.nodes.get("a.txt")?.node.classification.value, "tests");
+});
+
+test("invalid categories and classifier exceptions reject atomically before annotation", async () => {
+	for (const invalid of [false, "unknown"]) {
+		let annotations = 0;
+		const tree = fixture([{}]);
+		await assert.rejects(
+			createTreeAnalyzer({
+				config: config(),
+				extensions: [
+					{
+						id: "workspace",
+						classifyNode(ctx) {
+							ctx.classify("docs");
+							if (invalid === false) throw new Error("private classifier cause");
+							// @ts-expect-error Trusted JavaScript can pass invalid runtime categories.
+							ctx.classify(invalid);
+						},
+						annotateNode() {
+							annotations++;
+						},
+					},
+				],
+			}).analyze(tree, options()),
+			(e) =>
+				e instanceof AnalysisHandlerError &&
+				e.handler.id === "workspace#classifyNode" &&
+				!e.message.includes("private"),
+		);
+		assert.equal(annotations, 0);
+		assert.equal("classification" in (tree.nodes.get(".") ?? {}), false);
+		const fresh = await createTreeAnalyzer({ config: config(), extensions: [] }).analyze(tree, options());
+		assert.deepEqual(fresh.nodes.get(".")?.node.classification, { value: "code" });
+	}
+});
+
+test("classifier cancellation expires assignment and prevents annotation, observing late rejection", async () => {
+	const entered = Promise.withResolvers<void>();
+	const held = Promise.withResolvers<void>();
+	const controller = new AbortController();
+	let captured: import("../index.ts").TreeClassificationContext | undefined;
+	let annotations = 0;
+	let calls = 0;
+	const run = createTreeAnalyzer({
+		config: config(),
+		extensions: [
+			{
+				id: "workspace",
+				classifyNode(ctx) {
+					calls++;
+					captured = ctx;
+					ctx.classify("docs");
+					entered.resolve();
+					return held.promise;
+				},
+				annotateNode() {
+					annotations++;
+				},
+			},
+		],
+	}).analyze(fixture([{}]), { ...options(), signal: controller.signal });
+	await entered.promise;
+	controller.abort(new Error("cancel classifier"));
+	await assert.rejects(run, /cancel classifier/);
+	assert.throws(() => captured?.classify("code"), /cancel classifier/);
+	held.reject(new Error("late classifier rejection"));
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(calls, 1);
+	assert.equal(annotations, 0);
 });

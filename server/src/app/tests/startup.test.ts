@@ -214,7 +214,7 @@ test("startup publishes explicit literal configuration name instead of checkout 
 });
 
 test("startup handler failures affect analysis only and never expose their private cause", async (t) => {
-	for (const failure of ["missing", "export", "invoke"] as const) {
+	for (const failure of ["missing", "export", "classify", "invalid", "annotate"] as const) {
 		const input = await fixture(t);
 		await writeFixtureFile(input.configPath, "repositories: ['.']\ncodebases: []\n");
 		await mkdir(join(input.root, "docs/forge/workspace/forge-extension"), { recursive: true });
@@ -223,7 +223,9 @@ test("startup handler failures affect analysis only and never expose their priva
 				join(input.root, "docs/forge/workspace/forge-extension/forge-extension.ts"),
 				failure === "export"
 					? "export default 1;"
-					: "export default { api: 1, annotateNode() { throw new Error('/private/secret detail'); } };",
+					: failure === "invalid"
+						? "export default { api: 1, classifyNode(ctx) { ctx.classify('private-invalid-value'); } };"
+						: `export default { api: 1, ${failure === "classify" ? "classifyNode" : "annotateNode"}() { throw new Error('/private/secret detail'); } };`,
 			);
 		const server = await start(input.options);
 		t.after(server.close);
@@ -231,7 +233,7 @@ test("startup handler failures affect analysis only and never expose their priva
 		assert.equal(response.status, 500);
 		const body = (await response.json()) as { error: { code: string; handler: string } };
 		assert.equal(body.error.code, "internal_error");
-		assert.equal(typeof body.error.handler, "string");
+		assert.equal(body.error.handler, failure === "annotate" ? "workspace#annotateNode" : "workspace#classifyNode");
 		assert.doesNotMatch(JSON.stringify(body), /private|secret|forge-extension.ts|stack/);
 		assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
 		assert.equal((await fetch(`${server.address}/api/workspace`)).status, 200);
@@ -560,7 +562,7 @@ test("a broken rooted participant fails analysis only after Refresh finds an own
 	const refreshed = await fetch(`${server.address}/api/changes/analysis`);
 	assert.equal(refreshed.status, 500);
 	assert.deepEqual(await refreshed.json(), {
-		error: { code: "internal_error", message: "Internal server error", handler: "codebase:broken#annotateNode" },
+		error: { code: "internal_error", message: "Internal server error", handler: "codebase:broken#classifyNode" },
 	});
 	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
 	assert.equal((await fetch(`${server.address}/api/workspace`)).status, 200);

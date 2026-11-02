@@ -1,7 +1,7 @@
-import type { AnnotationContribution } from "../../tree-analysis/index.ts";
+import type { AnalysisContribution } from "../../tree-analysis/index.ts";
 import type { GuideIdentity } from "../../workspace-config/index.ts";
 
-export interface LoadedGuideExtension extends AnnotationContribution {
+export interface LoadedGuideExtension extends AnalysisContribution {
 	readonly error?: GuideExtensionLoadError;
 }
 

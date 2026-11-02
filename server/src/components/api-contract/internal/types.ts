@@ -21,6 +21,8 @@ export type WorkspaceChanges = {
 };
 
 export type AnalysisHandlerDefinition = { id: string };
+export type ClassificationValue = "code" | "tests" | "docs" | "config" | "assets";
+export type AnalysisClassification = { value: ClassificationValue; reason?: string; handler?: string };
 export type AnalysisEmphasis = "normal" | "emphasized" | "deemphasized" | "hidden";
 export type AnalysisSignal = {
 	severity: "notice" | "warning";
@@ -39,6 +41,7 @@ export type AnalysisSide = {
 export type AnalysisSetting = { value: AnalysisEmphasis; reason?: string; handler: string };
 export type AnalysisWireNode = {
 	path: string;
+	classification: AnalysisClassification;
 	children: string[];
 	repo?: string;
 	kind?: "added" | "modified" | "deleted" | "renamed";

@@ -2,7 +2,7 @@ import type { AnalysisNode } from "../../workspace-tree/index.ts";
 
 /**
  * Source-read-only emphasis and signal phase. Runs once per applicable guide for each
- * canonical node, attributed as `<namespaced guide id>#annotateNode`. A future
+ * canonical node, attributed as `<namespaced guide id>#annotateNode`. The
  * classification phase completes for every node before this phase starts.
  */
 export type TreeAnnotationHook = (context: TreeAnnotationContext) => void | Promise<void>;

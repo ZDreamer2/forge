@@ -195,12 +195,13 @@ source migration.
 
 ## Guide extensions
 
-The [analyzed tree](server/docs/protocol.md#analyze-workspace-changes) supplies raw
-and attention totals, emphasis and attributed signals. Policies come from adopted
-guides. Registering Forge-base and adopting it through workspace `parents` enables
-its planning/test deemphasis and large changed Markdown warnings. Registration alone
-does not apply a rootless guide. An engine without adopted policies returns normal
-emphasis and no signals.
+The [analyzed tree](server/docs/protocol.md#analyze-workspace-changes) supplies
+classification, raw and attention totals, emphasis and attributed signals. Policies
+come from adopted guides. Registering Forge-base and adopting it through workspace
+`parents` enables its path classification, planning/test deemphasis and large
+changed Markdown warnings. Registration alone does not apply a rootless guide.
+Without adopted policies, classification defaults to `code`, emphasis is normal
+and signals are empty.
 
 Each workspace or codebase guide can supply the fixed entry
 `forge-extension/forge-extension.ts`, with private `internal/` modules and owner-local
@@ -226,10 +227,10 @@ Remove YAML `analysis_handlers`, including empty lists, and replace legacy
 units. Unknown hooks and unsupported `api` revisions fail loading.
 
 Modules load once at startup from validated workspace and rooted participant
-ancestry; restart to reload them. Forge invokes each applicable guide once per
-canonical node, merging workspace and both source-owner chains. Hooks can navigate
-and annotate the whole tree, so account for repeated invocation. Extensions are
-trusted, unsandboxed code; await all work and cooperate with cancellation.
+ancestry; restart to reload them. Forge invokes each applicable hook once per
+canonical node, merging workspace and both source-owner chains. Annotation hooks
+can navigate and annotate the whole tree, so account for repeated invocation.
+Extensions are trusted, unsandboxed code; await all work and cooperate with cancellation.
 
 An applicable load error or hook failure rejects analysis atomically while light
 APIs remain usable. An unrelated broken participant does not block analysis.

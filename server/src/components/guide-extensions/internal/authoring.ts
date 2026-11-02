@@ -1,11 +1,14 @@
 // Hook owners define semantics and vocabulary; this facade lists known hooks so
 // author typechecking and module loading can reject unknown contributions.
-import type { TreeAnnotationHook } from "../../tree-analysis/index.ts";
+import type { TreeAnnotationHook, TreeClassificationHook } from "../../tree-analysis/index.ts";
 
 export type {
 	AnalysisNode,
 	AnalysisSide,
 	AnalysisSignal,
+	Classification,
+	ClassificationNode,
+	ClassificationValue,
 	CodebaseFacts,
 	Emphasis,
 	ExplicitEmphasis,
@@ -14,6 +17,8 @@ export type {
 	SignalLocation,
 	TreeAnnotationContext,
 	TreeAnnotationHook,
+	TreeClassificationContext,
+	TreeClassificationHook,
 	TreeSourceFacts,
 } from "../../tree-analysis/index.ts";
 
@@ -26,5 +31,6 @@ export type {
 export interface ForgeExtension {
 	/** Contract revision; it changes only for breaking hook semantics. */
 	readonly api: 1;
+	readonly classifyNode?: TreeClassificationHook;
 	readonly annotateNode?: TreeAnnotationHook;
 }

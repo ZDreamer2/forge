@@ -1,10 +1,14 @@
+---
+edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
+---
+
 # workspace-tree Guide
 
 Vocabulary and data structure for a tree of workspace paths that sources build and analysis enriches. The same tree serves current changes, merge requests and the project tree, so review views share one model of nodes, ownership and metadata.
 
 ## Notes
 
-`index.ts` exposes the request-local `WorkspaceTree`, its insertion vocabulary and `createWorkspaceTree`. Insertion resolves owners from explicit startup context. `nodes` includes real directory ancestors; `entries` retains source insertion order. `totals(path)` derives basic numeric added/removed line totals from current entry data. Analysis uses a separate run facade and final pass; arbitrary custom totals remain deferred.
+`index.ts` exposes the request-local `WorkspaceTree`, its insertion vocabulary and `createWorkspaceTree`. Insertion resolves owners from explicit startup context. `nodes` includes real directory ancestors; `entries` retains source insertion order. `totals(path)` derives basic numeric added/removed line totals from current entry data. Analysis uses a separate run facade and final pass.
 
 ### Nodes
 
@@ -18,18 +22,19 @@ Owners (repository and codebase) are resolved here per side from registered root
 
 ### Metadata
 
-The metadata set is fixed: emphasis (`emphasized`, `normal`, `deemphasized`, `hidden`, with reasons), signals (severity, message, source) and totals. Handlers express themselves through this set. A new kind is a deliberate change across this unit, `api-contract` and the UI, because each kind needs a wire shape and a rendering. Metadata records which handler produced it; it may later reference server-owned overview documents explaining it.
+The metadata set is fixed: classification (`code`, `tests`, `docs`, `config`, `assets`), emphasis (`emphasized`, `normal`, `deemphasized`, `hidden`, with reasons), signals (severity, message, source) and totals. Handlers express themselves through this set. A new kind is a deliberate change across this unit, `api-contract` and its consumers. Explicit metadata records which handler produced it.
 
-Emphasis applies to a subtree, and the nearest explicit setting wins, so an important subtree can contain unimportant ones such as tests deeper down. Direct signal payloads stay on their origin node. Inclusive severity counts summarize them on ancestors and remain visible through de-emphasis.
+Classification is node-local and never inherits. Every run starts each node, including structural directories and root, at `{value: "code"}`. Sequential assignments replace the value, optional reason and producing handler together; explicit Code remains attributed. The tree validates category values at runtime. Classification writes use a current-target capability supplied to the classifier; annotation nodes and their navigable relatives expose only readonly classification. Categorizing a structural node does not create a changed entry.
 
-After all handlers finish, `finalizeAnalysis` propagates effective emphasis from parent to child and aggregates raw/attention-filtered added and removed totals and inclusive signal counts bottom-up. Effective emphasis retains handler, reason and explicit origin; default normal has no invented handler. The nearest explicit setting wins, including a normal reset beneath hidden/deemphasized ancestry. Handlers read direct annotations rather than stale derived values. Basic line totals cover every node including directories and the root. Renames count once along the destination path; former ancestry is retained for context with no duplicated file entry or counts. Binary entries contribute no fabricated text counts. Attention-filtered totals exclude effectively hidden/deemphasized entries. A file/directory transition contributes both its own statistics and its descendants.
+`deemphasize`, `restoreNormalEmphasis`, `emphasize` and `hide` set direct emphasis. The nearest explicit setting controls subtree inheritance, including a normal reset beneath hidden/deemphasized ancestry. `warn` and `notice` append direct signals with optional one-based side/line/column locations. Inclusive severity counts summarize them on ancestors and remain visible through de-emphasis.
+
+After all handlers finish, `finalizeAnalysis` propagates effective emphasis from parent to child and aggregates raw/attention-filtered added and removed totals and inclusive signal counts bottom-up. Effective emphasis retains handler, reason and explicit origin; default normal has no invented handler. Handlers read direct annotations rather than stale derived values. Basic line totals cover every node including directories and the root. Renames count once along the destination path; former ancestry is retained for context with no duplicated file entry or counts. Binary entries contribute no fabricated text counts. Attention-filtered totals exclude effectively hidden/deemphasized entries. A file/directory transition contributes both its own statistics and its descendants.
 
 ### Shape
 
 Light operations use the base tree without running analysis. `createAnalysisTree` builds one per-run facade/topology over its canonical source facts; it projects owner identity without executable handler descriptors. Each analysis node provides readonly parent/children navigation and synchronous preorder `walk()` including self. Root has no parent; rename topology uses the canonical destination path. Annotation methods attach the active handler identity without mutating the base.
 
-A tree is built incrementally per request through `insert()`. Its live `nodes` and `entries` views allow reading, not independent structural edits: insertion owns node identity, side ownership and synchronization of the map and ordered entries. Statistics remain writable on base nodes. Analysis views expose readonly copies of statistics and sides, while each run owns separate annotations; simultaneous analyses and light projections cannot share mutable annotation state. These are TypeScript API constraints, not a runtime sandbox for trusted code.
+A tree is built incrementally per request through `insert()`. Its live `nodes` and `entries` views allow reading, not independent structural edits: insertion owns node identity, side ownership and synchronization of the map and ordered entries. Statistics remain writable on base nodes. Analysis views expose readonly copies of statistics and sides, while each run owns separate classification and annotations; simultaneous analyses and light projections cannot share mutable metadata state. These are TypeScript API constraints, not a runtime sandbox for trusted code.
 
 Classes are data-only under the service conventions: methods operate on their own fields, without dependencies or I/O. Source access is a capability supplied separately, not a tree method.
 
-Results with their own lifecycle, such as check runs or review checkpoints, may live beside the tree keyed by path rather than on nodes. Decide that when they arrive; their visible effect can still be emphasis and signals.

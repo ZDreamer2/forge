@@ -24,6 +24,7 @@ function node(path: string, extra: Partial<AnalysisWireNode> = {}): AnalysisWire
 		path,
 		children: [],
 		signals: [],
+		classification: { value: "code" },
 		effectiveEmphasis: { value: "normal" },
 		signalCounts: { notice: 0, warning: 0 },
 		rawTotals: { added: 0, removed: 0 },

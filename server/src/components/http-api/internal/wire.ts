@@ -84,6 +84,11 @@ export function workspaceAnalysis(root: string, result: AnalysisResult): Workspa
 				path,
 				{
 					path,
+					classification: {
+						value: node.classification.value,
+						...(node.classification.reason === undefined ? {} : { reason: node.classification.reason }),
+						...(node.classification.handler === undefined ? {} : { handler: node.classification.handler.id }),
+					},
 					children: node.children.map((child) => child.path),
 					...(node.repo === undefined ? {} : { repo: node.repo }),
 					...(node.kind === undefined ? {} : { kind: node.kind }),

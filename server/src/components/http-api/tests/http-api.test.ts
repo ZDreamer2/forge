@@ -118,7 +118,16 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 		extensions: [
 			{
 				id: "workspace",
+				classifyNode: ({ node, classify }) => {
+					if (node.path.endsWith("a.md")) classify("docs", "Markdown");
+				},
 				annotateNode: async ({ node, source }) => {
+					if (node.path === ".") {
+						assert.equal(
+							[...node.walk()].find((descendant) => descendant.path.endsWith("a.md"))?.classification.value,
+							"docs",
+						);
+					}
 					if (node.path.endsWith("tests")) node.deemphasize("tests");
 					if (node.path.endsWith("a.md")) {
 						if ((await source.currentByteSize(node)) > 20480) node.warn("large");
@@ -157,6 +166,15 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 	assert.equal(result.nodes["__proto__/tests/a.md"]?.signals[1]?.location?.line, 2);
 	assert.equal(Object.getOwnPropertyDescriptor(result.codebases, "__proto__")?.value.root, "__proto__");
 	assert.deepEqual(result.handlers["workspace#annotateNode"], { id: "workspace#annotateNode" });
+	assert.deepEqual(result.nodes["__proto__/tests/a.md"]?.classification, {
+		value: "docs",
+		reason: "Markdown",
+		handler: "workspace#classifyNode",
+	});
+	for (const path of [".", "__proto__", "__proto__/tests"])
+		assert.deepEqual(result.nodes[path]?.classification, { value: "code" }, path);
+	assert.deepEqual(Object.keys(result.handlers), ["workspace#classifyNode", "workspace#annotateNode"]);
+	assert.deepEqual(result.handlers["workspace#classifyNode"], { id: "workspace#classifyNode" });
 	assert.equal(result.codebases.empty, undefined);
 	assert.equal(calls, 1);
 	assert.equal((await routes.request("/changes/analysis", { method: "HEAD" })).status, 200);
@@ -262,6 +280,7 @@ test("all projections keep root keys distinct from stable IDs, including the wor
 	assert.equal(analysis.nodes["nested/new.txt"]?.base?.codebase, ".");
 	assert.equal(analysis.nodes["nested/new.txt"]?.current?.codebase, "nested");
 	assert.deepEqual(analysis.handlers["workspace#annotateNode"], { id: "workspace#annotateNode" });
+	for (const node of Object.values(analysis.nodes)) assert.deepEqual(node.classification, { value: "code" });
 	const file = workspaceFileDiff(root, {
 		kind: "metadata_only",
 		path: "nested/new.txt",
@@ -279,4 +298,108 @@ test("all projections keep root keys distinct from stable IDs, including the wor
 	if (file.kind !== "metadata_only") throw new Error("Expected metadata-only rename");
 	assert.equal(file.base.codebase, ".");
 	assert.equal(file.current.codebase, "nested");
+});
+
+test("classification maps one canonical assignment while preserving rename sides, transitions and direct signals", async () => {
+	const root = "/selected";
+	const owners = [
+		{ id: "old-owner", root: `${root}/old`, guide: `${root}/guides/old`, parents: [] },
+		{ id: "new-owner", root: `${root}/new`, guide: `${root}/guides/new`, parents: [] },
+	];
+	const tree = createWorkspaceTree({ root, repositories: [{ path: "." }, { path: "new" }], codebases: owners });
+	tree.insert({
+		repo: ".",
+		path: "new/moved.md",
+		from: "old/previous.ts",
+		kind: "renamed",
+		base: { kind: "file" },
+		current: { kind: "file" },
+		statistics: { added: 2, removed: 1, binary: false },
+	});
+	tree.insert({
+		repo: ".",
+		path: "old/deleted.md",
+		kind: "deleted",
+		base: { kind: "file" },
+		statistics: { added: 0, removed: 3, binary: false },
+	});
+	tree.insert({
+		repo: "new",
+		path: "new/tests",
+		kind: "modified",
+		base: { kind: "file" },
+		current: { kind: "directory" },
+		statistics: { added: 1, removed: 4, binary: false },
+	});
+	tree.insert({
+		repo: "new",
+		path: "new/tests/child.svg",
+		kind: "added",
+		current: { kind: "symlink" },
+		statistics: { added: 5, removed: 0, binary: false },
+	});
+	const canonicalCalls: string[] = [];
+	const analyzer = createTreeAnalyzer({
+		config: { workspace: { guide: "/guide", parents: [] }, guides: owners, repositories: [], unavailable: [] },
+		extensions: [
+			{
+				id: "workspace",
+				classifyNode: ({ node, classify }) => {
+					canonicalCalls.push(node.path);
+					if (node.path.endsWith(".md")) classify("docs", "canonical extension");
+					if (node.path === "new/tests") classify("tests", "directory transition");
+				},
+				annotateNode: ({ node }) => {
+					if (node.path === "new/tests") node.warn("direct folder warning");
+				},
+			},
+			{
+				id: "codebase:new-owner",
+				classifyNode: ({ node, classify }) => {
+					if (node.path === "new/moved.md") classify("code", "explicit owner override");
+				},
+			},
+		],
+	});
+	const result = workspaceAnalysis(
+		root,
+		await analyzer.analyze(tree, { currentByteSize: async () => 0, signal: new AbortController().signal }),
+	);
+	assert.equal(canonicalCalls.length, Object.keys(result.nodes).length);
+	assert.equal(new Set(canonicalCalls).size, canonicalCalls.length);
+	assert.equal(canonicalCalls.includes("old/previous.ts"), false);
+	assert.equal(result.nodes["old/previous.ts"], undefined);
+	assert.deepEqual(result.nodes["new/moved.md"]?.classification, {
+		value: "code",
+		reason: "explicit owner override",
+		handler: "codebase:new-owner#classifyNode",
+	});
+	assert.equal(result.nodes["new/moved.md"]?.base?.codebase, "old");
+	assert.equal(result.nodes["new/moved.md"]?.current?.codebase, "new");
+	assert.deepEqual(result.nodes["old/deleted.md"]?.classification, {
+		value: "docs",
+		reason: "canonical extension",
+		handler: "workspace#classifyNode",
+	});
+	assert.equal(result.nodes["old/deleted.md"]?.current, undefined);
+	assert.equal(result.nodes.new?.current?.codebaseRoot, "new");
+	assert.equal(result.nodes.new?.current?.repositoryRoot, "new");
+	assert.deepEqual(result.nodes["new/tests"]?.classification, {
+		value: "tests",
+		reason: "directory transition",
+		handler: "workspace#classifyNode",
+	});
+	assert.deepEqual(result.nodes["new/tests/child.svg"]?.classification, { value: "code" });
+	assert.equal(result.nodes["new/tests/child.svg"]?.current?.kind, "symlink");
+	assert.equal(result.nodes["new/tests"]?.signals.length, 1);
+	assert.equal(result.nodes["new/tests/child.svg"]?.signals.length, 0);
+	assert.deepEqual(result.nodes["new/tests"]?.rawTotals, { added: 6, removed: 4 });
+	assert.deepEqual(result.nodes["."]?.rawTotals, { added: 8, removed: 8 });
+	assert.deepEqual(result.nodes["."]?.attentionTotals, { added: 8, removed: 8 });
+	assert.deepEqual(result.nodes["."]?.signalCounts, { notice: 0, warning: 1 });
+	for (const node of Object.values(result.nodes)) {
+		if (node.classification.handler) assert.ok(result.handlers[node.classification.handler]);
+		assert.equal("origin" in node.classification, false);
+	}
+	for (const entry of workspaceChanges(root, tree).changes) assert.equal("classification" in entry, false);
 });

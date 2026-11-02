@@ -65,7 +65,8 @@ test("retains each guide failure without exposing raw causes in public errors", 
 		"export default { annotateNode() {} };",
 		"export default { api: 1, annotateNode: undefined };",
 		"export default { api: 1, annotateNode: true };",
-		"export default { api: 1, classifyNode() {} };",
+		"export default { api: 1, classifyNode: undefined };",
+		"export default { api: 1, classifyNode: true };",
 		"export default { api: 1, checkDiff() {} };",
 		"export default { api: 1, [Symbol('unknown')]: true };",
 		"throw new Error('secret absolute path');",
@@ -113,6 +114,34 @@ test("validates every rooted chain before module execution", async () => {
 			guides: [...f.config.guides, { id: "broken", root: f.root, guide: join(f.root, "broken"), parents: ["absent"] }],
 		};
 		await assert.rejects(loadGuideExtensions(broken), /unavailable parent.*absent/);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test("loads classifier-only, annotation-only and both-hook entries", async () => {
+	const f = await fixture();
+	try {
+		for (const [guide, hooks] of [
+			["base", "classifyNode(ctx) { ctx.classify('docs'); }"],
+			["workspace", "annotateNode() {}"],
+			["app", "classifyNode() {}, annotateNode() {}"],
+		])
+			await f.write(`${guide}/forge-extension/forge-extension.ts`, `export default { api: 1, ${hooks} };`);
+		const result = await loadGuideExtensions(f.config);
+		assert.deepEqual(
+			result.map(({ id, classifyNode, annotateNode, error }) => ({
+				id,
+				classify: typeof classifyNode,
+				annotate: typeof annotateNode,
+				error,
+			})),
+			[
+				{ id: "codebase:base", classify: "function", annotate: "undefined", error: undefined },
+				{ id: "workspace", classify: "undefined", annotate: "function", error: undefined },
+				{ id: "codebase:app", classify: "function", annotate: "function", error: undefined },
+			],
+		);
 	} finally {
 		await f.cleanup();
 	}
