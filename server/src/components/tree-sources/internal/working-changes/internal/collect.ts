@@ -1,7 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
 import { type GitProcess, gitFailure, preflightRepository } from "../../../../../lib/git/index.ts";
-import type { ResolvedCodebase } from "../../../../workspace-config/index.ts";
+import type { RootedCodebase } from "../../../../workspace-config/index.ts";
 import {
 	createScope,
 	inside,
@@ -23,7 +23,7 @@ import { createFileDiff } from "./file-diff.ts";
 interface Deps {
 	readonly root: string;
 	readonly repositories: readonly RepositoryResolution[];
-	readonly codebases: readonly ResolvedCodebase[];
+	readonly codebases: readonly RootedCodebase[];
 	readonly git: GitProcess;
 }
 

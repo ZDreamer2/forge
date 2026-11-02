@@ -1,4 +1,4 @@
-import type { ResolvedCodebase } from "../../workspace-config/index.ts";
+import type { RootedCodebase } from "../../workspace-config/index.ts";
 
 export type NodeKind = "directory" | "file" | "symlink";
 export interface LineStatistics {
@@ -20,9 +20,9 @@ export interface TreeSide {
 	readonly path: string;
 	readonly kind: NodeKind;
 	readonly repository?: string;
-	readonly codebase?: ResolvedCodebase;
+	readonly codebase?: RootedCodebase;
 	readonly repositoryRoot?: string;
-	readonly codebaseRoot?: ResolvedCodebase;
+	readonly codebaseRoot?: RootedCodebase;
 }
 export interface TreeNode {
 	readonly path: string;
@@ -39,7 +39,7 @@ export interface TreeEntryNode extends TreeNode {
 }
 export interface TreeContext {
 	readonly root: string;
-	readonly codebases: readonly ResolvedCodebase[];
+	readonly codebases: readonly RootedCodebase[];
 	readonly repositories: readonly { readonly path: string }[];
 }
 export interface LineTotals {
@@ -48,9 +48,9 @@ export interface LineTotals {
 }
 
 export interface CodebaseFacts {
+	readonly id: string;
 	readonly root: string;
 	readonly guide: string;
-	readonly type?: { readonly id: string; readonly guide: string };
 }
 export interface AnalysisHandlerIdentity {
 	readonly id: string;

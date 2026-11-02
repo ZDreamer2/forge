@@ -1,4 +1,3 @@
-import { relative, sep } from "node:path";
 import type {
 	AnalysisSide,
 	ApiErrorCode,
@@ -10,6 +9,7 @@ import type {
 import type { AnalysisResult } from "../../tree-analysis/index.ts";
 import type { RepositoryResolution } from "../../workspace-repositories/index.ts";
 import type { WorkspaceTree } from "../../workspace-tree/index.ts";
+import { codebaseDefinition } from "./codebase-definition.ts";
 
 export function apiError(code: ApiErrorCode, handler?: string): ApiFailure {
 	const messages = {
@@ -40,20 +40,15 @@ export function workspaceIdentity(
 export function workspaceChanges(root: string, tree: WorkspaceTree): WorkspaceChanges {
 	const definitions = new Map<string, WorkspaceChanges["codebases"][string]>();
 	const changes: WorkspaceChanges["changes"] = [];
-	const workspacePath = (path: string) => relative(root, path).split(sep).join("/") || ".";
 	for (const entry of tree.entries) {
 		if (entry.kind === undefined) continue;
 		const owners = new Set<string>();
 		for (const side of [entry.base, entry.current]) {
 			const codebase = side?.codebase;
 			if (codebase === undefined) continue;
-			const id = workspacePath(codebase.root);
-			owners.add(id);
-			definitions.set(id, {
-				root: id,
-				guidance: workspacePath(codebase.guide),
-				...(codebase.type ? { type: codebase.type.id } : {}),
-			});
+			const { rootKey, definition } = codebaseDefinition(root, codebase);
+			owners.add(rootKey);
+			definitions.set(rootKey, definition);
 		}
 		changes.push({
 			repo: entry.repo,
@@ -68,15 +63,10 @@ export function workspaceChanges(root: string, tree: WorkspaceTree): WorkspaceCh
 
 export function workspaceAnalysis(root: string, result: AnalysisResult): WorkspaceAnalysis {
 	const codebases = new Map<string, WorkspaceAnalysis["codebases"][string]>();
-	const workspacePath = (path: string) => relative(root, path).split(sep).join("/") || ".";
-	const owner = (codebase: { root: string; guide: string; type?: { id: string } }): string => {
-		const id = workspacePath(codebase.root);
-		codebases.set(id, {
-			root: id,
-			guidance: workspacePath(codebase.guide),
-			...(codebase.type === undefined ? {} : { type: codebase.type.id }),
-		});
-		return id;
+	const owner = (codebase: { id: string; root: string; guide: string }): string => {
+		const { rootKey, definition } = codebaseDefinition(root, codebase);
+		codebases.set(rootKey, definition);
+		return rootKey;
 	};
 	const side = (value: NonNullable<import("../../workspace-tree/index.ts").AnalysisNode["base"]>): AnalysisSide => ({
 		path: value.path,

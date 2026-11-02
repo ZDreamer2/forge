@@ -14,9 +14,9 @@ import type {
 
 export function codebaseFacts(owner: CodebaseFacts): CodebaseFacts {
 	return {
+		id: owner.id,
 		root: owner.root,
 		guide: owner.guide,
-		...(owner.type ? { type: { id: owner.type.id, guide: owner.type.guide } } : {}),
 	};
 }
 function sideFacts(side: TreeSide | undefined): AnalysisSide | undefined {

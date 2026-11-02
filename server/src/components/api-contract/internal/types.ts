@@ -10,7 +10,7 @@ export type ApiFailure = {
 };
 
 export type WorkspaceChanges = {
-	codebases: Record<string, { root: string; guidance: string; type?: string }>;
+	codebases: Record<string, { id: string; root: string; guidance: string }>;
 	changes: {
 		repo: string;
 		path: string;

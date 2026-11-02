@@ -1,9 +1,14 @@
+export { findCodebaseRoot, resolveGuideChain, resolveWorkspaceChain } from "./internal/guide-chains.ts";
 export { loadWorkspaceConfig, validRepositoryPath } from "./internal/load.ts";
+export { rootedCodebases } from "./internal/rooted-codebases.ts";
 export type {
 	RepositoryDeclaration,
 	ResolvedAnalysisHandler,
 	ResolvedCodebase,
-	ResolvedCodebaseType,
+	ResolvedGuideChain,
+	ResolvedWorkspaceGuide,
+	RootedCodebase,
+	UnavailableCodebase,
 	WorkspaceConfig,
 } from "./internal/types.ts";
 export { WorkspaceConfigError } from "./internal/types.ts";

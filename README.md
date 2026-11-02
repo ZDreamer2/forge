@@ -9,7 +9,8 @@ Read-only workspace server and React overview using the shared
 count and separately labelled all-change and attention line totals.
 Executable: `forge`. Licensed under [MIT](LICENSE).
 
-Registry `0.1.2` is the published server baseline; the React overview is unreleased.
+Registry `0.1.2` is the published server baseline; the configuration and API below
+describe the current source. The React overview is unreleased.
 
 The `0.x` configuration contract is provisional. Breaking changes require a minor
 release with migration notes. Source acceptance, publication and hosting adoption
@@ -124,43 +125,73 @@ remain future work.
 
 ## Workspace configuration and migration
 
-The source reads the same concrete registry as Python Forge, with required server
-repository declarations and optional display name:
+The server reads the unified guide registry shared with Python Forge, with required
+server repository declarations and optional display name:
 
 ```yaml
 display_name: Example workspace
 repositories:
   - .
   - tools/optional-checkout
+parents:
+  - shared-conventions
 codebases:
+  - ../../../shared/conventions/forge-codebase.yaml
   - ../../../app/docs/forge/forge-codebase.yaml
-codebase_types: []
 ```
 
-Marker references are relative to the containing YAML file; repository IDs are
-normalized workspace-relative POSIX paths, with `.` for the main repository.
-Repository declarations are ordered and explicit; codebase registration does not
-opt a repository into collection. Missing marker/root directories are skipped;
-present malformed declarations, duplicate references/roots/type IDs and unknown
-adopted types fail startup. Closest registered roots determine membership lexically,
-including deleted and renamed paths. Registry parity with Python does not imply
-repository discovery or staging-scope parity: Python still scans repositories.
+Each registered marker is named `forge-codebase.yaml`. In this example, the shared
+marker declares `id: shared-conventions` and omits `root`. The app marker declares:
+
+```yaml
+id: example-app
+root: ../..
+parents:
+  - shared-conventions
+```
+
+`id` is a required nonempty stable guide identifier, unique among available guides.
+`root` is optional and relative to the marker directory. A rootless guide supplies
+reusable conventions; only available rooted guides own source paths. Ordered
+`parents` lists reference distinct registered guide IDs. A rooted guide can also
+be reused as a parent without changing its ownership.
+
+Marker references are relative to the containing YAML file; repository paths must
+be normalized workspace-relative POSIX paths, with `.` for the main repository.
+Repository declarations are ordered and explicit; registering a codebase does not
+opt a repository into collection. Closest registered roots determine membership
+lexically, including deleted and renamed paths. Python retains its separate
+repository scan; registry parity does not imply collection or staging-scope parity.
+
+Missing markers or source roots make registrations unavailable and are optional
+until required by ancestry. Present malformed declarations fail even when their
+root is missing. Duplicate canonical references, available IDs or roots fail.
+Startup validates the workspace chain and independently composes every available
+rooted participant with it, including participants without changes. Required
+unavailable parents, cycles and contradictory ordering fail before handlers load
+or the listener opens. Unrelated rootless ancestry stays unresolved.
 
 `display_name` is an optional nonempty string, preserved literally. If omitted,
 the server uses the canonical workspace basename (or root itself). Restart reloads
-configuration, registry markers and repository participation.
+registration, composition and repository participation; Refresh observes changes
+within that startup context.
 
-This is a breaking migration from the earlier executable policy:
+This is a breaking configuration and public vocabulary migration:
 
-- Move `displayName` to YAML `display_name` and the ordered repository paths to
-  YAML `repositories`. Register concrete/type marker files in the shared registry.
-- Remove `workspace.ts`, policy-specific TypeScript checks and imports from
-  `@zdreamer/forge/workspace`; that export is removed.
-- Remove uses of `forge inspect-workspace` and the optional `test:workspace`
-  policy argument. The supported source CLI is `forge serve --workspace <path>`.
-- Keep an independent exact-pinned executable installation when useful. Existing
-  registry installations of the earlier diagnostic remain unchanged until an approved
-  release and explicit repin. No compatibility loader is provided.
+- Replace old type markers with `forge-codebase.yaml`, add stable `id`, register all
+  guides in `codebases`, and replace `type` adoption with ordered `parents`.
+  Remove `codebase_types`, including empty lists. Legacy declarations fail with
+  migration diagnostics rather than compatibility aliases.
+- Public analysis-owner facts require `{id, root, guide}`. Changes, analysis and
+  file definitions require `{id, root, guidance}`. Definition-map keys and owner
+  references remain workspace-relative roots (`.` allowed); stable IDs are values,
+  not replacement keys. Ancestry is not exposed as an ownership graph.
+
+Earlier executable-policy installations also need YAML `display_name` and
+`repositories`, removal of `workspace.ts` and `@zdreamer/forge/workspace` imports,
+and the supported `forge serve --workspace <path>` CLI instead of
+`forge inspect-workspace`. Publication and installation repins are separate from
+source migration.
 
 ## Analysis handlers
 
@@ -169,7 +200,7 @@ and attention totals, emphasis and attributed signals. Built-in and configured
 handlers annotate the same canonical tree.
 
 Register trusted modules with optional ordered `analysis_handlers` lists on
-`forge-workspace.yaml` or a concrete `forge-codebase.yaml`:
+`forge-workspace.yaml` or a registered rooted `forge-codebase.yaml`:
 
 ```yaml
 analysis_handlers:
@@ -193,8 +224,10 @@ imports use explicit extensions. The type-only public `./analysis` entry supplie
 authoring vocabulary, without operational loader/runner APIs. No runtime helper
 import is needed. Restart the process to reload modules.
 
-Handlers run after built-ins, workspace first and then concrete codebases in
-registry order. They can annotate the whole tree. A handler failure fails analysis
-while `/api/changes` remains available. See the
+Handlers run after built-ins, workspace first and then available rooted participants
+in registry/list order, preserving repeated references. Parent adoption adds no
+executions; a rooted parent runs only its own ordinary registered list. Rootless
+guides do not schedule handlers. Handlers can annotate the whole tree. A handler
+failure fails analysis while `/api/changes` remains available. See the
 [analysis authoring guide](server/src/components/tree-analysis/docs/UnitGuide.md)
 for source capabilities, attribution and execution limits.

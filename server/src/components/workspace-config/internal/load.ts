@@ -4,7 +4,7 @@ import { parse } from "yaml";
 import {
 	type ResolvedAnalysisHandler,
 	type ResolvedCodebase,
-	type ResolvedCodebaseType,
+	type UnavailableCodebase,
 	type WorkspaceConfig,
 	WorkspaceConfigError,
 } from "./types.ts";
@@ -82,12 +82,16 @@ async function references(config: string, data: Record<string, unknown>, key: st
 	const paths: string[] = [];
 	for (const value of raw) {
 		const path = relative(value, `${config}: ${key} entry`);
+		if (basename(path) === "forge-codebase-type.yaml")
+			throw new WorkspaceConfigError(
+				`${config}: legacy forge-codebase-type.yaml reference; migrate to forge-codebase.yaml with id and parents, registered in codebases`,
+			);
 		if (basename(path) !== filename)
 			throw new WorkspaceConfigError(`${config}: ${key} must reference ${filename} files`);
 		const target = await canonical(`${dirname(config)}/${path}`);
 		if (seen.has(target)) throw new WorkspaceConfigError(`${config}: duplicate ${key} reference ${target}`);
 		seen.add(target);
-		if (await exists(target)) paths.push(target);
+		paths.push(target);
 	}
 	return paths;
 }
@@ -105,6 +109,27 @@ function analysisHandlers(config: string, data: Record<string, unknown>): readon
 	});
 }
 
+function rejectLegacy(config: string, data: Record<string, unknown>): void {
+	for (const key of ["type", "codebase_types"]) {
+		if (Object.hasOwn(data, key))
+			throw new WorkspaceConfigError(
+				`${config}: legacy ${JSON.stringify(key)} is unsupported; migrate to codebases registrations of forge-codebase.yaml with stable id and ordered parents`,
+			);
+	}
+}
+
+function parents(config: string, data: Record<string, unknown>): readonly string[] {
+	const raw = Object.hasOwn(data, "parents") ? data.parents : [];
+	if (!Array.isArray(raw)) throw new WorkspaceConfigError(`${config}: parents must be an ordered list of distinct IDs`);
+	const result: string[] = [];
+	for (const value of raw) {
+		const id = string(value, `${config}: parent ID`);
+		if (result.includes(id)) throw new WorkspaceConfigError(`${config}: duplicate parent ID ${JSON.stringify(id)}`);
+		result.push(id);
+	}
+	return result;
+}
+
 export function validRepositoryPath(path: string): boolean {
 	return (
 		path === "." ||
@@ -120,33 +145,44 @@ export async function loadWorkspaceConfig(absolutePath: string): Promise<Workspa
 	if (!isAbsolute(absolutePath)) throw new WorkspaceConfigError("Workspace configuration path must be absolute");
 	const config = await canonical(absolutePath);
 	const data = await mapping(config);
-	const types = new Map<string, ResolvedCodebaseType>();
-	for (const marker of await references(config, data, "codebase_types", "forge-codebase-type.yaml")) {
-		const id = string((await mapping(marker)).id, `${marker}: id`);
-		if (types.has(id)) throw new WorkspaceConfigError(`Duplicate codebase type ID ${id}`);
-		types.set(id, { id, guide: dirname(marker) });
-	}
-	const codebases: ResolvedCodebase[] = [];
+	rejectLegacy(config, data);
+	const workspace = { guide: dirname(config), parents: parents(config, data) };
+	const guides: ResolvedCodebase[] = [];
+	const unavailable: UnavailableCodebase[] = [];
 	const roots = new Set<string>();
+	const identifiers = new Set<string>();
 	for (const marker of await references(config, data, "codebases", "forge-codebase.yaml")) {
-		const concrete = await mapping(marker);
-		// Concrete roots stay lexical, including symlinks; marker references are canonical.
-		const root = resolve(dirname(marker), relative(concrete.root, `${marker}: root`));
-		if (!(await exists(root))) continue;
-		if (!(await stat(root)).isDirectory()) throw new WorkspaceConfigError(`Codebase root is not a directory: ${root}`);
-		if (roots.has(root)) throw new WorkspaceConfigError(`Duplicate codebase root ${root}`);
-		roots.add(root);
-		let type: ResolvedCodebaseType | undefined;
-		if (Object.hasOwn(concrete, "type")) {
-			const id = string(concrete.type, `${marker}: type`);
-			type = types.get(id);
-			if (!type) throw new WorkspaceConfigError(`${marker}: unknown codebase type ${id}`);
+		if (!(await exists(marker))) {
+			unavailable.push({ marker, reason: "marker is missing" });
+			continue;
 		}
-		codebases.push({
-			root,
+		const declaration = await mapping(marker);
+		rejectLegacy(marker, declaration);
+		const id = string(declaration.id, `${marker}: id`);
+		const inherited = parents(marker, declaration);
+		const handlers = analysisHandlers(marker, declaration);
+		let root: string | undefined;
+		if (Object.hasOwn(declaration, "root")) {
+			// Source roots stay lexical, including symlinks; marker references are canonical.
+			root = resolve(dirname(marker), relative(declaration.root, `${marker}: root`));
+			if (!(await exists(root))) {
+				unavailable.push({ marker, id, reason: `root is missing: ${root}` });
+				continue;
+			}
+			if (!(await stat(root)).isDirectory())
+				throw new WorkspaceConfigError(`${marker}: Codebase root is not a directory: ${root}`);
+		}
+		if (identifiers.has(id)) throw new WorkspaceConfigError(`${marker}: Duplicate codebase ID ${JSON.stringify(id)}`);
+		if (root !== undefined && roots.has(root))
+			throw new WorkspaceConfigError(`${marker}: Duplicate codebase root ${root}`);
+		identifiers.add(id);
+		if (root !== undefined) roots.add(root);
+		guides.push({
+			id,
 			guide: dirname(marker),
-			analysisHandlers: analysisHandlers(marker, concrete),
-			...(type === undefined ? {} : { type }),
+			parents: inherited,
+			analysisHandlers: handlers,
+			...(root === undefined ? {} : { root }),
 		});
 	}
 	if (!Array.isArray(data.repositories)) throw new WorkspaceConfigError(`${config}: repositories must be a list`);
@@ -168,8 +204,9 @@ export async function loadWorkspaceConfig(absolutePath: string): Promise<Workspa
 	return {
 		analysisHandlers: analysisHandlers(config, data),
 		repositories,
-		codebases,
-		codebaseTypes: [...types.values()],
+		workspace,
+		guides,
+		unavailable,
 		...(displayName === undefined ? {} : { displayName }),
 	};
 }

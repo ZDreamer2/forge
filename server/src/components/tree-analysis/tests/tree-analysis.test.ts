@@ -222,7 +222,7 @@ test("excluded trees perform no size work and codebase context grants whole-tree
 		{ path: "tests/a.txt" },
 		{ path: "tests", current: { kind: "directory" }, kind: undefined },
 	]);
-	const owner = { root: "/workspace/owned", guide: "/guides/owned", type: { id: "service", guide: "/guides/service" } };
+	const owner = { id: "owned-service", root: "/workspace/owned", guide: "/guides/owned" };
 	const analyzer = createTreeAnalyzer({
 		handlers: [
 			{

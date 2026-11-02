@@ -18,7 +18,7 @@ async function fixture() {
 	execFileSync("git", ["init", "-q", root]);
 	await mkdir(join(root, "docs/forge/workspace"), { recursive: true });
 	const configuration = join(root, "docs/forge/workspace/forge-workspace.yaml");
-	await writeFile(configuration, "repositories: ['.', absent]\ncodebases: []\ncodebase_types: []\n");
+	await writeFile(configuration, "repositories: ['.', absent]\ncodebases: []\n");
 	return { root, configuration };
 }
 async function reservePort() {
@@ -206,7 +206,7 @@ test("CLI fails on invalid port, bad configuration and occupied port without a s
 		const process = run(["serve", "--workspace", root], { ZD_AI_FORGE_PORT: String(reservation.port) });
 		try {
 			assert.equal((await bounded(process.exited)).code, 1);
-			assert.match(process.stderr(), /forge-workspace.yaml: codebase_types must be a list/);
+			assert.match(process.stderr(), /forge-workspace.yaml: codebases must be a list/);
 			assert.equal(process.stdout(), "");
 		} finally {
 			process.child.kill("SIGKILL");
@@ -283,10 +283,7 @@ test("CLI aborts active analysis on shutdown and reloads modules in a fresh proc
 	const helper = await mkdtemp(join(tmpdir(), "forge-handler-marker-"));
 	const marker = join(helper, "started");
 	const handler = join(root, "docs/forge/workspace/handler.mjs");
-	await writeFile(
-		configuration,
-		"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
-	);
+	await writeFile(configuration, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
 	await writeFile(
 		handler,
 		`import { writeFile } from 'node:fs/promises'; export default async root => { await writeFile(${JSON.stringify(marker)}, 'started'); await new Promise(resolve => root.signal.addEventListener('abort', resolve, {once:true})); root.signal.throwIfAborted(); };`,
@@ -328,5 +325,27 @@ test("CLI aborts active analysis on shutdown and reloads modules in a fresh proc
 	} finally {
 		server.child.kill("SIGKILL");
 		await Promise.all([rm(root, { recursive: true, force: true }), rm(helper, { recursive: true, force: true })]);
+	}
+});
+
+test("CLI rejects obsolete configuration with actionable unified-registry migration diagnostics", async () => {
+	const { root, configuration } = await fixture();
+	try {
+		for (const content of [
+			"repositories: []\ncodebases: []\ncodebase_types: []",
+			"repositories: []\ncodebases: [old/forge-codebase-type.yaml]",
+		]) {
+			await writeFile(configuration, content);
+			const process = run(["serve", "--workspace", root], { ZD_AI_FORGE_PORT: "30111" });
+			try {
+				assert.equal((await bounded(process.exited)).code, 1);
+				assert.equal(process.stdout(), "");
+				assert.match(process.stderr(), /legacy.*migrate.*forge-codebase.yaml/);
+			} finally {
+				process.child.kill("SIGKILL");
+			}
+		}
+	} finally {
+		await rm(root, { recursive: true, force: true });
 	}
 });

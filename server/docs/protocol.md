@@ -63,11 +63,15 @@ authority for broader dirt capture, checking or staging scopes.
 
 ### Ownership definitions
 
-Changes responses include response-local `codebases`:
-`{ "<id>": { "root": "path", "guidance": "path", "type"?: "registered-type-id" } }`.
-IDs/roots are normalized concrete workspace-relative roots (`.` allowed), not reusable
-guidance/type IDs. Guidance is workspace-relative and may point outside it without
-authorizing file access. Only referenced definitions are included.
+Changes, analysis and file responses include response-local `codebases` definitions:
+`{ "<root-key>": { "id": "stable-guide-id", "root": "path", "guidance": "path" } }`.
+All three fields are required. Definition-map keys and side/handler owner references
+are normalized workspace-relative source roots (`.` allowed). `id` is the stable
+guide identifier, independent of checkout placement; it never substitutes for a
+root key. Guidance is workspace-relative and may point outside the workspace
+without authorizing file access. Only referenced rooted owners are included;
+rootless guides create no synthetic owners. Definitions expose no ancestry graph
+or legacy `type` field.
 
 Ownership resolves lexically per present side: the closest containing registered
 root wins; unmatched paths have no owner. Rename membership deduplicates base/current
@@ -135,7 +139,7 @@ change has `repo`, `path`, `kind`, `codebases: string[]`, and rename-only `from`
 | `path` | Current path, or previous path for deletion. |
 | `kind` | `added`, `modified`, `deleted`, `renamed`; type changes become modified, defensive copies become added. |
 | `from` | Previous path, required only for renamed. |
-| `codebases` | Unique present-side concrete owner IDs; empty is valid. |
+| `codebases` | Unique present-side owner root keys; empty is valid. |
 
 Empty success is `{ "codebases": {}, "changes": [] }`. This light projection runs
 no handlers and omits statistics, hierarchy, totals and review metadata; clients use
@@ -164,7 +168,7 @@ has an entry in the path-indexed `nodes` table. Each node carries:
 Side kinds/owners are independent through renames and file/directory transitions.
 A rename occurs once at its destination; previous ancestors can remain with zero
 counts. Side root fields label directory boundaries with the corresponding
-repository/codebase ID. File/directory nodes count their own change and descendants.
+repository ID or codebase root key. File/directory nodes count their own change and descendants.
 `rawTotals` counts every nonbinary change exactly once; binaries contribute no
 fabricated lines.
 `attentionTotals` excludes effectively deemphasized/hidden entries.
@@ -177,13 +181,16 @@ reason, producing handler ID and origin path; default normal invents none.
 Signals are `{severity: "notice" | "warning", message, handler, location?}`;
 `location` is `{side: "base" | "current", line, column?}` with one-based coordinates.
 Emphasis never suppresses signals or ancestor counts. `codebases` uses the shared
-definitions; `handlers` maps safe occurrence IDs to `{id, codebase?}`, distinguishing
+definitions; side `codebase`/`codebaseRoot` and handler `codebase` references are
+owner root keys. `handlers` maps safe occurrence IDs to `{id, codebase?}`, distinguishing
 repeated module references without exposing absolute module paths. Referenced handler
 owners can have no changed files; definitions do not create tree nodes.
 
-Built-ins run first, then workspace handlers in list order and concrete handlers in
-registry/list order. All trusted handlers see the whole tree and can annotate any
-node. Built-ins:
+Built-ins run first, then direct workspace handlers in list order and available
+registered rooted-participant handlers in registry/list order. Repeated references
+remain separate occurrences. Parent adoption adds no executions; a rooted parent
+runs its own ordinary registered list, and rootless guides schedule none. All
+trusted handlers see the whole tree and can annotate any node. Built-ins:
 
 - Deemphasize root `plans/` and directories named exactly `tests` or `Tests`.
 - Warn on current regular Markdown (`.md`/`.markdown`, case-insensitive) larger than

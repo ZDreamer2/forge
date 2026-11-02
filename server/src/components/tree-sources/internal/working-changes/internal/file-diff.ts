@@ -8,7 +8,7 @@ import {
 	GitOutputLimitError,
 	type GitProcess,
 } from "../../../../../lib/git/index.ts";
-import type { ResolvedCodebase } from "../../../../workspace-config/index.ts";
+import type { RootedCodebase } from "../../../../workspace-config/index.ts";
 import {
 	createScope,
 	inside,
@@ -26,7 +26,7 @@ export interface FileSide {
 	kind: "file" | "symlink" | "directory";
 	mode: string;
 	present: boolean;
-	codebase?: ResolvedCodebase;
+	codebase?: RootedCodebase;
 }
 export class SourceForbiddenError extends Error {}
 export interface Descriptor {

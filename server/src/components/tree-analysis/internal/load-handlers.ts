@@ -1,6 +1,6 @@
 import { relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { WorkspaceConfig } from "../../workspace-config/index.ts";
+import { rootedCodebases, type WorkspaceConfig } from "../../workspace-config/index.ts";
 import { codebaseFacts } from "../../workspace-tree/index.ts";
 import { AnalysisHandlerError, type RegisteredAnalysisHandler } from "./types.ts";
 export async function loadAnalysisHandlers(
@@ -10,7 +10,7 @@ export async function loadAnalysisHandlers(
 	const registry: RegisteredAnalysisHandler[] = [];
 	const owners = [
 		{ references: config.analysisHandlers ?? [], codebase: undefined },
-		...config.codebases.map((codebase) => ({
+		...rootedCodebases(config).map((codebase) => ({
 			references: codebase.analysisHandlers ?? [],
 			codebase: codebaseFacts(codebase),
 		})),

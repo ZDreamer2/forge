@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import type { WorkspaceAnalysis, WorkspaceChanges } from "../../components/api-contract/index.ts";
+import { rootedCodebases } from "../../components/workspace-config/index.ts";
 import { start } from "../startup.ts";
 
 async function availablePort(): Promise<number> {
@@ -27,7 +28,7 @@ async function fixture(t: TestContext) {
 	const root = join(directory, "workspace");
 	await mkdir(join(root, "docs/forge/workspace"), { recursive: true });
 	const configPath = join(root, "docs/forge/workspace/forge-workspace.yaml");
-	await writeFile(configPath, "repositories: ['.']\ncodebases: []\ncodebase_types: []\n");
+	await writeFile(configPath, "repositories: ['.']\ncodebases: []\n");
 	return {
 		directory,
 		root,
@@ -45,7 +46,7 @@ test("startup loads one configuration and publishes an ordered repository snapsh
 	for (const name of ["nested", "undeclared"]) {
 		execFileSync("git", ["init", "-q", join(input.root, name)]);
 	}
-	await writeFile(input.configPath, "repositories: [nested, absent, '.']\ncodebases: []\ncodebase_types: []\n");
+	await writeFile(input.configPath, "repositories: [nested, absent, '.']\ncodebases: []\n");
 	const previous = signalListeners();
 	const server = await start(input.options);
 	t.after(server.close);
@@ -79,11 +80,11 @@ test("socket requests collect fresh changes with startup routing and fail safely
 	execFileSync("git", ["init", "-q", nested]);
 	await mkdir(join(input.root, "guidance"));
 	await mkdir(join(nested, "guidance"));
-	await writeFile(join(input.root, "guidance/forge-codebase.yaml"), "root: ..\n");
-	await writeFile(join(nested, "guidance/forge-codebase.yaml"), "root: ..\n");
+	await writeFile(join(input.root, "guidance/forge-codebase.yaml"), "id: workspace-owner\nroot: ..\n");
+	await writeFile(join(nested, "guidance/forge-codebase.yaml"), "id: nested-owner\nroot: ..\n");
 	await writeFile(
 		input.configPath,
-		"repositories: [nested, absent, '.']\ncodebases: [../../../guidance/forge-codebase.yaml, ../../../nested/guidance/forge-codebase.yaml]\ncodebase_types: []\n",
+		"repositories: [nested, absent, '.']\ncodebases: [../../../guidance/forge-codebase.yaml, ../../../nested/guidance/forge-codebase.yaml]\n",
 	);
 	await writeFile(join(input.root, ".gitignore"), "docs/\nguidance/\nnested/\nabsent/\n");
 	await writeFile(join(input.root, "tracked.txt"), "baseline\n");
@@ -122,8 +123,8 @@ test("socket requests collect fresh changes with startup routing and fail safely
 	});
 	assert.deepEqual(await (await fetch(`${server.address}/api/changes`)).json(), {
 		codebases: {
-			nested: { root: "nested", guidance: "nested/guidance" },
-			".": { root: ".", guidance: "guidance" },
+			nested: { id: "nested-owner", root: "nested", guidance: "nested/guidance" },
+			".": { id: "workspace-owner", root: ".", guidance: "guidance" },
 		},
 		changes: [expectedChange("nested", "nested/child.txt"), expectedChange(".", "tracked.txt")],
 	});
@@ -133,8 +134,8 @@ test("socket requests collect fresh changes with startup routing and fail safely
 	await writeFile(join(input.root, "absent/ignored.txt"), "not a startup participant\n");
 	assert.deepEqual(await (await fetch(`${server.address}/api/changes`)).json(), {
 		codebases: {
-			nested: { root: "nested", guidance: "nested/guidance" },
-			".": { root: ".", guidance: "guidance" },
+			nested: { id: "nested-owner", root: "nested", guidance: "nested/guidance" },
+			".": { id: "workspace-owner", root: ".", guidance: "guidance" },
 		},
 		changes: [expectedChange("nested", "nested/child.txt"), expectedChange(".", "tracked.txt")],
 	});
@@ -171,7 +172,7 @@ test("termination signals dispose the listener and remove both owned signal hand
 test("fresh startup reads current configuration declarations from its selected checkout", async (t) => {
 	for (const missing of ["first", "second"]) {
 		const input = await fixture(t);
-		await writeFile(input.configPath, `repositories: [${missing}]\ncodebases: []\ncodebase_types: []\n`);
+		await writeFile(input.configPath, `repositories: [${missing}]\ncodebases: []\n`);
 		const server = await start(input.options);
 		t.after(server.close);
 		assert.deepEqual(server.snapshot.repositories, [{ path: missing, status: "missing" }]);
@@ -186,7 +187,7 @@ test("configuration and repository failures refuse startup before installing ter
 		if (failure === "import") await writeFile(input.configPath, "not: [valid YAML");
 		if (failure === "nested") {
 			await mkdir(join(input.root, "nested"));
-			await writeFile(input.configPath, "repositories: [nested]\ncodebases: []\ncodebase_types: []\n");
+			await writeFile(input.configPath, "repositories: [nested]\ncodebases: []\n");
 		}
 		if (failure === "git") await rm(join(input.directory, ".git"), { recursive: true });
 		const previous = signalListeners();
@@ -198,10 +199,7 @@ test("configuration and repository failures refuse startup before installing ter
 test("startup publishes explicit literal configuration name instead of checkout basename", async (t) => {
 	const input = await fixture(t);
 	const name = "BiCo <script> & 🛠️";
-	await writeFile(
-		input.configPath,
-		`display_name: ${JSON.stringify(name)}\nrepositories: []\ncodebases: []\ncodebase_types: []\n`,
-	);
+	await writeFile(input.configPath, `display_name: ${JSON.stringify(name)}\nrepositories: []\ncodebases: []\n`);
 	const server = await start(input.options);
 	t.after(server.close);
 	assert.deepEqual(await (await fetch(`${server.address}/api/workspace`)).json(), {
@@ -213,10 +211,7 @@ test("startup publishes explicit literal configuration name instead of checkout 
 test("startup handler failures affect analysis only and never expose their private cause", async (t) => {
 	for (const failure of ["missing", "export", "invoke"] as const) {
 		const input = await fixture(t);
-		await writeFile(
-			input.configPath,
-			"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
-		);
+		await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
 		if (failure !== "missing")
 			await writeFile(
 				join(input.root, "docs/forge/workspace/handler.mjs"),
@@ -243,10 +238,7 @@ test("invocation diagnostics stay in bounded sanitized server logs, not HTTP err
 		await t.test(asynchronous ? "async rejection" : "sync throw", async (t) => {
 			const input = await fixture(t);
 			const diagnostic = `/private/secret detail\n\t\u001b${"x".repeat(2000)}`;
-			await writeFile(
-				input.configPath,
-				"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
-			);
+			await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
 			await writeFile(
 				join(input.root, "docs/forge/workspace/handler.mjs"),
 				`export default ${asynchronous ? "async " : ""}() => { throw new Error(${JSON.stringify(diagnostic)}); };`,
@@ -276,10 +268,7 @@ test("invocation diagnostics stay in bounded sanitized server logs, not HTTP err
 
 test("simultaneous analysis runs and light requests remain independent", async (t) => {
 	const input = await fixture(t);
-	await writeFile(
-		input.configPath,
-		"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
-	);
+	await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
 	await writeFile(
 		join(input.root, "docs/forge/workspace/handler.mjs"),
 		"export default async root => { await new Promise(resolve => setTimeout(resolve, 20)); root.notice('one invocation'); };",
@@ -305,10 +294,7 @@ test("a disconnected analysis client aborts its cooperative handler while light 
 	const input = await fixture(t);
 	const started = join(input.directory, "analysis-started");
 	const cancelled = join(input.directory, "analysis-cancelled");
-	await writeFile(
-		input.configPath,
-		"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: ['./handler.mjs']\n",
-	);
+	await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
 	await writeFile(
 		join(input.root, "docs/forge/workspace/handler.mjs"),
 		`import { writeFile } from 'node:fs/promises'; export default async root => { await writeFile(${JSON.stringify(started)}, 'started'); await new Promise(resolve => root.signal.addEventListener('abort', resolve, {once:true})); await writeFile(${JSON.stringify(cancelled)}, 'cancelled'); root.signal.throwIfAborted(); };`,
@@ -345,10 +331,7 @@ test("assembled file routes return live patches and context while isolating anal
 		join(input.root, "handler.mjs"),
 		"export default () => { throw new Error('private handler failure') };\n",
 	);
-	await writeFile(
-		input.configPath,
-		"repositories: ['.']\ncodebases: []\ncodebase_types: []\nanalysis_handlers: [../../../handler.mjs]\n",
-	);
+	await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: [../../../handler.mjs]\n");
 	const index = await readFile(join(input.directory, ".git/index"));
 	const server = await start(input.options);
 	t.after(server.close);
@@ -480,4 +463,58 @@ else {
 	assert.deepEqual(await readFile(join(input.directory, ".git/index")), index);
 	assert.equal(await readFile(join(input.root, "file.slow"), "utf8"), "updated\n");
 	await server.close();
+});
+
+test("startup validates all rooted chains and workspace ancestry before importing handlers or listening", async (t) => {
+	for (const failure of ["rooted", "workspace", "missing-root", "merge"] as const) {
+		const input = await fixture(t);
+		const guide = join(input.root, "docs/forge/workspace");
+		const imported = join(input.directory, "imported");
+		await writeFile(
+			join(guide, "handler.mjs"),
+			`import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(imported)},'executed'); export default ()=>{};`,
+		);
+		await mkdir(join(guide, "api"));
+		await mkdir(join(guide, "a"));
+		await mkdir(join(guide, "b"));
+		await writeFile(
+			join(guide, "api/forge-codebase.yaml"),
+			`id: api\nroot: .\nparents: [${failure === "merge" ? "a, b" : failure === "rooted" || failure === "missing-root" ? "missing" : ""}]\n`,
+		);
+		await writeFile(join(guide, "a/forge-codebase.yaml"), "id: a\n");
+		await writeFile(join(guide, "b/forge-codebase.yaml"), "id: b\n");
+		await writeFile(join(guide, "forge-codebase.yaml"), "id: missing\nroot: absent\n");
+		await writeFile(
+			input.configPath,
+			`repositories: []\nparents: [${failure === "workspace" ? "missing" : failure === "merge" ? "b, a" : ""}]\ncodebases: [${failure === "workspace" ? "" : "api/forge-codebase.yaml, a/forge-codebase.yaml, b/forge-codebase.yaml, forge-codebase.yaml"}]\nanalysis_handlers: [./handler.mjs]\n`,
+		);
+		const before = signalListeners();
+		await assert.rejects(
+			start(input.options),
+			failure === "merge" ? /Contradictory ordering/ : /requires unavailable parent.*missing/,
+		);
+		await assert.rejects(readFile(imported), { code: "ENOENT" });
+		assert.deepEqual(signalListeners(), before);
+		const probe = createServer();
+		await new Promise<void>((resolve, reject) => {
+			probe.once("error", reject);
+			probe.listen(Number(input.options.env.ZD_AI_FORGE_PORT), "127.0.0.1", resolve);
+		});
+		await new Promise<void>((resolve, reject) => probe.close((error) => (error ? reject(error) : resolve())));
+	}
+});
+
+test("startup leaves unrelated rootless ancestry unresolved and skips optional unavailable registrations", async (t) => {
+	const input = await fixture(t);
+	const guide = join(input.root, "docs/forge/workspace");
+	await writeFile(join(guide, "forge-codebase.yaml"), "id: unused\nparents: [missing]\n");
+	await writeFile(
+		input.configPath,
+		"repositories: []\ncodebases: [forge-codebase.yaml, missing/forge-codebase.yaml]\n",
+	);
+	const server = await start(input.options);
+	t.after(server.close);
+	assert.deepEqual(rootedCodebases(server.snapshot.workspaceConfig), []);
+	assert.equal(server.snapshot.workspaceConfig.guides[0]?.id, "unused");
+	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
 });

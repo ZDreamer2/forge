@@ -110,3 +110,24 @@ test("empty root finalizes to normal and zero counts", () => {
 	assert.deepEqual(final?.effectiveEmphasis, { value: "normal" });
 	assert.deepEqual(final?.rawTotals, { added: 0, removed: 0 });
 });
+
+test("owner facts retain stable identity and isolate ancestry and executable declarations", () => {
+	const owner = {
+		id: "service-guide",
+		root: "/workspace",
+		guide: "/guides/service",
+		parents: ["shared"],
+		analysisHandlers: [{ modulePath: "/private/handler.ts", ordinal: 1 }],
+	};
+	const base = createWorkspaceTree({ root: "/workspace", codebases: [owner], repositories: [{ path: "." }] });
+	base.insert({ repo: ".", path: "a.ts", current: { kind: "file" } });
+	const deps = { currentHandler: () => ({ id: "test" }), checkActive: () => {} };
+	const first = createAnalysisTree(base, deps);
+	const second = createAnalysisTree(base, deps);
+	const expected = { id: "service-guide", root: "/workspace", guide: "/guides/service" };
+	assert.deepEqual(first.root.current?.codebaseRoot, expected);
+	assert.deepEqual(first.nodes.get("a.ts")?.current?.codebase, expected);
+	assert.notEqual(first.nodes.get("a.ts")?.current?.codebase, second.nodes.get("a.ts")?.current?.codebase);
+	assert.notEqual(first.nodes.get("a.ts")?.current?.codebase, owner);
+	assert.deepEqual(owner.parents, ["shared"]);
+});

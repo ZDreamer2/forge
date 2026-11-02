@@ -1,7 +1,12 @@
 import { basename } from "node:path";
 import { AnalysisHandlerError, createTreeAnalyzer, loadAnalysisHandlers } from "../components/tree-analysis/index.ts";
 import { createWorkingChanges } from "../components/tree-sources/index.ts";
-import { loadWorkspaceConfig } from "../components/workspace-config/index.ts";
+import {
+	loadWorkspaceConfig,
+	resolveGuideChain,
+	resolveWorkspaceChain,
+	rootedCodebases,
+} from "../components/workspace-config/index.ts";
 import { resolveRepositories } from "../components/workspace-repositories/index.ts";
 import { createGitProcess } from "../lib/git/index.ts";
 import { createAnalysis } from "./analysis.ts";
@@ -20,6 +25,9 @@ type Options = {
 export async function start(options: Options) {
 	const config = await loadConfig(options);
 	const workspaceConfig = await loadWorkspaceConfig(config.configPath);
+	const codebases = rootedCodebases(workspaceConfig);
+	resolveWorkspaceChain(workspaceConfig);
+	for (const codebase of codebases) resolveGuideChain(workspaceConfig, codebase);
 	const git = createGitProcess(options.env);
 	const repositories = await resolveRepositories(config.root, workspaceConfig.repositories, git);
 	const name = workspaceConfig.displayName ?? (basename(config.root) || config.root);
@@ -27,7 +35,7 @@ export async function start(options: Options) {
 	const changes = createWorkingChanges({
 		root: config.root,
 		repositories,
-		codebases: workspaceConfig.codebases,
+		codebases,
 		git,
 	});
 	const handlers = await loadAnalysisHandlers(workspaceConfig, config.root);

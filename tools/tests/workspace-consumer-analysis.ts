@@ -40,9 +40,14 @@ export async function verifyInstalledAnalysis({
 		writeFileSync(join(workspace, path), content);
 	}
 	const marker = "docs/forge/workspace/forge-workspace.yaml";
-	const workspaceYaml = `repositories: [., nested]\ncodebases: [../../../owner/forge-codebase.yaml]\ncodebase_types: []\nanalysis_handlers: [./workspace.ts]\n`;
+	const workspaceYaml = `repositories: [., nested]\ncodebases: [../../../owner/forge-codebase.yaml, ../../../reusable/forge-codebase.yaml]\nanalysis_handlers: [./workspace.ts]\n`;
 	write(marker, workspaceYaml);
-	write("owner/forge-codebase.yaml", "root: .\nanalysis_handlers: [./codebase.ts]\n");
+	write(
+		"owner/forge-codebase.yaml",
+		"id: foreign-guide\nroot: .\nparents: [reusable-guide]\nanalysis_handlers: [./codebase.ts]\n",
+	);
+	write("reusable/forge-codebase.yaml", "id: reusable-guide\nanalysis_handlers: [./forbidden.ts]\n");
+	write("reusable/forbidden.ts", "throw new Error('adopted rootless handler must not load');\n");
 	write(".gitignore", "nested/\n");
 	write("nested/file.txt", "baseline\n");
 	const text = Array.from({ length: 500 }, (_, i) => `Markdown line ${i}: ${"x".repeat(45)}\n`).join("");
@@ -64,6 +69,8 @@ export default handler;
 		"owner/codebase.ts",
 		`import type { AnalysisHandler } from '@zdreamer/forge/analysis';
 const handler: AnalysisHandler = (root) => {
+  if (root.handler.codebase?.id !== 'foreign-guide') throw new Error('stable registering owner ID required');
+  if (Object.keys(root.handler.codebase).sort().join(',') !== 'guide,id,root') throw new Error('owner facts must omit ancestry and executables');
   for (const node of root.walk()) {
     if (node.path === 'tests/critical/file.md') {
       if (!node.signals.some(signal => signal.message === 'startup-original' || signal.message === 'restart-new')) throw new Error('workspace handler must finish first');
@@ -118,6 +125,14 @@ export const example: AnalysisHandler = root => {
     node.path = 'changed';
     // @ts-expect-error Source statistics are immutable.
     if (node.statistics) node.statistics.added = 3;
+    if (node.current?.codebase) {
+      const identifier: string = node.current.codebase.id;
+      // @ts-expect-error Legacy owner type is removed.
+      node.current.codebase.type;
+      // @ts-expect-error Guide ancestry is private.
+      node.current.codebase.parents;
+      node.notice(identifier);
+    }
     node.notice(signal.aborted ? 'cancelled' : 'ready', {side: 'current', line: 1});
   }
 };
@@ -150,6 +165,8 @@ export const example: AnalysisHandler = root => {
 		assert.equal(response.status, 200, await response.clone().text());
 		const result = (await response.json()) as WorkspaceAnalysis;
 		assert.equal(result.root, ".");
+		assert.deepEqual(result.codebases, { owner: { id: "foreign-guide", root: "owner", guidance: "owner" } });
+		assert.equal(result.handlers["codebase:owner:1"]?.codebase, "owner");
 		const nodes = result.nodes;
 		assert.ok(Object.hasOwn(nodes, "__proto__"));
 		assert.equal(requiredNode(result, "edited-new.md").renameContentChanged, true);

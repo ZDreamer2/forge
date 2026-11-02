@@ -7,9 +7,9 @@ function tree() {
 		root: "/workspace",
 		repositories: [{ path: "." }, { path: "nested" }],
 		codebases: [
-			{ root: "/workspace/app", guide: "/guides/app" },
-			{ root: "/workspace/app/deep", guide: "/guides/deep", type: { id: "service", guide: "/types/service" } },
-			{ root: "/workspace/nested", guide: "/guides/nested" },
+			{ id: "application", parents: [], root: "/workspace/app", guide: "/guides/app" },
+			{ id: "deep-service", parents: ["application"], root: "/workspace/app/deep", guide: "/guides/deep" },
+			{ id: "nested-package", parents: [], root: "/workspace/nested", guide: "/guides/nested" },
 		],
 	});
 }

@@ -4,6 +4,8 @@ import type { WorkspaceAnalysis } from "../../api-contract/index.ts";
 import { createTreeAnalyzer } from "../../tree-analysis/index.ts";
 import { createWorkspaceTree } from "../../workspace-tree/index.ts";
 import { createWorkspaceRoutes } from "../index.ts";
+import { workspaceFileDiff } from "../internal/file-wire.ts";
+import { workspaceAnalysis, workspaceChanges } from "../internal/wire.ts";
 
 test("identity snapshots repository declarations without collecting or exposing private fields", async () => {
 	const repositories = [
@@ -36,8 +38,8 @@ test("identity snapshots repository declarations without collecting or exposing 
 test("flat projection uses present-side concrete roots, safe keys and response-local definitions", async () => {
 	const root = "/selected";
 	const codebases = [
-		{ root: `${root}/client`, guide: `${root}/shared/guidance`, type: { id: "service", guide: "/types" } },
-		{ root: `${root}/__proto__`, guide: `${root}/shared/guidance` },
+		{ id: "client-guide", root: `${root}/client`, guide: `${root}/shared/guidance`, parents: [] },
+		{ id: "prototype-guide", root: `${root}/__proto__`, guide: `${root}/shared/guidance`, parents: [] },
 	];
 	let tree = createWorkspaceTree({ root, repositories: [{ path: "." }], codebases });
 	tree.insert({
@@ -67,8 +69,8 @@ test("flat projection uses present-side concrete roots, safe keys and response-l
 	});
 	assert.deepEqual(await (await routes.request("/changes")).json(), {
 		codebases: {
-			client: { root: "client", guidance: "shared/guidance", type: "service" },
-			["__proto__"]: { root: "__proto__", guidance: "shared/guidance" },
+			client: { id: "client-guide", root: "client", guidance: "shared/guidance" },
+			["__proto__"]: { id: "prototype-guide", root: "__proto__", guidance: "shared/guidance" },
 		},
 		changes: [
 			{
@@ -91,7 +93,7 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 	const tree = createWorkspaceTree({
 		root,
 		repositories: [{ path: "." }],
-		codebases: [{ root: `${root}/__proto__`, guide: `${root}/guide` }],
+		codebases: [{ id: "prototype-guide", root: `${root}/__proto__`, guide: `${root}/guide`, parents: [] }],
 	});
 	tree.insert({
 		repo: ".",
@@ -103,7 +105,10 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 	const analyzer = createTreeAnalyzer({
 		handlers: [
 			{
-				identity: { id: "workspace:1", codebase: { root: `${root}/empty`, guide: `${root}/external-guide` } },
+				identity: {
+					id: "workspace:1",
+					codebase: { id: "empty-guide", root: `${root}/empty`, guide: `${root}/external-guide` },
+				},
 				handler: (root) => {
 					for (const node of root.walk())
 						if (node.path.endsWith("a.md")) {
@@ -146,7 +151,7 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 	assert.equal(calls, 1);
 	assert.equal((await routes.request("/changes/analysis", { method: "HEAD" })).status, 200);
 	assert.deepEqual(await (await routes.request("/changes")).json(), {
-		codebases: { ["__proto__"]: { root: "__proto__", guidance: "guide" } },
+		codebases: { ["__proto__"]: { id: "prototype-guide", root: "__proto__", guidance: "guide" } },
 		changes: [{ repo: ".", path: "__proto__/tests/a.md", kind: "added", codebases: ["__proto__"] }],
 	});
 	assert.equal(calls, 2);
@@ -203,4 +208,56 @@ test("file queries decode once, validate context and preserve literal names", as
 		assert.equal(response.status, 405);
 		assert.equal(response.headers.get("allow"), "GET, HEAD");
 	}
+});
+
+test("all projections keep root keys distinct from stable IDs, including the workspace root", async () => {
+	const root = "/selected";
+	const workspaceOwner = { id: "workspace-source", root, guide: `${root}/guides/root`, parents: [] };
+	const nestedOwner = { id: "nested-source", root: `${root}/nested`, guide: `${root}/guides/nested`, parents: [] };
+	const tree = createWorkspaceTree({ root, repositories: [{ path: "." }], codebases: [workspaceOwner, nestedOwner] });
+	tree.insert({
+		repo: ".",
+		path: "nested/new.txt",
+		from: "old.txt",
+		kind: "renamed",
+		base: { kind: "file" },
+		current: { kind: "file" },
+	});
+	const definitions = {
+		".": { id: "workspace-source", root: ".", guidance: "guides/root" },
+		nested: { id: "nested-source", root: "nested", guidance: "guides/nested" },
+	};
+	const changes = workspaceChanges(root, tree);
+	assert.deepEqual(changes.codebases, definitions);
+	assert.deepEqual(changes.changes[0]?.codebases, [".", "nested"]);
+	const analyzer = createTreeAnalyzer({
+		handlers: [{ identity: { id: "registered:1", codebase: workspaceOwner }, handler: () => {} }],
+	});
+	const analysis = workspaceAnalysis(
+		root,
+		await analyzer.analyze(tree, { currentByteSize: async () => 0, signal: new AbortController().signal }),
+	);
+	assert.deepEqual(analysis.codebases, definitions);
+	assert.equal(analysis.nodes["."]?.current?.codebaseRoot, ".");
+	assert.equal(analysis.nodes.nested?.current?.codebaseRoot, "nested");
+	assert.equal(analysis.nodes["nested/new.txt"]?.base?.codebase, ".");
+	assert.equal(analysis.nodes["nested/new.txt"]?.current?.codebase, "nested");
+	assert.equal(analysis.handlers["registered:1"]?.codebase, ".");
+	const file = workspaceFileDiff(root, {
+		kind: "metadata_only",
+		path: "nested/new.txt",
+		repo: ".",
+		baseline: { kind: "unborn" },
+		context: 3,
+		changeKind: "renamed",
+		from: "old.txt",
+		statistics: { added: 0, removed: 0, binary: false },
+		base: { path: "old.txt", kind: "file", mode: "100644", present: true, codebase: workspaceOwner },
+		current: { path: "nested/new.txt", kind: "file", mode: "100644", present: true, codebase: nestedOwner },
+	});
+	assert.deepEqual(file.codebases, definitions);
+	assert.equal(file.kind, "metadata_only");
+	if (file.kind !== "metadata_only") throw new Error("Expected metadata-only rename");
+	assert.equal(file.base.codebase, ".");
+	assert.equal(file.current.codebase, "nested");
 });

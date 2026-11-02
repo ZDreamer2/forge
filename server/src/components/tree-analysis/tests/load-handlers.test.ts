@@ -25,15 +25,18 @@ test("native default function modules preserve configured occurrences and retain
 		await writeFile(throws, 'throw new Error("private absolute filename");');
 		const config: WorkspaceConfig = {
 			repositories: [],
-			codebaseTypes: [],
+			workspace: { guide: dir, parents: [] },
+			unavailable: [],
 			analysisHandlers: [
 				{ modulePath: good, ordinal: 1 },
 				{ modulePath: bad, ordinal: 2 },
 				{ modulePath: join(dir, "missing.js"), ordinal: 3 },
 				{ modulePath: throws, ordinal: 4 },
 			],
-			codebases: [
+			guides: [
 				{
+					id: "application-service",
+					parents: [],
 					root: join(dir, "app"),
 					guide: dir,
 					analysisHandlers: [
@@ -55,7 +58,7 @@ test("native default function modules preserve configured occurrences and retain
 			assert.equal(item.error.handler, item.identity);
 			assert.equal(item.error.message.includes(dir), false);
 		}
-		assert.deepEqual(result[4]?.identity.codebase, { root: join(dir, "app"), guide: dir });
+		assert.deepEqual(result[4]?.identity.codebase, { id: "application-service", root: join(dir, "app"), guide: dir });
 		await writeFile(good, 'export default function() { throw new Error("changed"); }');
 		const cached = await loadAnalysisHandlers(config, dir);
 		assert.equal(cached[0]?.handler, result[0]?.handler);
@@ -65,6 +68,46 @@ test("native default function modules preserve configured occurrences and retain
 			`const loaded = await import(${JSON.stringify(pathToFileURL(good).href)}); try {loaded.default()} catch(error) {process.stdout.write(error.message)}`,
 		]);
 		assert.equal(child.stdout, "changed");
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("composition never schedules inherited handlers; rooted reusable guides run only as registered owners", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "forge-handler-composition-"));
+	try {
+		const modulePath = join(dir, "handler.mjs");
+		await writeFile(modulePath, "export default function() {}");
+		const rootless = { id: "conventions", guide: dir, parents: [], analysisHandlers: [{ modulePath, ordinal: 1 }] };
+		const reusable = {
+			id: "reusable",
+			guide: dir,
+			root: join(dir, "base"),
+			parents: [rootless.id],
+			analysisHandlers: [{ modulePath, ordinal: 1 }],
+		};
+		const application = {
+			id: "application",
+			guide: dir,
+			root: join(dir, "app"),
+			parents: [reusable.id],
+			analysisHandlers: [{ modulePath, ordinal: 1 }],
+		};
+		const config: WorkspaceConfig = {
+			repositories: [],
+			workspace: { guide: dir, parents: [rootless.id] },
+			unavailable: [],
+			guides: [rootless, reusable, application],
+		};
+		const result = await loadAnalysisHandlers(config, dir);
+		assert.deepEqual(
+			result.map(({ identity }) => identity.id),
+			["codebase:base:1", "codebase:app:1"],
+		);
+		assert.deepEqual(
+			result.map(({ identity }) => identity.codebase?.id),
+			["reusable", "application"],
+		);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

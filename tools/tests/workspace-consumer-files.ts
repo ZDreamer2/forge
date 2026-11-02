@@ -33,14 +33,14 @@ export async function verifyInstalledFiles({
 	}
 	write(
 		"docs/forge/workspace/forge-workspace.yaml",
-		"repositories: [., nested, missing]\ncodebases: [../../../owner/forge-codebase.yaml, ../../../nested/docs/forge-codebase.yaml]\ncodebase_types: []\nanalysis_handlers: [./handler.mjs]\n",
+		"repositories: [., nested, missing]\ncodebases: [../../../owner/forge-codebase.yaml, ../../../nested/docs/forge-codebase.yaml]\nanalysis_handlers: [./handler.mjs]\n",
 	);
 	write(
 		"docs/forge/workspace/handler.mjs",
 		"export default () => { throw new Error('file requests must never run handlers'); };\n",
 	);
-	write("owner/forge-codebase.yaml", "root: ../app\n");
-	write("nested/docs/forge-codebase.yaml", "root: ..\n");
+	write("owner/forge-codebase.yaml", "id: app-guide\nroot: ../app\n");
+	write("nested/docs/forge-codebase.yaml", "id: nested-guide\nroot: ..\n");
 	write(".gitignore", "nested/\n");
 	write(".gitattributes", "*.txt text eol=crlf\n");
 	write("app/normalized.txt", "old\r\n");
@@ -94,7 +94,7 @@ export async function verifyInstalledFiles({
 		assert.equal(normalized.kind, "text");
 		if (normalized.kind !== "text") throw new Error("Expected normalized text patch");
 		assert.deepEqual(normalized.statistics, { added: 2, removed: 1, binary: false });
-		assert.deepEqual(normalized.codebases, { app: { root: "app", guidance: "owner" } });
+		assert.deepEqual(normalized.codebases, { app: { id: "app-guide", root: "app", guidance: "owner" } });
 		assert.equal(normalized.current.codebase, "app");
 		assert.equal(normalized.baseline.kind, "commit");
 		assert.match(normalized.patch, /--- a\/app\/normalized\.txt\n\+\+\+ b\/app\/normalized\.txt\n/);
@@ -146,7 +146,7 @@ export async function verifyInstalledFiles({
 		if (binary.kind === "unsupported") {
 			assert.equal(binary.reason, "binary");
 			assert.equal(binary.repo, "nested");
-			assert.deepEqual(binary.codebases, { nested: { root: "nested", guidance: "nested/docs" } });
+			assert.deepEqual(binary.codebases, { nested: { id: "nested-guide", root: "nested", guidance: "nested/docs" } });
 		}
 		const literal = await diff(literalPath);
 		assert.equal(literal.kind, "text");

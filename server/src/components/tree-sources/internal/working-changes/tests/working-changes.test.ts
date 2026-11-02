@@ -1047,8 +1047,8 @@ test("retains side kinds, exact text counts, binary classification and rename ow
 		root,
 		repositories: await resolveRepositories(root, [{ path: "." }], gitProcess),
 		codebases: [
-			{ root: join(root, "old"), guide: join(root, "guides/old") },
-			{ root: join(root, "new"), guide: join(root, "guides/new") },
+			{ id: "old-service", parents: [], root: join(root, "old"), guide: join(root, "guides/old") },
+			{ id: "new-service", parents: [], root: join(root, "new"), guide: join(root, "guides/new") },
 		],
 		git: gitProcess,
 	}).collect();

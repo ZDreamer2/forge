@@ -186,14 +186,14 @@ async function verifyServer(executable: string, consumer: string) {
 	for (const path of ["app", "other", "docs/<guidance>/app", "docs/<guidance>/other", "nested/docs", "docs/type"]) {
 		mkdirSync(join(workspace, path), { recursive: true });
 	}
-	writeFileSync(join(workspace, "docs/type/forge-codebase-type.yaml"), 'id: "fixture<type>"\n');
+	writeFileSync(join(workspace, "docs/type/forge-codebase.yaml"), 'id: "fixture-parent"\n');
 	for (const path of ["app", "other"]) {
 		writeFileSync(
 			join(workspace, `docs/<guidance>/${path}/forge-codebase.yaml`),
-			`root: ../../../${path}\ntype: "fixture<type>"\n`,
+			`id: fixture-${path}\nroot: ../../../${path}\nparents: [fixture-parent]\n`,
 		);
 	}
-	writeFileSync(join(workspace, "nested/docs/forge-codebase.yaml"), "root: ..\n");
+	writeFileSync(join(workspace, "nested/docs/forge-codebase.yaml"), "id: nested-guide\nroot: ..\n");
 	writeFileSync(join(workspace, ".gitignore"), "nested/\n.env\n");
 	writeFileSync(join(workspace, "app/tracked.txt"), "original\n");
 	writeFileSync(join(workspace, "app/old.txt"), "rename content\n");
@@ -206,7 +206,7 @@ codebases:
   - ../../../docs/<guidance>/app/forge-codebase.yaml
   - ../../../docs/<guidance>/other/forge-codebase.yaml
   - ../../../nested/docs/forge-codebase.yaml
-codebase_types: [../../../docs/type/forge-codebase-type.yaml]
+  - ../../../docs/type/forge-codebase.yaml
 `,
 	);
 	for (const repository of [workspace, join(workspace, "nested")]) {
@@ -299,13 +299,13 @@ codebase_types: [../../../docs/type/forge-codebase-type.yaml]
 				const response = await request("/api/changes");
 				assert.equal(response.status, 200);
 				const { codebases, changes } = (await response.json()) as {
-					codebases: Record<string, { root: string; guidance: string; type?: string }>;
+					codebases: Record<string, { id: string; root: string; guidance: string }>;
 					changes: Record<string, unknown>[];
 				};
 				assert.deepEqual(codebases, {
-					app: { root: "app", guidance: "docs/<guidance>/app", type: "fixture<type>" },
-					other: { root: "other", guidance: "docs/<guidance>/other", type: "fixture<type>" },
-					nested: { root: "nested", guidance: "nested/docs" },
+					app: { id: "fixture-app", root: "app", guidance: "docs/<guidance>/app" },
+					other: { id: "fixture-other", root: "other", guidance: "docs/<guidance>/other" },
+					nested: { id: "nested-guide", root: "nested", guidance: "nested/docs" },
 				});
 				assert.deepEqual(changes.find((change) => change.path === "other/renamed.txt")?.codebases, ["app", "other"]);
 				assert.equal(changes.length, 4);
@@ -350,6 +350,32 @@ codebase_types: [../../../docs/type/forge-codebase-type.yaml]
 		} finally {
 			await server.stop("SIGKILL");
 		}
+	}
+}
+
+function verifyInvalidStartup(executable: string, consumer: string) {
+	const workspace = join(consumer, "invalid-fixture");
+	const guide = join(workspace, "docs/forge/workspace");
+	mkdirSync(guide, { recursive: true });
+	const marker = join(guide, "forge-workspace.yaml");
+	for (const [yaml, diagnostic] of [
+		["repositories: [.]\ncodebases: []\ncodebase_types: []\n", /legacy.*codebase_types.*migrate/s],
+		["repositories: [.]\ncodebases: [forge-codebase-type.yaml]\n", /legacy.*forge-codebase-type.yaml.*migrate/s],
+		["repositories: [.]\ncodebases: []\nparents: [unavailable-guide]\n", /unavailable-guide/],
+	] as const) {
+		writeFileSync(marker, yaml);
+		const before = snapshot(workspace);
+		const result = spawnSync(executable, ["serve", "--workspace", workspace], {
+			cwd: consumer,
+			encoding: "utf8",
+			timeout: 5000,
+			// biome-ignore lint/style/noProcessEnv: installed CLI fixtures override inherited workspace selection.
+			env: { ...process.env, ZD_AI_FORGE_WORKSPACE_GUIDE: "", ZD_AI_FORGE_PORT: "47999" },
+		});
+		assert.equal(result.status, 1, result.stderr);
+		assert.match(result.stderr, diagnostic);
+		assert.equal(result.stdout, "");
+		assert.deepEqual(snapshot(workspace), before);
 	}
 }
 
@@ -409,11 +435,13 @@ export type Removed = WorkspacePolicy;
 	writeFileSync(
 		join(consumer, "api-contract.ts"),
 		`import type { ApiErrorCode, ApiFailure, WorkspaceChanges, WorkspaceIdentity, FileBaseline, FileSide, FileUnsupportedReason, WorkspaceFileDiff } from './node_modules/@zdreamer/forge/dist/server/src/components/api-contract/index.js';
-export const changes = {codebases: {app: {root: 'app', guidance: 'docs/app', type: 'service'}}, changes: []} satisfies WorkspaceChanges;
+export const changes = {codebases: {app: {id: 'service-guide', root: 'app', guidance: 'docs/app'}}, changes: []} satisfies WorkspaceChanges;
 // @ts-expect-error Concrete definitions require their root.
 export const missingRoot: WorkspaceChanges = {codebases: {app: {guidance: 'docs/app'}}, changes: []};
-// @ts-expect-error Adopted type identity is a string.
-export const invalidType: WorkspaceChanges = {codebases: {app: {root: 'app', guidance: 'docs/app', type: 123}}, changes: []};
+// @ts-expect-error Every definition requires stable identity.
+export const missingId: WorkspaceChanges = {codebases: {app: {root: 'app', guidance: 'docs/app'}}, changes: []};
+// @ts-expect-error Legacy type is unsupported.
+export const legacyType: WorkspaceChanges = {codebases: {app: {id: 'service-guide', root: 'app', guidance: 'docs/app', type: 'service'}}, changes: []};
 export const identity = {workspace: {root: '/example', name: 'Example'}, repositories: []} satisfies WorkspaceIdentity;
 export const error = 'not_found' satisfies ApiErrorCode;
 export const invalidRequest = 'invalid_request' satisfies ApiErrorCode;
@@ -462,6 +490,7 @@ export type NodeGlobal = typeof process;
 	});
 	assert.equal(removedCommand.status, 1);
 	assert.match(removedCommand.stderr, /Usage: forge serve/);
+	verifyInvalidStartup(executable, consumer);
 	await verifyServer(executable, consumer);
 	await verifyInstalledAnalysis({ consumer, executable, compiler, run, portReservation, installedServer, sourceState });
 	await verifyInstalledFiles({ consumer, executable, run, portReservation, installedServer, sourceState });

@@ -1,3 +1,7 @@
+---
+edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
+---
+
 # tree-analysis Guide
 
 Runs trusted handlers over a per-request facade of a workspace tree. Base source
@@ -16,8 +20,12 @@ relative extensions. YAML `analysis_handlers` references explicit relative
 them. Ordinary Node ESM module caching applies.
 
 Every handler sees the workspace root, including codebase handlers.
-`root.handler.codebase` identifies the registering owner and grants no subtree
-restriction. `root.signal` carries cooperative cancellation.
+`root.handler.codebase`, when present, identifies the registering rooted owner;
+workspace and built-in handlers have none. It grants no subtree restriction.
+Public owner facts on handlers and node sides require stable `id`
+alongside `root` and `guide`; they expose neither legacy `type`, ancestry nor
+executable descriptors. The ID identifies the guide independently of its source
+root. `root.signal` carries cooperative cancellation.
 `root.source.currentByteSize(node)` returns the byte size of a current regular
 file, without reading content; invalid or foreign nodes and failed observations
 reject. Successful and failed lookups are reused within that run.
@@ -39,8 +47,10 @@ accumulate and remain visible through all emphasis levels.
 ## Execution and failures
 
 Built-ins run first, then workspace occurrences in YAML order, then codebase
-occurrences in registry/list order. Every configured occurrence runs, including
-repeated references. One handler finishes before the next starts. Synchronous
+occurrences from available registered rooted participants in registry/list order.
+Adoption adds no executions, and rootless guides schedule none. A rooted parent
+contributes only its own registered list. Every configured occurrence runs,
+including repeated references. One handler finishes before the next starts. Synchronous
 walks do not await each node. The built-ins deemphasize workspace-root `plans/`
 and directories named exactly `tests` or `Tests`. They warn for current added,
 modified or content-edited renamed Markdown files strictly above 20,480 bytes,
