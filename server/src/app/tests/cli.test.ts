@@ -5,7 +5,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { request } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -13,12 +13,17 @@ const manifest = JSON.parse(await readFile(new URL("../../../../package.json", i
 	version: string;
 };
 const main = fileURLToPath(new URL("../../main.ts", import.meta.url));
+async function writeFixtureFile(path: string, content: string | Uint8Array) {
+	await mkdir(dirname(path), { recursive: true });
+	await writeFile(path, content);
+}
+
 async function fixture() {
 	const root = await mkdtemp(join(tmpdir(), "forge-cli-'\"$-"));
 	execFileSync("git", ["init", "-q", root]);
 	await mkdir(join(root, "docs/forge/workspace"), { recursive: true });
 	const configuration = join(root, "docs/forge/workspace/forge-workspace.yaml");
-	await writeFile(configuration, "repositories: ['.', absent]\ncodebases: []\n");
+	await writeFixtureFile(configuration, "repositories: ['.', absent]\ncodebases: []\n");
 	return { root, configuration };
 }
 async function reservePort() {
@@ -102,8 +107,8 @@ test("CLI validates serve arguments and rejects the removed policy diagnostic", 
 test("CLI uses selected .env, serves fresh read-only changes and releases port on signals", async () => {
 	const { root } = await fixture();
 	try {
-		await writeFile(join(root, ".gitignore"), ".env\n");
-		await writeFile(join(root, "tracked"), "original\n");
+		await writeFixtureFile(join(root, ".gitignore"), ".env\n");
+		await writeFixtureFile(join(root, "tracked"), "original\n");
 		execFileSync("git", ["-C", root, "add", "."]);
 		execFileSync("git", [
 			"-C",
@@ -116,16 +121,16 @@ test("CLI uses selected .env, serves fresh read-only changes and releases port o
 			"-qm",
 			"baseline",
 		]);
-		await writeFile(join(root, "tracked"), "staged\n");
+		await writeFixtureFile(join(root, "tracked"), "staged\n");
 		execFileSync("git", ["-C", root, "add", "tracked"]);
-		await writeFile(join(root, "tracked"), "first\n");
+		await writeFixtureFile(join(root, "tracked"), "first\n");
 		const index = await readFile(join(root, ".git/index"));
 		const status = execFileSync("git", ["-C", root, "status", "--porcelain=v1"]);
 		for (const signal of ["SIGINT", "SIGTERM"] as const) {
-			await writeFile(join(root, "tracked"), "first\n");
+			await writeFixtureFile(join(root, "tracked"), "first\n");
 			const reservation = await reservePort();
 			await reservation.close();
-			await writeFile(
+			await writeFixtureFile(
 				join(root, ".env"),
 				`ZD_AI_FORGE_PORT=${reservation.port}\nPRIVATE_TOKEN=must-not-appear-in-startup\n`,
 			);
@@ -164,7 +169,7 @@ test("CLI uses selected .env, serves fresh read-only changes and releases port o
 					codebases: [],
 				});
 				assert.deepEqual(await (await fetch(`${address}/api/changes`)).json(), { codebases: {}, changes: [change()] });
-				await writeFile(join(root, "tracked"), "second\nextra\n");
+				await writeFixtureFile(join(root, "tracked"), "second\nextra\n");
 				assert.deepEqual(await (await fetch(`${address}/api/changes`)).json(), { codebases: {}, changes: [change()] });
 				assert.equal((await fetch(`${address}/api/changes`, { headers: { origin: "http://foreign" } })).status, 403);
 				const unsupported = await fetch(`${address}/api/changes`, { method: "OPTIONS" });
@@ -202,7 +207,7 @@ test("CLI fails on invalid port, bad configuration and occupied port without a s
 				process.child.kill("SIGKILL");
 			}
 		}
-		await writeFile(configuration, "repositories: invalid\n");
+		await writeFixtureFile(configuration, "repositories: invalid\n");
 		const process = run(["serve", "--workspace", root], { ZD_AI_FORGE_PORT: String(reservation.port) });
 		try {
 			assert.equal((await bounded(process.exited)).code, 1);
@@ -224,7 +229,7 @@ test("CLI shares active GET/HEAD work and shutdown reaps a TERM-resistant Git ch
 	const count = join(tools, "count");
 	const executable = join(tools, "git");
 	const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
-	await writeFile(
+	await writeFixtureFile(
 		executable,
 		`#!${process.execPath}\nimport {writeFileSync, appendFileSync} from 'node:fs';\nimport {spawnSync} from 'node:child_process';\nconst args=process.argv.slice(2);\nif(args.includes('diff')) { process.on('SIGTERM',()=>{}); appendFileSync(${JSON.stringify(count)}, 'diff\\n'); writeFileSync(${JSON.stringify(marker)}, String(process.pid)); setInterval(()=>{},1000); }\nelse {const result=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});process.exit(result.status ?? 1);}\n`,
 	);
@@ -282,11 +287,11 @@ test("CLI aborts active analysis on shutdown and reloads modules in a fresh proc
 	const { root, configuration } = await fixture();
 	const helper = await mkdtemp(join(tmpdir(), "forge-handler-marker-"));
 	const marker = join(helper, "started");
-	const handler = join(root, "docs/forge/workspace/handler.mjs");
-	await writeFile(configuration, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
-	await writeFile(
+	const handler = join(root, "docs/forge/workspace/forge-extension/forge-extension.ts");
+	await writeFixtureFile(configuration, "repositories: ['.']\ncodebases: []\n");
+	await writeFixtureFile(
 		handler,
-		`import { writeFile } from 'node:fs/promises'; export default async root => { await writeFile(${JSON.stringify(marker)}, 'started'); await new Promise(resolve => root.signal.addEventListener('abort', resolve, {once:true})); root.signal.throwIfAborted(); };`,
+		`import { writeFile } from 'node:fs/promises'; export default { api: 1, async annotateNode(ctx) { await writeFile(${JSON.stringify(marker)}, 'started'); await new Promise(resolve => ctx.signal.addEventListener('abort', resolve, {once:true})); ctx.signal.throwIfAborted(); } };`,
 	);
 	const configurationBefore = await readFile(configuration);
 	const reservation = await reservePort();
@@ -308,7 +313,10 @@ test("CLI aborts active analysis on shutdown and reloads modules in a fresh proc
 		server.child.kill("SIGTERM");
 		assert.deepEqual(await bounded(server.exited), { code: 0, signal: null });
 		await pending;
-		await writeFile(handler, "export default root => root.notice('fresh process');");
+		await writeFixtureFile(
+			handler,
+			"export default { api: 1, annotateNode(ctx) { if (ctx.node.path === '.') ctx.node.notice('fresh process'); } };",
+		);
 		const fresh = run(["serve", "--workspace", root], env);
 		try {
 			await ready(fresh);
@@ -335,7 +343,7 @@ test("CLI rejects obsolete configuration with actionable unified-registry migrat
 			"repositories: []\ncodebases: []\ncodebase_types: []",
 			"repositories: []\ncodebases: [old/forge-codebase-type.yaml]",
 		]) {
-			await writeFile(configuration, content);
+			await writeFixtureFile(configuration, content);
 			const process = run(["serve", "--workspace", root], { ZD_AI_FORGE_PORT: "30111" });
 			try {
 				assert.equal((await bounded(process.exited)).code, 1);

@@ -54,7 +54,6 @@ export interface CodebaseFacts {
 }
 export interface AnalysisHandlerIdentity {
 	readonly id: string;
-	readonly codebase?: CodebaseFacts;
 }
 export type Emphasis = "normal" | "emphasized" | "deemphasized" | "hidden";
 export interface ExplicitEmphasis {

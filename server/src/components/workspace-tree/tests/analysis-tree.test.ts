@@ -43,7 +43,7 @@ function fixture() {
 }
 test("run facade navigation, independent annotations, final inheritance and own-plus-child totals", () => {
 	const base = fixture();
-	let identity = { id: "first" };
+	let identity = { id: "workspace#annotateNode" };
 	const deps = { currentHandler: () => identity, checkActive: () => {} };
 	const a = createAnalysisTree(base, deps);
 	const b = createAnalysisTree(base, deps);
@@ -57,9 +57,10 @@ test("run facade navigation, independent annotations, final inheritance and own-
 	assert.ok(hidden);
 	hidden.hide("noise");
 	hidden.warn("Still visible");
-	identity = { id: "second" };
+	identity = { id: "codebase:shared#annotateNode" };
 	critical.emphasize("important");
-	assert.equal(critical.emphasis?.handler.id, "second");
+	assert.equal(critical.emphasis?.handler.id, "codebase:shared#annotateNode");
+	assert.deepEqual(critical.emphasis?.handler, { id: "codebase:shared#annotateNode" });
 	assert.equal(critical.parent, tests);
 	assert.equal(tests.children[0], hidden);
 	assert.equal(a.root.parent, undefined);
@@ -74,7 +75,7 @@ test("run facade navigation, independent annotations, final inheritance and own-
 	assert.deepEqual(final.nodes.get("former")?.rawTotals, { added: 0, removed: 0 });
 	assert.deepEqual(final.nodes.get("mixed")?.rawTotals, { added: 6, removed: 4 });
 	assert.equal(final.nodes.get("tests/critical/a")?.effectiveEmphasis.origin, "tests/critical");
-	assert.equal(final.nodes.get("tests/critical/a")?.effectiveEmphasis.handler?.id, "second");
+	assert.equal(final.nodes.get("tests/critical/a")?.effectiveEmphasis.handler?.id, "codebase:shared#annotateNode");
 	assert.equal(b.nodes.get("tests")?.emphasis, undefined);
 	assert.equal("emphasis" in (base.nodes.get("tests") ?? {}), false);
 	assert.equal(base.nodes.get("destination/moved")?.renameContentChanged, true);
@@ -117,7 +118,6 @@ test("owner facts retain stable identity and isolate ancestry and executable dec
 		root: "/workspace",
 		guide: "/guides/service",
 		parents: ["shared"],
-		analysisHandlers: [{ modulePath: "/private/handler.ts", ordinal: 1 }],
 	};
 	const base = createWorkspaceTree({ root: "/workspace", codebases: [owner], repositories: [{ path: "." }] });
 	base.insert({ repo: ".", path: "a.ts", current: { kind: "file" } });

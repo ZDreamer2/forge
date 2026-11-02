@@ -65,7 +65,7 @@ authority for broader dirt capture, checking or staging scopes.
 
 Changes, analysis and file responses include response-local `codebases` definitions:
 `{ "<root-key>": { "id": "stable-guide-id", "root": "path", "guidance": "path" } }`.
-All three fields are required. Definition-map keys and side/handler owner references
+All three fields are required. Definition-map keys and side owner references
 are normalized workspace-relative source roots (`.` allowed). `id` is the stable
 guide identifier, independent of checkout placement; it never substitutes for a
 root key. Guidance is workspace-relative and may point outside the workspace
@@ -181,27 +181,24 @@ reason, producing handler ID and origin path; default normal invents none.
 Signals are `{severity: "notice" | "warning", message, handler, location?}`;
 `location` is `{side: "base" | "current", line, column?}` with one-based coordinates.
 Emphasis never suppresses signals or ancestor counts. `codebases` uses the shared
-definitions; side `codebase`/`codebaseRoot` and handler `codebase` references are
-owner root keys. `handlers` maps safe occurrence IDs to `{id, codebase?}`, distinguishing
-repeated module references without exposing absolute module paths. Referenced handler
-owners can have no changed files; definitions do not create tree nodes.
+definitions; side `codebase`/`codebaseRoot` references are owner root keys.
+`handlers` maps safe guide/hook IDs to `{id}`, for example
+`codebase:forge-base#annotateNode` or `workspace#annotateNode`. It contains each
+actually invoked identity once, in first-invocation order. Handler provenance has
+no owner reference; adopting a parent creates no synthetic owner definition.
 
-Built-ins run first, then direct workspace handlers in list order and available
-registered rooted-participant handlers in registry/list order. Repeated references
-remain separate occurrences. Parent adoption adds no executions; a rooted parent
-runs its own ordinary registered list, and rootless guides schedule none. All
-trusted handlers see the whole tree and can annotate any node. Built-ins:
-
-- Deemphasize root `plans/` and directories named exactly `tests` or `Tests`.
-- Warn on current regular Markdown (`.md`/`.markdown`, case-insensitive) larger than
-  20,480 bytes for additions, modifications and content-edited renames, except root
-  `plans/`. Metadata-only size probes read no bytes or symlinks and fail if the
-  candidate disappears, changes kind or leaves source bounds.
+Annotations come from applicable guide extensions; hooks can annotate any node.
+Without adopted policies, all emphasis is normal and signals are empty.
+The [analysis contract](../src/components/tree-analysis/docs/UnitGuide.md) owns
+hook ordering and execution semantics.
 
 Analysis annotations/state are independent per request even when collection overlaps.
-Modules load at startup and refresh on restart. Handler load/invocation failure
-returns HTTP 500 with `{ "error": { "code": "internal_error", "message": "Internal server error", "handler": "safe-occurrence-id" } }`;
-raw causes/stacks/module paths stay private. Light `/changes` remains independently
+Modules load at startup and refresh on restart. An applicable guide load error or hook invocation failure
+returns HTTP 500 with `{ "error": { "code": "internal_error", "message": "Internal server error", "handler": "codebase:example#annotateNode" } }`;
+the handler field identifies the applicable guide's `annotateNode` hook in both
+cases. Unrelated broken participants do not block analysis. Contradictory owner
+ordering returns `internal_error` without a handler field. Failures return no partial
+analysis; raw causes/stacks/module paths stay private. Light `/changes` remains independently
 available. Shared deadline/cancellation/effects rules apply.
 
 #### Read file diff

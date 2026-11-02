@@ -26,7 +26,10 @@ test("HTTP page and API operations have consistent routing failures", async (t) 
 		repositories: [],
 		port: 43210,
 		analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
-		analyze: createTreeAnalyzer({ handlers: [] }).analyze,
+		analyze: createTreeAnalyzer({
+			config: { workspace: { guide: "/guide", parents: [] }, guides: [], repositories: [], unavailable: [] },
+			extensions: [],
+		}).analyze,
 		currentByteSize: async () => 0,
 		collectChanges: async () => {
 			collections++;
@@ -103,7 +106,10 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 		repositories: [],
 		port: 43210,
 		analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
-		analyze: createTreeAnalyzer({ handlers: [] }).analyze,
+		analyze: createTreeAnalyzer({
+			config: { workspace: { guide: "/guide", parents: [] }, guides: [], repositories: [], unavailable: [] },
+			extensions: [],
+		}).analyze,
 		currentByteSize: async () => 0,
 		collectChanges: async () => {
 			collections++;

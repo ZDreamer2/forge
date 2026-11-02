@@ -4,68 +4,54 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 
 # tree-analysis Guide
 
-Runs trusted handlers over a per-request facade of a workspace tree. Base source
-facts stay shared with light requests; annotations and source-size caches belong
-to one analysis invocation. `http-api` supplies source access under app-owned
-cancellation, so this component does not depend on a particular tree source.
+Runs trusted guide annotation hooks over a per-request facade of a workspace tree.
+Composition supplies loaded contributions; this component imports no extension
+modules. Base facts remain shared with light requests, while annotations and source
+observations belong to one run. `http-api` supplies source access and cancellation.
+The [shared extension contract](../../../../../../../../ai/bc-plugins/dev/forge/docs/theory/codebases/guide-part/extension/forge-extension.md)
+owns authoring, guide identity and module compatibility.
 
-## Handler authoring
+## Scheduling and annotation
 
-The package's type-only `@zdreamer/forge/analysis` entry exports `AnalysisHandler`
-and supported root/node/annotation vocabulary. A module default-exports
-`handler(root)`, synchronously returning void or a promise that completes all its
-work. Native TypeScript uses erasable syntax, type-only imports and explicit
-relative extensions. YAML `analysis_handlers` references explicit relative
-`.ts`, `.mts`, `.js` or `.mjs` files. Modules load once at startup; restart refreshes
-them. Ordinary Node ESM module caching applies.
+Visit canonical nodes in deterministic preorder, including root, inferred directories,
+deletions and symlinks. For each node, merge independent workspace, base-owner and
+current-owner ancestry through `workspace-config`, preserving constraints with that
+priority between eligible guides. Shared guides run once per node. Ownership comes
+from actual sides, including both rename endpoints; unassigned nodes use workspace
+ancestry alone. Contradictory cross-owner order fails analysis atomically.
 
-Every handler sees the workspace root, including codebase handlers.
-`root.handler.codebase`, when present, identifies the registering rooted owner;
-workspace and built-in handlers have none. It grants no subtree restriction.
-Public owner facts on handlers and node sides require stable `id`
-alongside `root` and `guide`; they expose neither legacy `type`, ancestry nor
-executable descriptors. The ID identifies the guide independently of its source
-root. `root.signal` carries cooperative cancellation.
-`root.source.currentByteSize(node)` returns the byte size of a current regular
-file, without reading content; invalid or foreign nodes and failed observations
-reject. Successful and failed lookups are reused within that run.
+Each applicable `annotateNode` finishes before the next invocation. Context exposes
+current `node`, namespaced `guide.id`, `signal` and `source`. Whole-tree navigation
+and cross-node annotations remain available; repeated calls require authors to avoid
+unintended duplicate effects. Each write receives `<guide>#annotateNode` provenance.
+The result inventory records actually invoked identities once, in first-use order,
+without codebase ownership. Node-side owner facts retain stable ID, root and guide.
 
-Nodes expose readonly source facts and projected owners, parent/children
-navigation and a synchronous preorder `walk()` including self. The root has no
-parent. Rename ancestry follows its canonical destination path. Explicit emphasis
-and direct signals remain readable by subsequent handlers. Derived effective
-emphasis, inclusive signal counts and totals are calculated only after handlers.
+Nodes provide readonly facts, parent/children navigation and synchronous preorder
+`walk()` including self. Rename topology follows the destination path. Hooks read
+direct annotations; derived metadata is finalized only after successful execution.
+`deemphasize`, `restoreNormalEmphasis`, `emphasize` and `hide` set emphasis; later
+writes win on a node, and the nearest explicit ancestor controls inheritance. A normal
+reset restores attention beneath hidden/deemphasized ancestry. `warn` and `notice`
+accumulate visible signals with optional one-based side/line/column locations.
 
-Use `deemphasize(reason)`, `restoreNormalEmphasis(reason?)`, `emphasize(reason)` or
-`hide(reason)`. Use `warn(message, location?)` or `notice(message, location?)`;
-optional locations have `side`, one-based `line` and optional one-based `column`.
-The active handler identity is attached automatically. Later emphasis on the same
-node wins; the nearest explicitly annotated ancestor controls inheritance. A
-normal reset restores attention beneath a hidden/deemphasized ancestor. Signals
-accumulate and remain visible through all emphasis levels.
+No policy is intrinsic to the engine. Without adopted hooks, emphasis stays normal
+and signals remain empty; Forge-base owns its planning/test and Markdown policies.
 
-## Execution and failures
+## Source facts and lifecycle
 
-Built-ins run first, then workspace occurrences in YAML order, then codebase
-occurrences from available registered rooted participants in registry/list order.
-Adoption adds no executions, and rootless guides schedule none. A rooted parent
-contributes only its own registered list. Every configured occurrence runs,
-including repeated references. One handler finishes before the next starts. Synchronous
-walks do not await each node. The built-ins deemphasize workspace-root `plans/`
-and directories named exactly `tests` or `Tests`. They warn for current added,
-modified or content-edited renamed Markdown files strictly above 20,480 bytes,
-excluding current paths under root `plans/`, pure moves, deletions and symlinks.
-Size reads are lazy and bounded to two concurrent candidate reads.
+`source.currentByteSize(node)` observes only current regular files belonging to the
+run, without exposing content. Pending, successful and failed observations are cached.
+The capability permits at most two simultaneous observations even if a trusted hook
+fans out across the tree. Cancellation stops queued reads and later effects.
 
-Import/default-export errors are retained in the startup registry rather than
-breaking light APIs. Loading or invocation failure rejects the whole analysis
-with the safe configured occurrence ID. Raw causes stay in server diagnostics,
-not HTTP errors. Cancellation stops awaiting async work, observes late rejection
-and prevents later handlers/finalization. It cannot preempt synchronous JavaScript
-or detached work: handlers are trusted executable code, without a sandbox.
+An applicable retained load error or invocation failure rejects the whole analysis;
+light requests remain usable. Safe guide/hook identities reach clients, while raw
+causes remain in server diagnostics. Cancellation races async work, observes late
+rejection and prevents later invocations and finalization. Run capabilities become
+invalid after completion or cancellation.
 
-Startup-loaded functions may run concurrently for different requests. Authors
-must keep invocation state local, await all their work and stop using run-scoped
-roots, nodes and source capabilities on return. Do not retain them in module state
-or launch detached callbacks. This is an authoring contract, not runtime policing
-of arbitrary JavaScript.
+Startup-loaded functions can serve concurrent requests. Authors keep state local,
+await all work and stop using capabilities when their invocation returns. Trusted
+JavaScript is not sandboxed: cancellation cannot preempt synchronous execution or
+police detached callbacks. Hooks have no supplied source-write or exec capability.

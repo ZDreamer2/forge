@@ -79,8 +79,7 @@ test("an already disconnected client cannot start work", async () => {
 test("a failed size candidate aborts and drains the other probe before releasing its request owner", async () => {
 	const owner = createAnalysis();
 	const tree = createWorkspaceTree({ root: "/selected", repositories: [{ path: "." }], codebases: [] });
-	for (const path of ["a.md", "b.md", "c.md"])
-		tree.insert({ repo: ".", path, kind: "added", current: { kind: "file" } });
+	for (const path of ["a.md", "b.md"]) tree.insert({ repo: ".", path, kind: "added", current: { kind: "file" } });
 	const failure = Promise.withResolvers<number>();
 	const held = Promise.withResolvers<number>();
 	const started = Promise.withResolvers<void>();
@@ -88,11 +87,18 @@ test("a failed size candidate aborts and drains the other probe before releasing
 	const reads: string[] = [];
 	let laterHandler = false;
 	const analyzer = createTreeAnalyzer({
-		handlers: [
+		config: { workspace: { guide: "/guide", parents: [] }, guides: [], repositories: [], unavailable: [] },
+		extensions: [
 			{
-				identity: { id: "workspace:1" },
-				handler: () => {
-					laterHandler = true;
+				id: "workspace",
+				annotateNode: async ({ node, source }) => {
+					if (node.path !== ".") {
+						laterHandler = true;
+						return;
+					}
+					await Promise.all(
+						[...node.walk()].filter((n) => n.current?.kind === "file").map((n) => source.currentByteSize(n)),
+					);
 				},
 			},
 		],
@@ -148,11 +154,18 @@ test("shutdown keeps a cancelled analysis registered until its source probe is r
 	const aborted = Promise.withResolvers<void>();
 	let laterHandler = false;
 	const analyzer = createTreeAnalyzer({
-		handlers: [
+		config: { workspace: { guide: "/guide", parents: [] }, guides: [], repositories: [], unavailable: [] },
+		extensions: [
 			{
-				identity: { id: "workspace:1" },
-				handler: () => {
-					laterHandler = true;
+				id: "workspace",
+				annotateNode: async ({ node, source }) => {
+					if (node.path !== ".") {
+						laterHandler = true;
+						return;
+					}
+					await Promise.all(
+						[...node.walk()].filter((n) => n.current?.kind === "file").map((n) => source.currentByteSize(n)),
+					);
 				},
 			},
 		],

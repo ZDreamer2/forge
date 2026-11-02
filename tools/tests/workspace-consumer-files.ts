@@ -33,11 +33,11 @@ export async function verifyInstalledFiles({
 	}
 	write(
 		"docs/forge/workspace/forge-workspace.yaml",
-		"repositories: [., nested, missing]\ncodebases: [../../../owner/forge-codebase.yaml, ../../../nested/docs/forge-codebase.yaml]\nanalysis_handlers: [./handler.mjs]\n",
+		"repositories: [., nested, missing]\ncodebases: [../../../owner/forge-codebase.yaml, ../../../nested/docs/forge-codebase.yaml]\n",
 	);
 	write(
-		"docs/forge/workspace/handler.mjs",
-		"export default () => { throw new Error('file requests must never run handlers'); };\n",
+		"docs/forge/workspace/forge-extension/forge-extension.ts",
+		"export default {api: 1, annotateNode() { throw new Error('file requests must never run handlers'); }};\n",
 	);
 	write("owner/forge-codebase.yaml", "id: app-guide\nroot: ../app\n");
 	write("nested/docs/forge-codebase.yaml", "id: nested-guide\nroot: ..\n");

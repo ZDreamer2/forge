@@ -25,7 +25,7 @@ async function fixture() {
 	};
 }
 
-test("loads ordered rooted and rootless guides, preserving direct handler references and display names", async () => {
+test("loads ordered rooted and rootless guides, preserving display names", async () => {
 	const f = await fixture();
 	try {
 		const value = await loadWorkspaceConfig(f.config);
@@ -196,42 +196,11 @@ test("rejects available ID/root conflicts and keeps symlink source roots lexical
 	}
 });
 
-test("resolves ordered handler occurrences without importing or skipping missing modules", async () => {
-	const f = await fixture();
-	try {
-		await f.write("workspace/explodes.ts", "throw new Error('must never execute during config loading');\n");
-		await f.write(
-			"workspace/forge-workspace.yaml",
-			JSON.stringify({
-				codebases: ["../app/docs/forge-codebase.yaml"],
-
-				repositories: [],
-				analysis_handlers: ["./explodes.ts", "../external/missing # handler.mts", "./explodes.ts"],
-			}),
-		);
-		await f.write(
-			"app/docs/forge-codebase.yaml",
-			"id: app\nroot: ..\nanalysis_handlers: [./rule.mjs, ../../workspace/explodes.ts]\n",
-		);
-		const config = await loadWorkspaceConfig(f.config);
-		assert.deepEqual(config.analysisHandlers, [
-			{ modulePath: join(f.root, "workspace/explodes.ts"), ordinal: 1 },
-			{ modulePath: join(f.root, "external/missing # handler.mts"), ordinal: 2 },
-			{ modulePath: join(f.root, "workspace/explodes.ts"), ordinal: 3 },
-		]);
-		assert.deepEqual(rootedCodebases(config)[0]?.analysisHandlers, [
-			{ modulePath: join(f.root, "app/docs/rule.mjs"), ordinal: 1 },
-			{ modulePath: join(f.root, "workspace/explodes.ts"), ordinal: 2 },
-		]);
-	} finally {
-		await f.cleanup();
-	}
-});
-
-test("rejects malformed handler references at workspace and concrete declarations", async () => {
+test("rejects retired handler declarations, including empty lists, at workspace and codebase guides", async () => {
 	const f = await fixture();
 	try {
 		for (const value of [
+			[],
 			null,
 			{},
 			"./rule.ts",
@@ -247,7 +216,10 @@ test("rejects malformed handler references at workspace and concrete declaration
 				"workspace/forge-workspace.yaml",
 				JSON.stringify({ codebases: [], repositories: [], analysis_handlers: value }),
 			);
-			await assert.rejects(loadWorkspaceConfig(f.config), /analysis_handlers/);
+			await assert.rejects(
+				loadWorkspaceConfig(f.config),
+				/analysis_handlers.*fixed entry forge-extension\/forge-extension\.ts/,
+			);
 			await f.write(
 				"workspace/forge-workspace.yaml",
 				JSON.stringify({ codebases: ["../app/docs/forge-codebase.yaml"], repositories: [] }),
@@ -256,7 +228,10 @@ test("rejects malformed handler references at workspace and concrete declaration
 				"app/docs/forge-codebase.yaml",
 				JSON.stringify({ id: "app", root: "..", analysis_handlers: value }),
 			);
-			await assert.rejects(loadWorkspaceConfig(f.config), /analysis_handlers/);
+			await assert.rejects(
+				loadWorkspaceConfig(f.config),
+				/analysis_handlers.*fixed entry forge-extension\/forge-extension\.ts/,
+			);
 		}
 	} finally {
 		await f.cleanup();

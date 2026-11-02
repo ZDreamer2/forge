@@ -1,3 +1,7 @@
+---
+edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
+---
+
 # Forge application architecture
 
 Forge interprets one authoritative workspace checkout and exposes it to browser and
@@ -33,11 +37,12 @@ its design context.
 
 | Component | Responsibility | Outgoing component imports |
 | --- | --- | --- |
-| `workspace-config` | Trusted authored workspace knowledge: registered codebases, declared repositories, display name, handler references | None |
+| `workspace-config` | Trusted authored workspace knowledge: registered codebases, declared repositories, display name and guide composition | None |
 | `workspace-repositories` | Observed participating repositories: startup resolution, status, path participation | workspace-config |
 | `workspace-tree` | Canonical tree vocabulary, ownership and derived review data | workspace-config |
 | `tree-sources` | Builds base trees from sources of workspace state, with bounded source capabilities | workspace-tree, workspace-repositories, workspace-config |
-| `tree-analysis` | Runs ordered trusted handlers over a run-local tree facade and finalizes review metadata | workspace-tree, workspace-config |
+| `tree-analysis` | Schedules applicable guide hooks per node over a run-local tree facade and finalizes review metadata | workspace-tree, workspace-config |
+| `guide-extensions` | Discovers and validates trusted guide modules; publishes the authoring contract listing engine-known hooks | workspace-config, tree-analysis |
 | `http-api` | Domain endpoints: selects a source, builds and analyzes its tree, maps results to the wire contract | tree-sources, tree-analysis, workspace-tree, workspace-repositories, workspace-config, api-contract |
 | `api-contract` | Browser-safe wire vocabulary consumed by server and UI; contract changes also require consumer verification | None |
 | `ui-assets` | Delivers installed HTML and bundled assets through protected HTTP routes | None |
@@ -52,6 +57,11 @@ display projections from that vocabulary.
 `app` constructs components and owns HTTP assembly and process configuration.
 `lib/git` owns bounded Git processes and cancellation; `lib/loopback-access` owns
 the Host/Origin guard. Domain components receive dependencies from composition.
+
+`guide-extensions` publishes the type-only authoring API at
+`@zdreamer/forge/extension`, separately from engine loading operations. Hook execution
+owners define their capability contracts; `guide-extensions` composes them, never
+the reverse. Loader, runner and configuration internals remain private.
 
 ## Installed browser host
 

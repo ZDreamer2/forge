@@ -1,3 +1,4 @@
+import type { WorkspaceConfig } from "../../workspace-config/index.ts";
 import {
 	type AnalysisHandlerIdentity,
 	type AnalysisNode,
@@ -5,15 +6,12 @@ import {
 	finalizeAnalysis,
 	type WorkspaceTree,
 } from "../../workspace-tree/index.ts";
-import { deemphasizeDirectories, warnLargeMarkdown } from "./builtins.ts";
-import {
-	AnalysisHandlerError,
-	type AnalysisResult,
-	type AnalysisRoot,
-	type RegisteredAnalysisHandler,
-} from "./types.ts";
+import { createInvocationOrder } from "./invocation-order.ts";
+import { createSourceFacts } from "./source-facts.ts";
+import { AnalysisHandlerError, type AnalysisResult, type AnnotationContribution } from "./types.ts";
 export interface TreeAnalyzerDeps {
-	readonly handlers: readonly RegisteredAnalysisHandler[];
+	readonly config: WorkspaceConfig;
+	readonly extensions: readonly AnnotationContribution[];
 }
 export interface AnalysisRunOptions {
 	readonly signal: AbortSignal;
@@ -28,11 +26,8 @@ function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 	});
 }
 export function createTreeAnalyzer(deps: TreeAnalyzerDeps) {
-	const registry: readonly RegisteredAnalysisHandler[] = [
-		{ identity: { id: "builtin:deemphasize-directories" }, handler: deemphasizeDirectories },
-		{ identity: { id: "builtin:large-markdown" }, handler: warnLargeMarkdown },
-		...deps.handlers,
-	];
+	const order = createInvocationOrder(deps.config);
+	const registry = new Map(deps.extensions.map((item) => [item.id, item]));
 	return {
 		async analyze(base: WorkspaceTree, options: AnalysisRunOptions): Promise<AnalysisResult> {
 			let current: AnalysisHandlerIdentity | undefined;
@@ -47,51 +42,37 @@ export function createTreeAnalyzer(deps: TreeAnalyzerDeps) {
 				return current;
 			};
 			const tree = createAnalysisTree(base, { checkActive, currentHandler });
-			const sizes = new Map<AnalysisNode, Promise<number>>();
-			const root = Object.assign(tree.root, {
-				signal: options.signal,
-				source: {
-					currentByteSize(node: AnalysisNode) {
-						checkActive();
-						if (tree.nodes.get(node.path) !== node || node.current?.kind !== "file")
-							return Promise.reject(new TypeError("Size lookup requires a current regular file in this run"));
-						let pending = sizes.get(node);
-						if (!pending) {
-							pending = Promise.resolve()
-								.then(() => {
-									checkActive();
-									return options.currentByteSize(node, options.signal);
-								})
-								.then((value) => {
-									checkActive();
-									return value;
-								});
-							sizes.set(node, pending);
-						}
-						return pending;
-					},
-				},
-			}) as AnalysisRoot;
-			Object.defineProperty(root, "handler", { get: currentHandler });
+			const source = createSourceFacts({ tree, signal: options.signal, checkActive, read: options.currentByteSize });
+			const invoked = new Map<string, AnalysisHandlerIdentity>();
 			try {
-				for (const registration of registry) {
-					checkActive();
-					current = registration.identity;
-					if (registration.error) throw registration.error;
-					try {
-						const returned = registration.handler?.(root);
-						if (returned) await abortable(Promise.resolve(returned), options.signal);
+				for (const node of tree.root.walk()) {
+					for (const id of order(node)) {
 						checkActive();
-					} catch (cause) {
-						options.signal.throwIfAborted();
-						throw new AnalysisHandlerError(registration.identity, cause);
+						const extension = registry.get(id);
+						if (!extension) continue;
+						const identity = { id: `${id}#annotateNode` };
+						if (extension.error) throw new AnalysisHandlerError(identity, extension.error);
+						if (!extension.annotateNode) continue;
+						current = identity;
+						invoked.set(identity.id, identity);
+						try {
+							const returned = extension.annotateNode({ node, guide: { id }, signal: options.signal, source });
+							if (returned) await abortable(Promise.resolve(returned), options.signal);
+							checkActive();
+						} catch (cause) {
+							options.signal.throwIfAborted();
+							throw new AnalysisHandlerError(identity, cause);
+						} finally {
+							current = undefined;
+						}
 					}
 				}
 				checkActive();
-				return { ...finalizeAnalysis(tree), handlers: registry.map((item) => item.identity) };
+				return { ...finalizeAnalysis(tree), handlers: [...invoked.values()] };
 			} finally {
 				active = false;
 				current = undefined;
+				source.close();
 			}
 		},
 	};

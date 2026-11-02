@@ -1,15 +1,20 @@
 import { resolve } from "node:path";
 import { rootedCodebases } from "./rooted-codebases.ts";
 import {
+	type GuideIdentity,
 	type ResolvedCodebase,
+	type ResolvedGuide,
 	type ResolvedGuideChain,
-	type ResolvedWorkspaceGuide,
 	type RootedCodebase,
 	type WorkspaceConfig,
 	WorkspaceConfigError,
 } from "./types.ts";
 
-type Guide = ResolvedCodebase | ResolvedWorkspaceGuide;
+type Guide = ResolvedGuide;
+
+export function guideIdentity(guide: Guide): GuideIdentity {
+	return "id" in guide ? `codebase:${guide.id}` : "workspace";
+}
 
 export function findCodebaseRoot(registry: WorkspaceConfig, root: string): RootedCodebase | undefined {
 	const lexical = resolve(root);
@@ -115,20 +120,42 @@ export function resolveGuideChain(
 		throw new WorkspaceConfigError(
 			`Selected codebase ${JSON.stringify(selected.id)} must be an available registered rooted guide`,
 		);
-	const workspace = ancestry(registry, registry.workspace);
-	const codebase = ancestry(registry, selected);
-	const predecessors = new Map<Guide, Set<Guide>>();
-	for (const chain of [workspace, codebase]) {
-		for (const guide of chain) if (!predecessors.has(guide)) predecessors.set(guide, new Set());
-		for (let index = 1; index < chain.length; index++) {
-			const before = chain[index - 1];
-			const after = chain[index];
-			if (before !== undefined && after !== undefined) predecessors.get(after)?.add(before);
-		}
-	}
-	const priority = [...new Set([...workspace, ...codebase])];
 	return {
 		selected,
-		guides: topological(predecessors, priority, "workspace/codebase chain merge"),
+		guides: mergeGuideSequences(
+			[ancestry(registry, registry.workspace), ancestry(registry, selected)],
+			"workspace/codebase chain merge",
+		),
 	};
+}
+
+export function resolveCodebaseChain(registry: WorkspaceConfig, selected: RootedCodebase): readonly Guide[] {
+	validateIds(registry);
+	if (!registry.guides.includes(selected) || selected.root === undefined)
+		throw new WorkspaceConfigError(
+			`Selected codebase ${JSON.stringify(selected.id)} must be an available registered rooted guide`,
+		);
+	return ancestry(registry, selected);
+}
+
+export function mergeGuideSequences(chains: readonly (readonly Guide[])[], context: string): readonly Guide[] {
+	const canonical = new Map<GuideIdentity, Guide>();
+	const predecessors = new Map<Guide, Set<Guide>>();
+	const priority: Guide[] = [];
+	for (const chain of chains) {
+		let before: Guide | undefined;
+		for (const candidate of chain) {
+			const id = guideIdentity(candidate);
+			let guide = canonical.get(id);
+			if (guide === undefined) {
+				guide = candidate;
+				canonical.set(id, guide);
+				predecessors.set(guide, new Set());
+				priority.push(guide);
+			}
+			if (before !== undefined && before !== guide) predecessors.get(guide)?.add(before);
+			before = guide;
+		}
+	}
+	return topological(predecessors, priority, context);
 }

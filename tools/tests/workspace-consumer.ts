@@ -28,6 +28,9 @@ const args = process.argv.slice(2);
 assert.ok(args.length === 0 || (args.length === 1 && args[0] === "--built"), "test:workspace accepts only --built");
 // biome-ignore lint/style/noProcessEnv: CI explicitly chooses where its checked artifact is retained.
 const artifactDirectory = process.env.FORGE_CHECKED_PACKAGE_DIR;
+// biome-ignore lint/style/noProcessEnv: Optional local distribution acceptance is explicitly supplied by the caller.
+const generatedBaseGuide = process.env.FORGE_GENERATED_BASE_GUIDE;
+assert.ok(!generatedBaseGuide || generatedBaseGuide.startsWith("/"), "Generated base guide must be absolute");
 assert.ok(!artifactDirectory || artifactDirectory.startsWith("/"), "Artifact directory must be absolute");
 const temporary = mkdtempSync(join(tmpdir(), "forge-consumer-"));
 function run(command: string, args: string[], cwd: string) {
@@ -359,6 +362,7 @@ function verifyInvalidStartup(executable: string, consumer: string) {
 	mkdirSync(guide, { recursive: true });
 	const marker = join(guide, "forge-workspace.yaml");
 	for (const [yaml, diagnostic] of [
+		["repositories: [.]\ncodebases: []\nanalysis_handlers: []\n", /analysis_handlers.*forge-extension/s],
 		["repositories: [.]\ncodebases: []\ncodebase_types: []\n", /legacy.*codebase_types.*migrate/s],
 		["repositories: [.]\ncodebases: [forge-codebase-type.yaml]\n", /legacy.*forge-codebase-type.yaml.*migrate/s],
 		["repositories: [.]\ncodebases: []\nparents: [unavailable-guide]\n", /unavailable-guide/],
@@ -492,7 +496,16 @@ export type NodeGlobal = typeof process;
 	assert.match(removedCommand.stderr, /Usage: forge serve/);
 	verifyInvalidStartup(executable, consumer);
 	await verifyServer(executable, consumer);
-	await verifyInstalledAnalysis({ consumer, executable, compiler, run, portReservation, installedServer, sourceState });
+	await verifyInstalledAnalysis({
+		consumer,
+		executable,
+		compiler,
+		run,
+		portReservation,
+		installedServer,
+		sourceState,
+		generatedBaseGuide,
+	});
 	await verifyInstalledFiles({ consumer, executable, run, portReservation, installedServer, sourceState });
 	if (artifactDirectory) {
 		mkdirSync(artifactDirectory, { recursive: true });
@@ -500,7 +513,7 @@ export type NodeGlobal = typeof process;
 		writeFileSync(join(artifactDirectory, "pack.json"), `${JSON.stringify(packed, null, 2)}\n`);
 	}
 	console.log(
-		"Tarball-only consumer: installed server/React/CSS/Chromium, read-only changes/analysis/files, normalized patches and full context, native TS handlers, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
+		"Tarball-only consumer: installed server/React/CSS/Chromium, read-only changes/analysis/files, normalized patches and full context, guide extensions and native TS imports, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
 	);
 } finally {
 	rmSync(temporary, { recursive: true, force: true });

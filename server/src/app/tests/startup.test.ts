@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { type TestContext, test } from "node:test";
 import type { WorkspaceAnalysis, WorkspaceChanges } from "../../components/api-contract/index.ts";
 import { rootedCodebases } from "../../components/workspace-config/index.ts";
@@ -21,6 +21,11 @@ async function availablePort(): Promise<number> {
 	return address.port;
 }
 
+async function writeFixtureFile(path: string, content: string | Uint8Array) {
+	await mkdir(dirname(path), { recursive: true });
+	await writeFile(path, content);
+}
+
 async function fixture(t: TestContext) {
 	const directory = await mkdtemp(join(tmpdir(), "forge-startup-"));
 	t.after(() => rm(directory, { recursive: true, force: true }));
@@ -28,7 +33,7 @@ async function fixture(t: TestContext) {
 	const root = join(directory, "workspace");
 	await mkdir(join(root, "docs/forge/workspace"), { recursive: true });
 	const configPath = join(root, "docs/forge/workspace/forge-workspace.yaml");
-	await writeFile(configPath, "repositories: ['.']\ncodebases: []\n");
+	await writeFixtureFile(configPath, "repositories: ['.']\ncodebases: []\n");
 	return {
 		directory,
 		root,
@@ -46,7 +51,7 @@ test("startup loads one configuration and publishes an ordered repository snapsh
 	for (const name of ["nested", "undeclared"]) {
 		execFileSync("git", ["init", "-q", join(input.root, name)]);
 	}
-	await writeFile(input.configPath, "repositories: [nested, absent, '.']\ncodebases: []\n");
+	await writeFixtureFile(input.configPath, "repositories: [nested, absent, '.']\ncodebases: []\n");
 	const previous = signalListeners();
 	const server = await start(input.options);
 	t.after(server.close);
@@ -80,15 +85,15 @@ test("socket requests collect fresh changes with startup routing and fail safely
 	execFileSync("git", ["init", "-q", nested]);
 	await mkdir(join(input.root, "guidance"));
 	await mkdir(join(nested, "guidance"));
-	await writeFile(join(input.root, "guidance/forge-codebase.yaml"), "id: workspace-owner\nroot: ..\n");
-	await writeFile(join(nested, "guidance/forge-codebase.yaml"), "id: nested-owner\nroot: ..\n");
-	await writeFile(
+	await writeFixtureFile(join(input.root, "guidance/forge-codebase.yaml"), "id: workspace-owner\nroot: ..\n");
+	await writeFixtureFile(join(nested, "guidance/forge-codebase.yaml"), "id: nested-owner\nroot: ..\n");
+	await writeFixtureFile(
 		input.configPath,
 		"repositories: [nested, absent, '.']\ncodebases: [../../../guidance/forge-codebase.yaml, ../../../nested/guidance/forge-codebase.yaml]\n",
 	);
-	await writeFile(join(input.root, ".gitignore"), "docs/\nguidance/\nnested/\nabsent/\n");
-	await writeFile(join(input.root, "tracked.txt"), "baseline\n");
-	await writeFile(join(nested, "child.txt"), "baseline\n");
+	await writeFixtureFile(join(input.root, ".gitignore"), "docs/\nguidance/\nnested/\nabsent/\n");
+	await writeFixtureFile(join(input.root, "tracked.txt"), "baseline\n");
+	await writeFixtureFile(join(nested, "child.txt"), "baseline\n");
 	for (const directory of [input.directory, nested]) {
 		execFileSync("git", ["-C", directory, "add", "."]);
 		execFileSync("git", [
@@ -103,8 +108,8 @@ test("socket requests collect fresh changes with startup routing and fail safely
 			"baseline",
 		]);
 	}
-	await writeFile(join(input.root, "tracked.txt"), "first\n");
-	await writeFile(join(nested, "child.txt"), "child\n");
+	await writeFixtureFile(join(input.root, "tracked.txt"), "first\n");
+	await writeFixtureFile(join(nested, "child.txt"), "child\n");
 	const indexes = await Promise.all(
 		[input.directory, nested].map((directory) => readFile(join(directory, ".git/index"))),
 	);
@@ -128,10 +133,10 @@ test("socket requests collect fresh changes with startup routing and fail safely
 		},
 		changes: [expectedChange("nested", "nested/child.txt"), expectedChange(".", "tracked.txt")],
 	});
-	await writeFile(join(input.root, "tracked.txt"), "second\nextra\n");
-	await writeFile(input.configPath, "not: [valid YAML");
+	await writeFixtureFile(join(input.root, "tracked.txt"), "second\nextra\n");
+	await writeFixtureFile(input.configPath, "not: [valid YAML");
 	execFileSync("git", ["init", "-q", join(input.root, "absent")]);
-	await writeFile(join(input.root, "absent/ignored.txt"), "not a startup participant\n");
+	await writeFixtureFile(join(input.root, "absent/ignored.txt"), "not a startup participant\n");
 	assert.deepEqual(await (await fetch(`${server.address}/api/changes`)).json(), {
 		codebases: {
 			nested: { id: "nested-owner", root: "nested", guidance: "nested/guidance" },
@@ -172,7 +177,7 @@ test("termination signals dispose the listener and remove both owned signal hand
 test("fresh startup reads current configuration declarations from its selected checkout", async (t) => {
 	for (const missing of ["first", "second"]) {
 		const input = await fixture(t);
-		await writeFile(input.configPath, `repositories: [${missing}]\ncodebases: []\n`);
+		await writeFixtureFile(input.configPath, `repositories: [${missing}]\ncodebases: []\n`);
 		const server = await start(input.options);
 		t.after(server.close);
 		assert.deepEqual(server.snapshot.repositories, [{ path: missing, status: "missing" }]);
@@ -183,11 +188,11 @@ test("fresh startup reads current configuration declarations from its selected c
 test("configuration and repository failures refuse startup before installing termination hooks", async (t) => {
 	for (const failure of ["malformed", "import", "nested", "git"] as const) {
 		const input = await fixture(t);
-		if (failure === "malformed") await writeFile(input.configPath, "repositories: invalid\n");
-		if (failure === "import") await writeFile(input.configPath, "not: [valid YAML");
+		if (failure === "malformed") await writeFixtureFile(input.configPath, "repositories: invalid\n");
+		if (failure === "import") await writeFixtureFile(input.configPath, "not: [valid YAML");
 		if (failure === "nested") {
 			await mkdir(join(input.root, "nested"));
-			await writeFile(input.configPath, "repositories: [nested]\ncodebases: []\n");
+			await writeFixtureFile(input.configPath, "repositories: [nested]\ncodebases: []\n");
 		}
 		if (failure === "git") await rm(join(input.directory, ".git"), { recursive: true });
 		const previous = signalListeners();
@@ -199,7 +204,7 @@ test("configuration and repository failures refuse startup before installing ter
 test("startup publishes explicit literal configuration name instead of checkout basename", async (t) => {
 	const input = await fixture(t);
 	const name = "BiCo <script> & 🛠️";
-	await writeFile(input.configPath, `display_name: ${JSON.stringify(name)}\nrepositories: []\ncodebases: []\n`);
+	await writeFixtureFile(input.configPath, `display_name: ${JSON.stringify(name)}\nrepositories: []\ncodebases: []\n`);
 	const server = await start(input.options);
 	t.after(server.close);
 	assert.deepEqual(await (await fetch(`${server.address}/api/workspace`)).json(), {
@@ -211,13 +216,14 @@ test("startup publishes explicit literal configuration name instead of checkout 
 test("startup handler failures affect analysis only and never expose their private cause", async (t) => {
 	for (const failure of ["missing", "export", "invoke"] as const) {
 		const input = await fixture(t);
-		await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
+		await writeFixtureFile(input.configPath, "repositories: ['.']\ncodebases: []\n");
+		await mkdir(join(input.root, "docs/forge/workspace/forge-extension"), { recursive: true });
 		if (failure !== "missing")
-			await writeFile(
-				join(input.root, "docs/forge/workspace/handler.mjs"),
+			await writeFixtureFile(
+				join(input.root, "docs/forge/workspace/forge-extension/forge-extension.ts"),
 				failure === "export"
 					? "export default 1;"
-					: "export default () => { throw new Error('/private/secret detail'); };",
+					: "export default { api: 1, annotateNode() { throw new Error('/private/secret detail'); } };",
 			);
 		const server = await start(input.options);
 		t.after(server.close);
@@ -226,7 +232,7 @@ test("startup handler failures affect analysis only and never expose their priva
 		const body = (await response.json()) as { error: { code: string; handler: string } };
 		assert.equal(body.error.code, "internal_error");
 		assert.equal(typeof body.error.handler, "string");
-		assert.doesNotMatch(JSON.stringify(body), /private|secret|handler.mjs|stack/);
+		assert.doesNotMatch(JSON.stringify(body), /private|secret|forge-extension.ts|stack/);
 		assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
 		assert.equal((await fetch(`${server.address}/api/workspace`)).status, 200);
 		await server.close();
@@ -238,10 +244,10 @@ test("invocation diagnostics stay in bounded sanitized server logs, not HTTP err
 		await t.test(asynchronous ? "async rejection" : "sync throw", async (t) => {
 			const input = await fixture(t);
 			const diagnostic = `/private/secret detail\n\t\u001b${"x".repeat(2000)}`;
-			await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
-			await writeFile(
-				join(input.root, "docs/forge/workspace/handler.mjs"),
-				`export default ${asynchronous ? "async " : ""}() => { throw new Error(${JSON.stringify(diagnostic)}); };`,
+			await writeFixtureFile(input.configPath, "repositories: ['.']\ncodebases: []\n");
+			await writeFixtureFile(
+				join(input.root, "docs/forge/workspace/forge-extension/forge-extension.ts"),
+				`export default { api: 1, annotateNode: ${asynchronous ? "async " : ""}() => { throw new Error(${JSON.stringify(diagnostic)}); } };`,
 			);
 			const logged = t.mock.method(console, "error", () => {});
 			const server = await start(input.options);
@@ -249,14 +255,14 @@ test("invocation diagnostics stay in bounded sanitized server logs, not HTTP err
 			const response = await fetch(`${server.address}/api/changes/analysis`);
 			assert.equal(response.status, 500);
 			assert.deepEqual(await response.json(), {
-				error: { code: "internal_error", message: "Internal server error", handler: "workspace:1" },
+				error: { code: "internal_error", message: "Internal server error", handler: "workspace#annotateNode" },
 			});
 			assert.equal(logged.mock.calls.length, 1);
 			const message = logged.mock.calls[0]?.arguments[0];
 			assert.equal(typeof message, "string");
 			assert.match(
 				message,
-				/^Forge workspace request failed: Analysis handler failed: workspace:1: \/private\/secret detail {3}x+$/,
+				/^Forge workspace request failed: Analysis handler failed: workspace#annotateNode: \/private\/secret detail {3}x+$/,
 			);
 			assert.doesNotMatch(message, /\p{Cc}/u);
 			assert.equal(message.length, "Forge workspace request failed: ".length + 1600);
@@ -268,10 +274,10 @@ test("invocation diagnostics stay in bounded sanitized server logs, not HTTP err
 
 test("simultaneous analysis runs and light requests remain independent", async (t) => {
 	const input = await fixture(t);
-	await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
-	await writeFile(
-		join(input.root, "docs/forge/workspace/handler.mjs"),
-		"export default async root => { await new Promise(resolve => setTimeout(resolve, 20)); root.notice('one invocation'); };",
+	await writeFixtureFile(input.configPath, "repositories: ['.']\ncodebases: []\n");
+	await writeFixtureFile(
+		join(input.root, "docs/forge/workspace/forge-extension/forge-extension.ts"),
+		"export default { api: 1, async annotateNode(ctx) { if (ctx.node.path !== '.') return; await new Promise(resolve => setTimeout(resolve, 20)); ctx.node.notice('one invocation'); } };",
 	);
 	const server = await start(input.options);
 	t.after(server.close);
@@ -294,10 +300,10 @@ test("a disconnected analysis client aborts its cooperative handler while light 
 	const input = await fixture(t);
 	const started = join(input.directory, "analysis-started");
 	const cancelled = join(input.directory, "analysis-cancelled");
-	await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: ['./handler.mjs']\n");
-	await writeFile(
-		join(input.root, "docs/forge/workspace/handler.mjs"),
-		`import { writeFile } from 'node:fs/promises'; export default async root => { await writeFile(${JSON.stringify(started)}, 'started'); await new Promise(resolve => root.signal.addEventListener('abort', resolve, {once:true})); await writeFile(${JSON.stringify(cancelled)}, 'cancelled'); root.signal.throwIfAborted(); };`,
+	await writeFixtureFile(input.configPath, "repositories: ['.']\ncodebases: []\n");
+	await writeFixtureFile(
+		join(input.root, "docs/forge/workspace/forge-extension/forge-extension.ts"),
+		`import { writeFile } from 'node:fs/promises'; export default { api: 1, async annotateNode(ctx) { await writeFile(${JSON.stringify(started)}, 'started'); await new Promise(resolve => ctx.signal.addEventListener('abort', resolve, {once:true})); await writeFile(${JSON.stringify(cancelled)}, 'cancelled'); ctx.signal.throwIfAborted(); } };`,
 	);
 	const server = await start(input.options);
 	t.after(server.close);
@@ -323,15 +329,15 @@ test("a disconnected analysis client aborts its cooperative handler while light 
 test("assembled file routes return live patches and context while isolating analysis failures", async (t) => {
 	const input = await fixture(t);
 	const git = (args: string[]) => execFileSync("git", ["-C", input.directory, ...args]);
-	await writeFile(join(input.root, "tracked.txt"), "old\n");
+	await writeFixtureFile(join(input.root, "tracked.txt"), "old\n");
 	git(["add", "."]);
 	git(["-c", "user.name=Fixture", "-c", "user.email=f@example.com", "commit", "-qm", "baseline"]);
-	await writeFile(join(input.root, "tracked.txt"), "new\n");
-	await writeFile(
-		join(input.root, "handler.mjs"),
-		"export default () => { throw new Error('private handler failure') };\n",
+	await writeFixtureFile(join(input.root, "tracked.txt"), "new\n");
+	await writeFixtureFile(
+		join(input.root, "docs/forge/workspace/forge-extension/forge-extension.ts"),
+		"export default { api: 1, annotateNode() { throw new Error('private handler failure') } };\n",
 	);
-	await writeFile(input.configPath, "repositories: ['.']\ncodebases: []\nanalysis_handlers: [../../../handler.mjs]\n");
+	await writeFixtureFile(input.configPath, "repositories: ['.']\ncodebases: []\n");
 	const index = await readFile(join(input.directory, ".git/index"));
 	const server = await start(input.options);
 	t.after(server.close);
@@ -349,7 +355,7 @@ test("assembled file routes return live patches and context while isolating anal
 	assert.equal(full.patch, diff.patch);
 	assert.equal((await fetch(`${server.address}/api/changes/analysis`)).status, 500);
 	assert.equal((await fetch(`${server.address}/api/changes/file?path=tracked.txt`, { method: "HEAD" })).status, 200);
-	await writeFile(join(input.root, "tracked.txt"), "old\n");
+	await writeFixtureFile(join(input.root, "tracked.txt"), "old\n");
 	assert.equal(
 		((await (await fetch(`${server.address}/api/changes/file?path=tracked.txt`)).json()) as { kind: string }).kind,
 		"not_changed",
@@ -369,13 +375,13 @@ test("disconnecting an assembled file request drains its filter and scratch whil
 	const { lstat } = await import("node:fs/promises");
 	const marker = join(input.directory, "file-filter-started.json");
 	const script = join(input.directory, "file-filter.mjs");
-	await writeFile(join(input.root, ".gitattributes"), "file.slow filter=hanging\n");
-	await writeFile(join(input.root, "file.slow"), "baseline\n");
+	await writeFixtureFile(join(input.root, ".gitattributes"), "file.slow filter=hanging\n");
+	await writeFixtureFile(join(input.root, "file.slow"), "baseline\n");
 	const git = (args: string[]) => execFileSync("git", ["-C", input.directory, ...args]);
 	git(["add", "workspace"]);
 	git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "-qm", "baseline"]);
-	await writeFile(join(input.root, "file.slow"), "updated\n");
-	await writeFile(
+	await writeFixtureFile(join(input.root, "file.slow"), "updated\n");
+	await writeFixtureFile(
 		script,
 		`import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -470,23 +476,23 @@ test("startup validates all rooted chains and workspace ancestry before importin
 		const input = await fixture(t);
 		const guide = join(input.root, "docs/forge/workspace");
 		const imported = join(input.directory, "imported");
-		await writeFile(
-			join(guide, "handler.mjs"),
-			`import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(imported)},'executed'); export default ()=>{};`,
+		await writeFixtureFile(
+			join(guide, "forge-extension/forge-extension.ts"),
+			`import {writeFileSync} from 'node:fs'; writeFileSync(${JSON.stringify(imported)},'executed'); export default { api: 1, annotateNode() {} };`,
 		);
 		await mkdir(join(guide, "api"));
 		await mkdir(join(guide, "a"));
 		await mkdir(join(guide, "b"));
-		await writeFile(
+		await writeFixtureFile(
 			join(guide, "api/forge-codebase.yaml"),
 			`id: api\nroot: .\nparents: [${failure === "merge" ? "a, b" : failure === "rooted" || failure === "missing-root" ? "missing" : ""}]\n`,
 		);
-		await writeFile(join(guide, "a/forge-codebase.yaml"), "id: a\n");
-		await writeFile(join(guide, "b/forge-codebase.yaml"), "id: b\n");
-		await writeFile(join(guide, "forge-codebase.yaml"), "id: missing\nroot: absent\n");
-		await writeFile(
+		await writeFixtureFile(join(guide, "a/forge-codebase.yaml"), "id: a\n");
+		await writeFixtureFile(join(guide, "b/forge-codebase.yaml"), "id: b\n");
+		await writeFixtureFile(join(guide, "forge-codebase.yaml"), "id: missing\nroot: absent\n");
+		await writeFixtureFile(
 			input.configPath,
-			`repositories: []\nparents: [${failure === "workspace" ? "missing" : failure === "merge" ? "b, a" : ""}]\ncodebases: [${failure === "workspace" ? "" : "api/forge-codebase.yaml, a/forge-codebase.yaml, b/forge-codebase.yaml, forge-codebase.yaml"}]\nanalysis_handlers: [./handler.mjs]\n`,
+			`repositories: []\nparents: [${failure === "workspace" ? "missing" : failure === "merge" ? "b, a" : ""}]\ncodebases: [${failure === "workspace" ? "" : "api/forge-codebase.yaml, a/forge-codebase.yaml, b/forge-codebase.yaml, forge-codebase.yaml"}]\n`,
 		);
 		const before = signalListeners();
 		await assert.rejects(
@@ -507,8 +513,8 @@ test("startup validates all rooted chains and workspace ancestry before importin
 test("startup leaves unrelated rootless ancestry unresolved and skips optional unavailable registrations", async (t) => {
 	const input = await fixture(t);
 	const guide = join(input.root, "docs/forge/workspace");
-	await writeFile(join(guide, "forge-codebase.yaml"), "id: unused\nparents: [missing]\n");
-	await writeFile(
+	await writeFixtureFile(join(guide, "forge-codebase.yaml"), "id: unused\nparents: [missing]\n");
+	await writeFixtureFile(
 		input.configPath,
 		"repositories: []\ncodebases: [forge-codebase.yaml, missing/forge-codebase.yaml]\n",
 	);
@@ -517,4 +523,46 @@ test("startup leaves unrelated rootless ancestry unresolved and skips optional u
 	assert.deepEqual(rootedCodebases(server.snapshot.workspaceConfig), []);
 	assert.equal(server.snapshot.workspaceConfig.guides[0]?.id, "unused");
 	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+});
+
+test("a broken rooted participant fails analysis only after Refresh finds an owned change", async (t) => {
+	const input = await fixture(t);
+	const guide = join(input.root, "docs/forge/workspace/broken");
+	await mkdir(join(input.root, "owned"));
+	await writeFixtureFile(join(input.root, ".gitignore"), "docs/\n");
+	await writeFixtureFile(join(guide, "forge-codebase.yaml"), "id: broken\nroot: ../../../../owned\n");
+	await writeFixtureFile(
+		join(guide, "forge-extension/forge-extension.ts"),
+		"throw new Error('/private/broken extension');\n",
+	);
+	await writeFixtureFile(input.configPath, "repositories: ['.']\ncodebases: [broken/forge-codebase.yaml]\n");
+	execFileSync("git", ["-C", input.directory, "add", "."]);
+	execFileSync("git", [
+		"-C",
+		input.directory,
+		"-c",
+		"user.name=Fixture",
+		"-c",
+		"user.email=fixture@example.com",
+		"commit",
+		"-qm",
+		"baseline",
+	]);
+	await writeFixtureFile(join(input.root, "outside.txt"), "unassigned\n");
+	const index = await readFile(join(input.directory, ".git/index"));
+	const server = await start(input.options);
+	t.after(server.close);
+	const initial = await fetch(`${server.address}/api/changes/analysis`);
+	assert.equal(initial.status, 200);
+	const analysis = (await initial.json()) as WorkspaceAnalysis;
+	assert.deepEqual(analysis.handlers, {});
+	await writeFixtureFile(join(input.root, "owned/change.txt"), "now applicable\n");
+	const refreshed = await fetch(`${server.address}/api/changes/analysis`);
+	assert.equal(refreshed.status, 500);
+	assert.deepEqual(await refreshed.json(), {
+		error: { code: "internal_error", message: "Internal server error", handler: "codebase:broken#annotateNode" },
+	});
+	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+	assert.equal((await fetch(`${server.address}/api/workspace`)).status, 200);
+	assert.deepEqual(await readFile(join(input.directory, ".git/index")), index);
 });

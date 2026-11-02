@@ -1,14 +1,9 @@
-import type { AnalysisHandlerIdentity, AnalysisNode, FinalAnalysisTree } from "../../workspace-tree/index.ts";
-export interface AnalysisRoot extends AnalysisNode {
-	readonly handler: AnalysisHandlerIdentity;
-	readonly signal: AbortSignal;
-	readonly source: { currentByteSize(node: AnalysisNode): Promise<number> };
-}
-export type AnalysisHandler = (root: AnalysisRoot) => void | Promise<void>;
-export interface RegisteredAnalysisHandler {
-	readonly identity: AnalysisHandlerIdentity;
-	readonly handler?: AnalysisHandler;
-	readonly error?: AnalysisHandlerError;
+import type { AnalysisHandlerIdentity, FinalAnalysisTree } from "../../workspace-tree/index.ts";
+import type { TreeAnnotationHook } from "./annotation-hook.ts";
+export interface AnnotationContribution {
+	readonly id: `codebase:${string}` | "workspace";
+	readonly annotateNode?: TreeAnnotationHook;
+	readonly error?: Error;
 }
 export interface AnalysisResult extends FinalAnalysisTree {
 	readonly handlers: readonly AnalysisHandlerIdentity[];

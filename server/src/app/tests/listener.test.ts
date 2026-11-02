@@ -86,7 +86,10 @@ test("real adapter preserves Host and Origin restrictions including spoofed forw
 				repositories: [],
 				port,
 				analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
-				analyze: createTreeAnalyzer({ handlers: [] }).analyze,
+				analyze: createTreeAnalyzer({
+					config: { workspace: { guide: "/guide", parents: [] }, guides: [], repositories: [], unavailable: [] },
+					extensions: [],
+				}).analyze,
 				currentByteSize: async () => 0,
 				collectChanges: async () => createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] }),
 			}).fetch(incoming),

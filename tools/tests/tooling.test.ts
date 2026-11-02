@@ -93,6 +93,15 @@ test("real graph preserves public browser contract type re-exports", () => {
 		(item: { source: string }) => item.source === "src/components/api-contract/index.ts",
 	);
 	assert.ok(surface);
+	const facade = graph.modules.find(
+		(item: { source: string }) => item.source === "src/components/guide-extensions/internal/authoring.ts",
+	);
+	assert.ok(facade);
+	assert.deepEqual(
+		facade.dependencies.map((item: { resolved: string }) => item.resolved),
+		["src/components/tree-analysis/index.ts"],
+	);
+
 	assert.deepEqual(
 		surface.dependencies.map((item: { resolved: string }) => item.resolved),
 		["src/components/api-contract/internal/types.ts"],
@@ -242,11 +251,15 @@ test("analysis graph allows composition edges and rejects source, reverse and co
 			"src/components/http-api/index.ts",
 			"import type { Value } from '../tree-analysis/index.ts'; export type Result = Value;",
 		);
+		write(
+			"src/components/guide-extensions/index.ts",
+			"import '../tree-analysis/index.ts'; import '../workspace-config/index.ts';",
+		);
 		const allowed = cruise();
 		assert.equal(allowed.status, 0, allowed.stdout + allowed.stderr);
 		write(
 			"src/components/tree-analysis/internal/invalid.ts",
-			"import '../../tree-sources/index.ts'; import '../../api-contract/index.ts';",
+			"import '../../tree-sources/index.ts'; import '../../api-contract/index.ts'; import '../../guide-extensions/index.ts';",
 		);
 		write("src/components/workspace-tree/internal/invalid.ts", "import '../../tree-analysis/index.ts';");
 		write("src/components/api-contract/internal/invalid.ts", "import '../../tree-analysis/index.ts';");

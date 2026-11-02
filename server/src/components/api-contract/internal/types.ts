@@ -20,7 +20,7 @@ export type WorkspaceChanges = {
 	}[];
 };
 
-export type AnalysisHandlerDefinition = { id: string; codebase?: string };
+export type AnalysisHandlerDefinition = { id: string };
 export type AnalysisEmphasis = "normal" | "emphasized" | "deemphasized" | "hidden";
 export type AnalysisSignal = {
 	severity: "notice" | "warning";

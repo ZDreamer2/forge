@@ -193,41 +193,45 @@ and the supported `forge serve --workspace <path>` CLI instead of
 `forge inspect-workspace`. Publication and installation repins are separate from
 source migration.
 
-## Analysis handlers
+## Guide extensions
 
 The [analyzed tree](server/docs/protocol.md#analyze-workspace-changes) supplies raw
-and attention totals, emphasis and attributed signals. Built-in and configured
-handlers annotate the same canonical tree.
+and attention totals, emphasis and attributed signals. Policies come from adopted
+guides. Registering Forge-base and adopting it through workspace `parents` enables
+its planning/test deemphasis and large changed Markdown warnings. Registration alone
+does not apply a rootless guide. An engine without adopted policies returns normal
+emphasis and no signals.
 
-Register trusted modules with optional ordered `analysis_handlers` lists on
-`forge-workspace.yaml` or a registered rooted `forge-codebase.yaml`:
-
-```yaml
-analysis_handlers:
-  - ./analysis.ts
-```
+Each workspace or codebase guide can supply the fixed entry
+`forge-extension/forge-extension.ts`, with private `internal/` modules and owner-local
+`tests/` when needed:
 
 ```ts
-import type { AnalysisHandler } from '@zdreamer/forge/analysis';
+import type { ForgeExtension } from '@zdreamer/forge/extension';
 
-const analyze: AnalysisHandler = (root) => {
-  for (const node of root.walk()) {
-    if (node.path === 'tests/critical') node.restoreNormalEmphasis('Review critical tests');
-  }
-};
-export default analyze;
+export default {
+  api: 1,
+  annotateNode(ctx) {
+    if (ctx.node.path === 'tests/critical')
+      ctx.node.restoreNormalEmphasis('Review critical tests');
+  },
+} satisfies ForgeExtension;
 ```
 
-Paths resolve relative to their declaring YAML. Native ESM `.ts`/`.mts` (erasable
-TypeScript syntax) and `.js`/`.mjs` modules export one default function; relative
-imports use explicit extensions. The type-only public `./analysis` entry supplies
-authoring vocabulary, without operational loader/runner APIs. No runtime helper
-import is needed. Restart the process to reload modules.
+Use named type-only imports from `@zdreamer/forge/extension`, native erasable
+TypeScript ESM and explicit relative import extensions.
 
-Handlers run after built-ins, workspace first and then available rooted participants
-in registry/list order, preserving repeated references. Parent adoption adds no
-executions; a rooted parent runs only its own ordinary registered list. Rootless
-guides do not schedule handlers. Handlers can annotate the whole tree. A handler
-failure fails analysis while `/api/changes` remains available. See the
-[analysis authoring guide](server/src/components/tree-analysis/docs/UnitGuide.md)
-for source capabilities, attribution and execution limits.
+Remove YAML `analysis_handlers`, including empty lists, and replace legacy
+`@zdreamer/forge/analysis` imports and whole-tree functions with fixed extension
+units. Unknown hooks and unsupported `api` revisions fail loading.
+
+Modules load once at startup from validated workspace and rooted participant
+ancestry; restart to reload them. Forge invokes each applicable guide once per
+canonical node, merging workspace and both source-owner chains. Hooks can navigate
+and annotate the whole tree, so account for repeated invocation. Extensions are
+trusted, unsandboxed code; await all work and cooperate with cancellation.
+
+An applicable load error or hook failure rejects analysis atomically while light
+APIs remain usable. An unrelated broken participant does not block analysis.
+The [analysis guide](https://github.com/ZDreamer2/forge/blob/main/server/src/components/tree-analysis/docs/UnitGuide.md)
+explains attribution, source capabilities and execution limits.

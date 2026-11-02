@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
 	findCodebaseRoot,
+	guideIdentity,
+	mergeGuideSequences,
 	type ResolvedGuideChain,
+	resolveCodebaseChain,
 	resolveGuideChain,
 	resolveWorkspaceChain,
 	rootedCodebases,
@@ -151,4 +154,33 @@ test("cycles and ordering contradictions fail atomically with identities and con
 	assert.ok(first);
 	const duplicate = { ...config, guides: [...config.guides, first] };
 	assert.throws(() => resolveWorkspaceChain(duplicate), /Duplicate codebase ID/);
+});
+
+test("independent owner ancestry avoids workspace tie constraints in a three-chain merge", () => {
+	const config = registry({ api: ["a"], other: ["a", "b"], a: [], b: [] }, ["b"], ["api", "other"]);
+	const workspace = resolveWorkspaceChain(config).guides;
+	const api = rootedCodebases(config).find((guide) => guide.id === "api");
+	const other = rootedCodebases(config).find((guide) => guide.id === "other");
+	assert.ok(api && other);
+	const apiChain = resolveCodebaseChain(config, api);
+	const otherChain = resolveCodebaseChain(config, other);
+	assert.deepEqual(apiChain.map(guideIdentity), ["codebase:a", "codebase:api"]);
+	assert.deepEqual(mergeGuideSequences([workspace, apiChain, otherChain], "node example").map(guideIdentity), [
+		"codebase:a",
+		"codebase:b",
+		"workspace",
+		"codebase:api",
+		"codebase:other",
+	]);
+	assert.throws(
+		() =>
+			mergeGuideSequences(
+				[
+					[api, other],
+					[{ ...other }, { ...api }],
+				],
+				"node rename",
+			),
+		/Contradictory ordering in node rename/,
+	);
 });

@@ -2,14 +2,8 @@ export interface RepositoryDeclaration {
 	readonly path: string;
 }
 
-export interface ResolvedAnalysisHandler {
-	readonly modulePath: string;
-	readonly ordinal: number;
-}
-
 export interface ResolvedCodebase {
 	readonly id: string;
-	readonly analysisHandlers?: readonly ResolvedAnalysisHandler[];
 	readonly root?: string;
 	readonly guide: string;
 	readonly parents: readonly string[];
@@ -30,13 +24,15 @@ export interface UnavailableCodebase {
 	readonly reason: string;
 }
 
+export type ResolvedGuide = ResolvedCodebase | ResolvedWorkspaceGuide;
+export type GuideIdentity = `codebase:${string}` | "workspace";
+
 export interface ResolvedGuideChain<Selected extends RootedCodebase | undefined = RootedCodebase | undefined> {
 	readonly selected: Selected;
-	readonly guides: readonly (ResolvedCodebase | ResolvedWorkspaceGuide)[];
+	readonly guides: readonly ResolvedGuide[];
 }
 
 export interface WorkspaceConfig {
-	readonly analysisHandlers?: readonly ResolvedAnalysisHandler[];
 	readonly displayName?: string;
 	readonly repositories: readonly RepositoryDeclaration[];
 	readonly workspace: ResolvedWorkspaceGuide;

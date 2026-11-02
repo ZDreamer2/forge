@@ -19,7 +19,10 @@ test("identity snapshots repository declarations without collecting or exposing 
 		name: "Selected",
 		repositories,
 		analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
-		analyze: createTreeAnalyzer({ handlers: [] }).analyze,
+		analyze: createTreeAnalyzer({
+			config: { workspace: { guide: "/guide", parents: [] }, guides: [], repositories: [], unavailable: [] },
+			extensions: [],
+		}).analyze,
 		currentByteSize: async () => 0,
 		collectChanges: async () => {
 			throw new Error("Identity must not collect");
@@ -60,7 +63,10 @@ test("flat projection uses present-side concrete roots, safe keys and response-l
 		name: "Selected",
 		repositories: [],
 		analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
-		analyze: createTreeAnalyzer({ handlers: [] }).analyze,
+		analyze: createTreeAnalyzer({
+			config: { workspace: { guide: "/guide", parents: [] }, guides: [], repositories: [], unavailable: [] },
+			extensions: [],
+		}).analyze,
 		currentByteSize: async () => 0,
 		collectChanges: async () => {
 			collections++;
@@ -103,18 +109,22 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 		statistics: { added: 4, removed: 2, binary: false },
 	});
 	const analyzer = createTreeAnalyzer({
-		handlers: [
+		config: {
+			workspace: { guide: "/guide", parents: [] },
+			guides: [{ id: "prototype-guide", root: `${root}/__proto__`, guide: `${root}/guide`, parents: [] }],
+			repositories: [],
+			unavailable: [],
+		},
+		extensions: [
 			{
-				identity: {
-					id: "workspace:1",
-					codebase: { id: "empty-guide", root: `${root}/empty`, guide: `${root}/external-guide` },
-				},
-				handler: (root) => {
-					for (const node of root.walk())
-						if (node.path.endsWith("a.md")) {
-							node.restoreNormalEmphasis();
-							node.notice("located", { side: "current", line: 2, column: 1 });
-						}
+				id: "workspace",
+				annotateNode: async ({ node, source }) => {
+					if (node.path.endsWith("tests")) node.deemphasize("tests");
+					if (node.path.endsWith("a.md")) {
+						if ((await source.currentByteSize(node)) > 20480) node.warn("large");
+						node.restoreNormalEmphasis();
+						node.notice("located", { side: "current", line: 2, column: 1 });
+					}
 				},
 			},
 		],
@@ -143,11 +153,11 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 	assert.deepEqual(result.nodes["."]?.attentionTotals, { added: 4, removed: 2 });
 	assert.deepEqual(result.nodes["."]?.signalCounts, { notice: 1, warning: 1 });
 	assert.equal(result.nodes["__proto__/tests"]?.effectiveEmphasis.value, "deemphasized");
-	assert.equal(result.nodes["__proto__/tests/a.md"]?.emphasis?.handler, "workspace:1");
+	assert.equal(result.nodes["__proto__/tests/a.md"]?.emphasis?.handler, "workspace#annotateNode");
 	assert.equal(result.nodes["__proto__/tests/a.md"]?.signals[1]?.location?.line, 2);
 	assert.equal(Object.getOwnPropertyDescriptor(result.codebases, "__proto__")?.value.root, "__proto__");
-	assert.equal(result.handlers["workspace:1"]?.codebase, "empty");
-	assert.equal(result.codebases.empty?.root, "empty");
+	assert.deepEqual(result.handlers["workspace#annotateNode"], { id: "workspace#annotateNode" });
+	assert.equal(result.codebases.empty, undefined);
 	assert.equal(calls, 1);
 	assert.equal((await routes.request("/changes/analysis", { method: "HEAD" })).status, 200);
 	assert.deepEqual(await (await routes.request("/changes")).json(), {
@@ -165,7 +175,10 @@ test("file queries decode once, validate context and preserve literal names", as
 		repositories: [],
 		analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
-		analyze: createTreeAnalyzer({ handlers: [] }).analyze,
+		analyze: createTreeAnalyzer({
+			config: { workspace: { guide: "/guide", parents: [] }, guides: [], repositories: [], unavailable: [] },
+			extensions: [],
+		}).analyze,
 		currentByteSize: async () => 0,
 		collectChanges: async () => createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] }),
 		fileDiff: async (_tree, path, signal, context) => {
@@ -231,7 +244,13 @@ test("all projections keep root keys distinct from stable IDs, including the wor
 	assert.deepEqual(changes.codebases, definitions);
 	assert.deepEqual(changes.changes[0]?.codebases, [".", "nested"]);
 	const analyzer = createTreeAnalyzer({
-		handlers: [{ identity: { id: "registered:1", codebase: workspaceOwner }, handler: () => {} }],
+		config: {
+			workspace: { guide: "/guide", parents: [] },
+			guides: [workspaceOwner, nestedOwner],
+			repositories: [],
+			unavailable: [],
+		},
+		extensions: [{ id: "workspace", annotateNode: () => {} }],
 	});
 	const analysis = workspaceAnalysis(
 		root,
@@ -242,7 +261,7 @@ test("all projections keep root keys distinct from stable IDs, including the wor
 	assert.equal(analysis.nodes.nested?.current?.codebaseRoot, "nested");
 	assert.equal(analysis.nodes["nested/new.txt"]?.base?.codebase, ".");
 	assert.equal(analysis.nodes["nested/new.txt"]?.current?.codebase, "nested");
-	assert.equal(analysis.handlers["registered:1"]?.codebase, ".");
+	assert.deepEqual(analysis.handlers["workspace#annotateNode"], { id: "workspace#annotateNode" });
 	const file = workspaceFileDiff(root, {
 		kind: "metadata_only",
 		path: "nested/new.txt",

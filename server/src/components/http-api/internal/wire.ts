@@ -76,15 +76,7 @@ export function workspaceAnalysis(root: string, result: AnalysisResult): Workspa
 		...(value.codebase === undefined ? {} : { codebase: owner(value.codebase) }),
 		...(value.codebaseRoot === undefined ? {} : { codebaseRoot: owner(value.codebaseRoot) }),
 	});
-	const handlers = Object.fromEntries(
-		result.handlers.map((handler) => [
-			handler.id,
-			{
-				id: handler.id,
-				...(handler.codebase === undefined ? {} : { codebase: owner(handler.codebase) }),
-			},
-		]),
-	);
+	const handlers = Object.fromEntries(result.handlers.map((handler) => [handler.id, { id: handler.id }]));
 	const nodes = Object.fromEntries(
 		[...result.nodes].map(([path, finalized]) => {
 			const { node, effectiveEmphasis } = finalized;

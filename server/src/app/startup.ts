@@ -1,5 +1,6 @@
 import { basename } from "node:path";
-import { AnalysisHandlerError, createTreeAnalyzer, loadAnalysisHandlers } from "../components/tree-analysis/index.ts";
+import { loadGuideExtensions } from "../components/guide-extensions/index.ts";
+import { AnalysisHandlerError, createTreeAnalyzer } from "../components/tree-analysis/index.ts";
 import { createWorkingChanges } from "../components/tree-sources/index.ts";
 import {
 	loadWorkspaceConfig,
@@ -38,17 +39,17 @@ export async function start(options: Options) {
 		codebases,
 		git,
 	});
-	const handlers = await loadAnalysisHandlers(workspaceConfig, config.root);
-	for (const registration of handlers) {
+	const extensions = await loadGuideExtensions(workspaceConfig);
+	for (const registration of extensions) {
 		if (registration.error) {
 			const diagnostic = registration.error
 				.diagnostic()
 				.replace(/\p{Cc}/gu, " ")
 				.slice(0, 1600);
-			console.error(`Forge analysis handler unavailable (${registration.identity.id}): ${diagnostic}`);
+			console.error(`Forge analysis handler unavailable (${registration.id}): ${diagnostic}`);
 		}
 	}
-	const analyzer = createTreeAnalyzer({ handlers });
+	const analyzer = createTreeAnalyzer({ config: workspaceConfig, extensions });
 	const analysis = createAnalysis();
 	const fileRequests = createFileRequests();
 	const collection = createCollection({ collect: (signal) => changes.collect(signal) });

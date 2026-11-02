@@ -20,9 +20,9 @@
 		"forge": "./dist/server/src/main.js"
 	},
 	"exports": {
-		"./analysis": {
-			"types": "./dist/server/src/components/tree-analysis/internal/authoring.d.ts",
-			"import": "./dist/server/src/components/tree-analysis/internal/authoring.js"
+		"./extension": {
+			"types": "./dist/server/src/components/guide-extensions/internal/authoring.d.ts",
+			"import": "./dist/server/src/components/guide-extensions/internal/authoring.js"
 		}
 	},
 	"engines": {

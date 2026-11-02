@@ -48,7 +48,8 @@ export default {
 			severity: "error",
 			from: {
 				path: "^src/components/([^/]+)/",
-				pathNot: "^src/components/(workspace-repositories|workspace-tree|tree-sources|tree-analysis|http-api)/",
+				pathNot:
+					"^src/components/(workspace-repositories|workspace-tree|tree-sources|tree-analysis|guide-extensions|http-api)/",
 			},
 			to: { path: "^src/components/", pathNot: "^src/components/$1/" },
 		},
@@ -57,6 +58,7 @@ export default {
 			"workspace-tree": ["workspace-config"],
 			"tree-sources": ["workspace-tree", "workspace-repositories", "workspace-config"],
 			"tree-analysis": ["workspace-tree", "workspace-config"],
+			"guide-extensions": ["workspace-config", "tree-analysis"],
 			"http-api": [
 				"tree-analysis",
 				"tree-sources",

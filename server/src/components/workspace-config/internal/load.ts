@@ -2,7 +2,6 @@ import { lstat, readFile, readlink, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { parse } from "yaml";
 import {
-	type ResolvedAnalysisHandler,
 	type ResolvedCodebase,
 	type UnavailableCodebase,
 	type WorkspaceConfig,
@@ -96,20 +95,11 @@ async function references(config: string, data: Record<string, unknown>, key: st
 	return paths;
 }
 
-function analysisHandlers(config: string, data: Record<string, unknown>): readonly ResolvedAnalysisHandler[] {
-	if (!Object.hasOwn(data, "analysis_handlers")) return [];
-	const raw = data.analysis_handlers;
-	if (!Array.isArray(raw)) throw new WorkspaceConfigError(`${config}: analysis_handlers must be a list`);
-	return raw.map((value: unknown, index) => {
-		const path = relative(value, `${config}: analysis_handlers entry`);
-		if (!/^\.{1,2}\//.test(path) || !/\.(?:m?ts|m?js)$/.test(path) || path.includes("\\") || /[*?]/.test(path)) {
-			throw new WorkspaceConfigError(`${config}: analysis_handlers requires explicit relative ESM module paths`);
-		}
-		return { modulePath: resolve(dirname(config), path), ordinal: index + 1 };
-	});
-}
-
 function rejectLegacy(config: string, data: Record<string, unknown>): void {
+	if (Object.hasOwn(data, "analysis_handlers"))
+		throw new WorkspaceConfigError(
+			`${config}: analysis_handlers is unsupported; move policy to the guide fixed entry forge-extension/forge-extension.ts with a default ForgeExtension export`,
+		);
 	for (const key of ["type", "codebase_types"]) {
 		if (Object.hasOwn(data, key))
 			throw new WorkspaceConfigError(
@@ -160,7 +150,6 @@ export async function loadWorkspaceConfig(absolutePath: string): Promise<Workspa
 		rejectLegacy(marker, declaration);
 		const id = string(declaration.id, `${marker}: id`);
 		const inherited = parents(marker, declaration);
-		const handlers = analysisHandlers(marker, declaration);
 		let root: string | undefined;
 		if (Object.hasOwn(declaration, "root")) {
 			// Source roots stay lexical, including symlinks; marker references are canonical.
@@ -181,7 +170,6 @@ export async function loadWorkspaceConfig(absolutePath: string): Promise<Workspa
 			id,
 			guide: dirname(marker),
 			parents: inherited,
-			analysisHandlers: handlers,
 			...(root === undefined ? {} : { root }),
 		});
 	}
@@ -202,7 +190,6 @@ export async function loadWorkspaceConfig(absolutePath: string): Promise<Workspa
 		displayName = data.display_name;
 	}
 	return {
-		analysisHandlers: analysisHandlers(config, data),
 		repositories,
 		workspace,
 		guides,
