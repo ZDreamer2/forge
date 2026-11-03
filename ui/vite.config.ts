@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
@@ -15,6 +16,28 @@ export default defineConfig({
 			routeFileIgnorePattern: "routeTree\\.gen\\.ts$",
 		}),
 		react(),
+		{
+			name: "workspace-asset-notices",
+			generateBundle() {
+				for (const [source, name] of [
+					["WorkspaceReview/Internal/Assets/OFL.txt", "OFL.txt"],
+					[
+						"WorkspaceReview/Components/ChangesNavigator/Components/ChangesTree/Internal/Assets/icons/LICENSE",
+						"icons-LICENSE",
+					],
+					[
+						"WorkspaceReview/Components/ChangesNavigator/Components/ChangesTree/Internal/Assets/icons/SOURCE.txt",
+						"icons-SOURCE.txt",
+					],
+				]) {
+					this.emitFile({
+						type: "asset",
+						fileName: `assets/licenses/${name}`,
+						source: readFileSync(new URL(`src/Components/${source}`, import.meta.url)),
+					});
+				}
+			},
+		},
 	],
 	resolve: {
 		alias: [
@@ -25,6 +48,7 @@ export default defineConfig({
 		],
 	},
 	build: {
+		assetsInlineLimit: 0,
 		outDir: fileURLToPath(new URL("../dist/ui", import.meta.url)),
 		emptyOutDir: true,
 	},

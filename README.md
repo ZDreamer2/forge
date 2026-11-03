@@ -4,9 +4,9 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 
 # @zdreamer/forge
 
-Read-only workspace server and React overview using the shared
-`forge-workspace.yaml` registry. The overview shows workspace identity, changed-entry
-count and separately labelled all-change and attention line totals.
+Read-only workspace server and React changes navigator using the shared
+`forge-workspace.yaml` registry. The navigator combines a compact changes tree,
+Type/Importance filters and a selected-entry metadata pane.
 Executable: `forge`. Licensed under [MIT](LICENSE).
 
 Registry `0.1.2` is the published server baseline; the configuration and API below
@@ -34,6 +34,13 @@ owns application boundaries; the
 [HTTP API contract](https://github.com/ZDreamer2/forge/blob/main/server/docs/protocol.md)
 owns wire behavior. Concrete server and UI guides live under their respective
 `docs/forge/` directories.
+
+The UI's `Components/WorkspaceReview/` composes a ChangesNavigator and an independent
+SelectionViewer. Owned WorkspaceData and ChangeSetData separate workspace-context
+reads from comparison analysis while sharing the existing Query mechanism. The
+navigator owns tree projection/expansion; selection uses canonical comparison facts,
+not filtered tree rows. Shared summaries belong to the review feature. See
+[UI architecture](ui/docs/architecture.md) for the responsibility map.
 
 ## Develop
 
@@ -120,8 +127,26 @@ curl "$FORGE_ADDRESS/api/changes/analysis"
 ```
 
 The API also exposes [bounded file patches](server/docs/protocol.md#read-file-diff).
-The current overview is read-only; changes-tree navigation and diff rendering
-remain future work.
+The navigator is read-only. Select a file, folder or registered repository by its
+name; select it again to clear. Direct links use `/?path=src/example.ts`, with
+`/?path=.` for the workspace root. Back/Forward restores selection. Ctrl+Click
+selects and copies the workspace-relative path. Disclosure controls expansion
+independently; drag the divider or focus it and use Left/Right to resize.
+
+Type and Importance combine with AND, with OR within each dimension. All types
+and High/Medium/Low start enabled; None starts disabled. Classification and
+effective importance come from server analysis. Header totals cover every changed
+entry; visible/total file counts preserve the complete denominator, while sidebar
+and subtree line totals follow the filters. Repository-owned counts exclude nested
+repositories; subtree summaries include them. Binary and zero-line entries still
+count as changes. Count tooltips show independent Type and Importance breakdowns.
+
+Filtering preserves selected metadata, including rename sources, both-side ownership
+and file/directory transitions. Empty and missing-at-startup registered repositories
+remain selectable. Explicit Refresh preserves filters, expansion and useful selection;
+a disappeared selection is explained after successful identity and analysis reads.
+Failed reads preserve usable content and mark retained data stale, with independent
+retry controls. File content, signal inspection and diff rendering remain future work.
 
 ## Workspace configuration and migration
 

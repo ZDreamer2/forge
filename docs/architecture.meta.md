@@ -5,7 +5,7 @@ Editing context for [application architecture](architecture.md).
 ## architecture.md goals and principles
 
 - Helps maintainers assign responsibilities and judge dependency, authority and lifetime changes. It records consequential boundaries, not an implementation inventory.
-- Keeps the component map aligned with machine-checked edges. Per-component design belongs in UnitGuides; operating and wire details have separate owners.
+- Keeps the server component map aligned with machine-checked edges. UI topology belongs in the UI architecture document; per-server-component design belongs in UnitGuides. Operating and wire details have separate owners.
 
 ## AiDocFormat
 
@@ -17,6 +17,7 @@ Editing context for [application architecture](architecture.md).
 
 ## MAY read for additional context
 
+- [UI architecture](../ui/docs/architecture.md) - Owns frontend component/data responsibilities and presentation-state boundaries.
 - [API contract](../server/docs/protocol.md) - For observable semantics and effects.
 - [README](../README.md) - For configuration and commands.
 - [Server planning](../server/docs/forge/on-plan.md) - For service conventions; graph rules live in the installation and server dependency-cruiser configs.

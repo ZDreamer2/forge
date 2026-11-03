@@ -16,8 +16,8 @@ aggregate acceptance and distribution. Its source boundaries are:
 
 - `server/`: workspace authority, its public API contract, HTTP access and process
   lifecycle.
-- `ui/`: the standalone React overview, owning browser presentation, data access,
-  providers and recovery. Vite bundles it into the distributed package.
+- `ui/`: the standalone React workspace review, owning browser presentation, data
+  access, providers and recovery. Vite bundles it into the distributed package.
 
 Server and frontend are distinct codebases with different runtime and verification
 requirements despite sharing an installation. The UI imports only the server's
@@ -62,6 +62,12 @@ the Host/Origin guard. Domain components receive dependencies from composition.
 `@zdreamer/forge/extension`, separately from engine loading operations. Hook execution
 owners define their capability contracts; `guide-extensions` composes them, never
 the reverse. Loader, runner and configuration internals remain private.
+
+## UI ownership
+
+[UI architecture](../ui/docs/architecture.md) owns frontend component/data
+responsibilities, selection and navigator boundaries, and derived presentation
+state. This document owns the application-wide authority and lifecycle boundaries.
 
 ## Installed browser host
 

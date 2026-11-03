@@ -2,8 +2,10 @@
 
 The standalone React application lives in `ui/src/`, with `main.tsx` as its mount
 entry. Server and UI share one root package and lockfile.
-[Architecture](../../../docs/architecture.md) owns their authority boundary;
-[build guidance](on-build.md) supplies tooling and acceptance bindings.
+[Application architecture](../../../docs/architecture.md) owns their authority
+boundary. Read [UI architecture](../architecture.md) for component/data ownership
+and navigator/selection boundaries; [build guidance](on-build.md) supplies tooling
+and acceptance bindings.
 
 Vite emits to `dist/ui/`. The installed server serves `/` and exact `/assets/`
 files behind its loopback guard; unknown paths remain 404s. TanStack's Vite plugin

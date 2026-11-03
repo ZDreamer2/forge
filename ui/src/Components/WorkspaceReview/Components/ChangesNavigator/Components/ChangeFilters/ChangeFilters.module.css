@@ -1,0 +1,86 @@
+.filters {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 10px 7px 18px;
+	flex-shrink: 0;
+}
+.options {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	flex: 1;
+	min-width: 0;
+}
+.options fieldset {
+	display: flex;
+	gap: 4px;
+	flex-wrap: wrap;
+	border: 0;
+	padding: 0;
+	margin: 0;
+	min-width: 0;
+}
+.options legend {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+.toggle {
+	font: inherit;
+	font-size: 11px;
+	font-weight: 500;
+	padding: 4px 9px;
+	border: 1px solid transparent;
+	border-radius: 5px;
+	background: transparent;
+	color: #869187;
+	cursor: pointer;
+}
+.toggle:hover {
+	background: #edf1ec;
+	color: #54665a;
+}
+.toggle[aria-pressed="true"] {
+	background: #e6eee5;
+	color: #315e42;
+	border-color: #d6e2d6;
+}
+.actions {
+	display: flex;
+	flex-shrink: 0;
+	gap: 3px;
+}
+.action {
+	display: grid;
+	place-items: center;
+	width: 27px;
+	height: 27px;
+	padding: 4px;
+	border: 0;
+	border-radius: 5px;
+	background: none;
+	color: #7c8b80;
+	cursor: pointer;
+}
+.action:hover {
+	background: #edf1ec;
+}
+.action svg {
+	width: 18px;
+	height: 18px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.4;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.filters button:focus-visible {
+	outline: 2px solid #267553;
+	outline-offset: 2px;
+}

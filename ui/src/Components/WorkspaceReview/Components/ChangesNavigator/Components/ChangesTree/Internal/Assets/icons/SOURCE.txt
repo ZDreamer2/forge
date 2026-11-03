@@ -1,0 +1,10 @@
+Material Icon Theme
+https://github.com/material-extensions/vscode-material-icon-theme
+Commit: e8982b88eaea91f3955cd42ca4b564275fbd9c6a
+License: MIT (see LICENSE)
+
+Consumed assets were copied from the Forge workspace viewer prototype.
+Local adaptation: folder-neutral.svg uses the folder-src.svg silhouette with a
+neutral gray fill and removes the source-code motif. The application colors that
+shape through a CSS mask to distinguish ordinary folders and repository roots.
+File icons retain their source shapes and use CSS grayscale for neutral display.

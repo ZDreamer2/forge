@@ -59,9 +59,12 @@ function analysis(empty = false): WorkspaceAnalysis {
 function start() {
 	return render(<App queryClient={suite.createQueryClient()} env="test" />);
 }
-function expectTotal(label: string, value: string) {
-	expect(screen.getByText(label).parentElement).toHaveTextContent(`${label}${value}`);
+function expectTotal(value: string) {
+	expect(
+		screen.getByRole("button", { name: new RegExp(`All workspace changes: ${value} changed files`) }),
+	).toBeInTheDocument();
 }
+const summary = () => screen.findByRole("button", { name: /All workspace changes:/ });
 const identityHandler = () => http.get("http://localhost/api/workspace", () => Response.json(identity));
 const analysisHandler = (empty = false) =>
 	http.get("http://localhost/api/changes/analysis", () => Response.json(analysis(empty)));
@@ -80,16 +83,15 @@ it("shows canonical entries including metadata and renames, distinct totals and 
 	);
 	start();
 	expect(await screen.findByText(identity.workspace.name)).toBeInTheDocument();
-	await screen.findByText("Changed entries");
-	expectTotal("Changed entries", "3");
-	expectTotal("All-change additions", "20");
-	expectTotal("All-change removals", "7");
-	expectTotal("Attention additions", "5");
-	expectTotal("Attention removals", "2");
-	expect(screen.getByText("/tmp/<workspace>")).toBeInTheDocument();
-	expect(screen.getByText("<script>repository</script>: Available")).toBeInTheDocument();
-	expect(screen.getByText("missing-checkout: Missing")).toBeInTheDocument();
-	expect(document.querySelector("img,script")).toBeNull();
+	await summary();
+	expectTotal("3");
+	expect(
+		screen.getByRole("button", { name: "All workspace changes: 3 changed files, 7 removed lines, 20 added lines" }),
+	).toBeInTheDocument();
+	expect(screen.getByTitle("/tmp/<workspace>")).toHaveTextContent(identity.workspace.name);
+	expect(screen.getByRole("button", { name: "Select <script>repository</script>" })).toBeInTheDocument();
+	expect(screen.getByText("Missing at startup")).toBeInTheDocument();
+	expect(document.querySelector("script, img[onerror]")).toBeNull();
 	expect(requests.sort()).toEqual(["/api/changes/analysis", "/api/workspace"]);
 });
 
@@ -100,10 +102,13 @@ it("retains identity while analysis loads and distinguishes a true empty result"
 	start();
 	expect(await screen.findByText(identity.workspace.name)).toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
-	expect(screen.queryByText("Changed entries")).not.toBeInTheDocument();
+	expect(screen.getByRole("navigation", { name: "Registered repositories" })).toHaveTextContent(
+		"Available · changes unknown",
+	);
+	expect(screen.queryByRole("button", { name: /All workspace changes:/ })).not.toBeInTheDocument();
 	await act(async () => response.release(Response.json(analysis(true))));
 	expect(await screen.findByText("No changed entries.")).toBeInTheDocument();
-	expectTotal("Changed entries", "0");
+	expectTotal("0");
 	expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
 });
 
@@ -114,8 +119,8 @@ it("keeps totals usable after identity failure and retries identity successfully
 	);
 	start();
 	expect(await screen.findByRole("alert")).toHaveTextContent("Could not load workspace identity.");
-	await screen.findByText("Changed entries");
-	expectTotal("Changed entries", "3");
+	await summary();
+	expectTotal("3");
 	network.use(identityHandler());
 	await userEvent.setup().click(screen.getByRole("button", { name: "Retry workspace" }));
 	expect(await screen.findByText(identity.workspace.name)).toBeInTheDocument();
@@ -134,7 +139,7 @@ it("keeps malformed JSON failure local and never shows unknown changes as zero",
 		);
 		start();
 		expect(await screen.findByRole("alert")).toHaveTextContent("Could not load change summary.");
-		expect(screen.queryByText("Changed entries")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /All workspace changes:/ })).not.toBeInTheDocument();
 		expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
 		network.use(analysisHandler(true));
 		await userEvent.setup().click(screen.getByRole("button", { name: "Retry changes" }));
@@ -148,17 +153,17 @@ it("keeps malformed JSON failure local and never shows unknown changes as zero",
 it("acknowledges refresh, preserves pending totals and visibly marks failure stale until retry", async () => {
 	const network = suite.createHttpScenario(identityHandler(), analysisHandler());
 	start();
-	await screen.findByText("Changed entries");
+	await summary();
 	const refreshed = network.deferResponse();
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => refreshed.handle(request)));
 	await userEvent.setup().click(screen.getByRole("button", { name: "Refresh" }));
 	await waitFor(() => expect(refreshed.request).toBeDefined());
 	expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
 	expect(screen.getByRole("status")).toHaveTextContent("Updating");
-	expectTotal("Changed entries", "3");
+	expectTotal("3");
 	await act(async () => refreshed.release(new Response("failed", { status: 500 })));
 	expect(await screen.findByRole("alert")).toHaveTextContent("Change summary is stale.");
-	expectTotal("Changed entries", "3");
+	expectTotal("3");
 	expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
 	const retry = network.deferResponse();
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => retry.handle(request)));
@@ -182,7 +187,7 @@ it("does not refresh on focus, reconnect or cached remount", async () => {
 	);
 	const queryClient = suite.createQueryClient();
 	const mounted = render(<App queryClient={queryClient} env="test" />);
-	await screen.findByText("Changed entries");
+	await summary();
 	await act(async () => {
 		window.dispatchEvent(new Event("focus"));
 		document.dispatchEvent(new Event("visibilitychange"));
@@ -191,7 +196,7 @@ it("does not refresh on focus, reconnect or cached remount", async () => {
 	});
 	mounted.unmount();
 	render(<App queryClient={queryClient} env="test" />);
-	await screen.findByText("Changed entries");
+	await summary();
 	expect(seen).toHaveBeenCalledTimes(2);
 });
 
@@ -208,7 +213,7 @@ it("refreshes and retries the loopback API while the browser reports offline", a
 		}),
 	);
 	start();
-	await screen.findByText("Changed entries");
+	await summary();
 	await screen.findByText(identity.workspace.name);
 	try {
 		await act(async () => {

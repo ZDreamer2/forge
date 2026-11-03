@@ -1,0 +1,189 @@
+import { Button, Tooltip } from "@mantine/core";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { ChangesNavigator } from "./Components/ChangesNavigator/ChangesNavigator";
+import { ChangesSummary } from "./Components/ChangesSummary/ChangesSummary";
+import { SelectionViewer } from "./Components/SelectionViewer/SelectionViewer";
+import emblem from "./Internal/Assets/forge-emblem.svg";
+import { analyzeChanges, initialFilters, resolveSelection } from "./Internal/changeAnalysis";
+import { useChangeSetAnalysis } from "./Lib/ChangeSetData/ChangeSetData";
+import { useWorkspaceIdentity } from "./Lib/WorkspaceData/WorkspaceData";
+import styles from "./WorkspaceReview.module.css";
+
+type Props = {
+	selectedPath?: string | undefined;
+	invalidSelection?: boolean | undefined;
+	onNavigate: (path: string | undefined, replace?: boolean) => void;
+};
+
+export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: Props) {
+	const workspaceData = useWorkspaceIdentity();
+	const changeSetData = useChangeSetAnalysis();
+	const { workspace } = workspaceData;
+	const { analysis } = changeSetData;
+	const updating = workspaceData.updating || changeSetData.updating;
+	const [filters, setFilters] = useState(initialFilters);
+	const [notice, setNotice] = useState("");
+	const [copyFeedback, setCopyFeedback] = useState("");
+	const copyAttempt = useRef(0);
+	const [viewport, setViewport] = useState(() => window.innerWidth);
+	const [sidebarWidth, setSidebarWidth] = useState(390);
+	const sidebarMin = Math.min(240, Math.floor(viewport * 0.55));
+	const sidebarMax = Math.max(sidebarMin, Math.min(600, viewport - Math.min(280, viewport * 0.4)));
+	const width = Math.max(sidebarMin, Math.min(sidebarMax, sidebarWidth));
+	// memo-reason: canonical subtree and repository summaries traverse all entries;
+	// divider drags and clipboard acknowledgements must reuse the same derived facts.
+	const review = useMemo(
+		() => analyzeChanges(analysis.data, workspace.data, filters),
+		[analysis.data, workspace.data, filters],
+	);
+
+	useEffect(() => {
+		const resize = () => setViewport(window.innerWidth);
+		window.addEventListener("resize", resize);
+		return () => window.removeEventListener("resize", resize);
+	}, []);
+
+	useEffect(() => {
+		if (invalidSelection) {
+			setNotice("Invalid selection address. Use a normalized workspace-relative path, or . for the root.");
+			onNavigate(undefined, true);
+		} else if (
+			selectedPath !== undefined &&
+			workspace.isSuccess &&
+			analysis.isSuccess &&
+			!updating &&
+			!resolveSelection(review, selectedPath)
+		) {
+			setNotice(`Selection is unavailable: ${selectedPath}. It may have disappeared since the previous observation.`);
+			onNavigate(undefined, true);
+		}
+	}, [invalidSelection, selectedPath, workspace.isSuccess, analysis.isSuccess, updating, review, onNavigate]);
+
+	function select(path: string, copy: boolean) {
+		setNotice("");
+		setCopyFeedback("");
+		onNavigate(!copy && path === selectedPath ? undefined : path);
+		const attempt = ++copyAttempt.current;
+		if (copy) {
+			void (async () => {
+				try {
+					await navigator.clipboard.writeText(path);
+					if (attempt === copyAttempt.current) setCopyFeedback(`Copied: ${path}`);
+				} catch {
+					if (attempt === copyAttempt.current) setCopyFeedback("Could not copy path. Clipboard access is unavailable.");
+				}
+			})();
+		}
+	}
+
+	const root = analysis.data?.nodes["."];
+	return (
+		<main className={styles.review} style={{ "--sidebar-width": `${width}px` } as CSSProperties}>
+			<header className={styles.header} data-workspace-header>
+				<div className={styles.identity}>
+					<img src={emblem} alt="Forge" width={34} height={36} />
+					<h1 title={workspace.data?.workspace.root}>{workspace.data?.workspace.name ?? "Workspace"}</h1>
+				</div>
+				<div className={styles.headerMain}>
+					{analysis.data && (
+						<ChangesSummary
+							summary={{ ...review.all, ...(root?.rawTotals ?? {}) }}
+							label="All workspace changes"
+							files
+						/>
+					)}
+					<Button
+						size="compact-sm"
+						variant="default"
+						disabled={updating}
+						onClick={() => void Promise.all([workspaceData.refresh(), changeSetData.refresh()])}
+					>
+						Refresh
+					</Button>
+					<Tooltip
+						label="Click a name to select or clear. Ctrl+Click selects and copies its path. Use Left/Right on the divider to resize."
+						events={{ hover: true, focus: true, touch: false }}
+					>
+						<Button className={styles.help} variant="subtle" size="compact-xs" color="gray" aria-label="Keyboard help">
+							⌨︎
+						</Button>
+					</Tooltip>
+				</div>
+			</header>
+			<div className={styles.feedback}>
+				{updating && <p role="status">{workspace.data || analysis.data ? "Updating…" : "Loading workspace…"}</p>}
+				{workspace.isError && (
+					<div role="alert">
+						{workspace.data ? "Workspace identity is stale. " : ""}Could not load workspace identity.{" "}
+						<Button
+							size="compact-xs"
+							variant="subtle"
+							disabled={workspace.isFetching}
+							onClick={() => void workspaceData.refresh()}
+						>
+							Retry workspace
+						</Button>
+					</div>
+				)}
+				{analysis.isError && (
+					<div role="alert">
+						{analysis.data ? "Change summary is stale. " : ""}Could not load change summary.{" "}
+						<Button
+							size="compact-xs"
+							variant="subtle"
+							disabled={analysis.isFetching}
+							onClick={() => void changeSetData.refresh()}
+						>
+							Retry changes
+						</Button>
+					</div>
+				)}
+				{notice && <p role="status">{notice}</p>}
+				{copyFeedback && <p role="status">{copyFeedback}</p>}
+			</div>
+			<ChangesNavigator
+				review={review}
+				analysis={analysis.data}
+				identity={workspace.data}
+				filters={filters}
+				onFiltersChange={setFilters}
+				selectedPath={selectedPath}
+				onSelect={select}
+			/>
+			<hr
+				className={styles.divider}
+				tabIndex={0}
+				aria-label="Resize changes sidebar"
+				aria-orientation="vertical"
+				aria-valuemin={sidebarMin}
+				aria-valuemax={sidebarMax}
+				aria-valuenow={Math.round(width)}
+				onPointerDown={(event) => {
+					event.currentTarget.setPointerCapture(event.pointerId);
+					event.preventDefault();
+				}}
+				onPointerMove={(event) => {
+					if (event.currentTarget.hasPointerCapture(event.pointerId))
+						setSidebarWidth(Math.max(sidebarMin, Math.min(sidebarMax, event.clientX)));
+				}}
+				onPointerUp={(event) => {
+					if (event.currentTarget.hasPointerCapture(event.pointerId))
+						event.currentTarget.releasePointerCapture(event.pointerId);
+				}}
+				onKeyDown={(event) => {
+					if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+						event.preventDefault();
+						setSidebarWidth(Math.max(sidebarMin, Math.min(sidebarMax, width + (event.key === "ArrowLeft" ? -20 : 20))));
+					}
+				}}
+			/>
+			<div className={styles.details}>
+				{analysis.data ? (
+					<SelectionViewer review={review} selectedPath={selectedPath} codebases={analysis.data.codebases} />
+				) : (
+					<p>Waiting for change analysis.</p>
+				)}
+			</div>
+		</main>
+	);
+}

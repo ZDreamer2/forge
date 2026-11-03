@@ -14,6 +14,7 @@ Specification for creating and editing [Forge UI planning context](on-plan.md).
 
 - [StartSimple](AI_DOC_PLUGIN/Theory/StartSimple.md) - Limits host guidance to established needs.
 - [Application architecture](../../../docs/architecture.md) - Owns server/UI responsibilities and dependency boundaries.
+- [UI architecture](../architecture.md) - Owns frontend component/data responsibilities and navigator/selection boundaries.
 
 ## on-plan.md typical use context
 

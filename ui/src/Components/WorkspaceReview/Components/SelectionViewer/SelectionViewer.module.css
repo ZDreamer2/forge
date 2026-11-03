@@ -1,0 +1,205 @@
+.details {
+	min-width: 0;
+	min-height: 0;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	color: #45594b;
+}
+.header {
+	padding: 15px 26px;
+	border-bottom: 1px solid #e3e8e4;
+	flex-shrink: 0;
+	min-width: 0;
+}
+.title {
+	font-size: 12px;
+	font-weight: 650;
+	margin: 0;
+}
+.path {
+	width: 100%;
+	border: 0;
+	background: none;
+	padding: 0;
+	text-align: left;
+	cursor: help;
+	display: flex;
+	align-items: baseline;
+	font:
+		13px / 1.8 "JetBrains Mono",
+		Consolas,
+		ui-monospace,
+		monospace;
+	color: #78877c;
+	margin: 0;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.path strong {
+	font-weight: 600;
+	color: #34483b;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	flex: 0 1 auto;
+}
+.first {
+	flex-shrink: 2;
+	max-width: 25%;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.middle {
+	flex: 0 3 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.parent {
+	flex: 0 2 auto;
+	min-width: 0;
+	max-width: 30%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.content {
+	overflow: auto;
+	flex: 1;
+	min-height: 0;
+	padding: 18px 26px 40px;
+	overflow-wrap: anywhere;
+	font-size: 12px;
+}
+.orientation {
+	padding: 70px 24px;
+	text-align: center;
+	color: #829087;
+}
+.orientation strong {
+	display: block;
+	color: #46594c;
+	font-size: 15px;
+	font-weight: 550;
+	margin-bottom: 9px;
+}
+.filtered {
+	padding: 10px 16px;
+	background: #f6f0dd;
+	color: #89713b;
+	font-size: 11px;
+	line-height: 1.6;
+	border-radius: 5px;
+}
+.repository {
+	color: #7962be;
+	font-size: 11px;
+}
+.subtree {
+	margin: 0 0 24px;
+	padding: 0 0 18px;
+	border-bottom: 1px solid #e3e8e4;
+}
+.subtree h3,
+.metadata h3 {
+	font-size: 14px;
+	font-weight: 550;
+	margin: 0 0 12px;
+}
+.subtree h3 span {
+	font-size: 11px;
+	font-weight: 400;
+	color: #8a968d;
+}
+.subtree p,
+.quiet {
+	color: #829087;
+	font-size: 11px;
+}
+.metadata {
+	max-width: 850px;
+}
+.metadata dl {
+	margin: 18px 0;
+}
+.metadata dl > div {
+	display: grid;
+	grid-template-columns: 125px minmax(0, 1fr);
+	gap: 15px;
+	padding: 9px 0;
+	border-bottom: 1px solid #edf1ec;
+}
+.metadata dt {
+	color: #829087;
+	font-size: 11px;
+}
+.metadata dd {
+	margin: 0;
+}
+.metadata dd span {
+	display: block;
+	color: #829087;
+	font-size: 11px;
+	margin-top: 5px;
+}
+.metadata code,
+.rename code {
+	font:
+		11px / 1.6 "JetBrains Mono",
+		Consolas,
+		ui-monospace,
+		monospace;
+}
+.rename {
+	color: #78827c;
+	font-size: 11px;
+}
+.deferred {
+	margin-top: 25px;
+	color: #829087;
+	font-size: 11px;
+}
+.tooltip {
+	color: #45594b;
+	background: #fff;
+	border: 1px solid #e3e8e4;
+	box-shadow: 0 5px 22px #16302016;
+	padding: 10px 14px;
+	max-width: min(620px, calc(100vw - 16px));
+	overflow-wrap: anywhere;
+}
+.path:focus-visible {
+	outline: 2px solid #267553;
+	outline-offset: 2px;
+}
+@media (max-width: 900px) {
+	.header {
+		padding: 15px 18px;
+	}
+	.content {
+		padding: 15px 18px 40px;
+	}
+	.metadata dl > div {
+		grid-template-columns: minmax(70px, 1fr) minmax(0, 2fr);
+		gap: 8px;
+	}
+	.orientation {
+		padding: 40px 0;
+	}
+}
+
+@media (max-width: 600px) {
+	.header,
+	.content {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+	.metadata dl > div {
+		display: block;
+	}
+	.metadata dt {
+		margin-bottom: 6px;
+	}
+}

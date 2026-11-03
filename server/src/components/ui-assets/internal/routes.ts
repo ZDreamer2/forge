@@ -8,7 +8,8 @@ export function createUiAssetRoutes({ directory }: Deps) {
 	const routes = new Hono();
 	const serve: Handler = async (context) => {
 		const path = context.req.path;
-		if (path !== "/" && !/^\/assets\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:js|css)$/.test(path)) return context.notFound();
+		if (path !== "/" && !/^\/assets\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:js|css|svg|woff2)$/.test(path))
+			return context.notFound();
 		if (path.includes("..")) return context.notFound();
 		let file: string;
 		try {
@@ -33,7 +34,11 @@ export function createUiAssetRoutes({ directory }: Deps) {
 				? "text/html; charset=utf-8"
 				: path.endsWith(".js")
 					? "text/javascript; charset=utf-8"
-					: "text/css; charset=utf-8",
+					: path.endsWith(".css")
+						? "text/css; charset=utf-8"
+						: path.endsWith(".svg")
+							? "image/svg+xml"
+							: "font/woff2",
 		);
 		if (context.req.method === "HEAD") return context.body(null);
 		return context.body(new Uint8Array(await readFile(file)));

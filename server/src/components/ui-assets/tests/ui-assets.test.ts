@@ -14,6 +14,8 @@ test("built UI files have exact paths, content types, HEAD and known-resource me
 		["index.html", "/", "text/html", '<div id="root"></div>'],
 		["assets/index-A123.js", "/assets/index-A123.js", "text/javascript", "export {};"],
 		["assets/index-A123.css", "/assets/index-A123.css", "text/css", "body { color: black; }"],
+		["assets/emblem-A123.svg", "/assets/emblem-A123.svg", "image/svg+xml", '<svg xmlns="http://www.w3.org/2000/svg"/>'],
+		["assets/Mono-A123.woff2", "/assets/Mono-A123.woff2", "font/woff2", "wOF2 font fixture"],
 	] as const;
 	const app = new Hono().route("/", createUiAssetRoutes({ directory }));
 	for (const [file, path, contentType, contents] of fixtures) {
@@ -43,7 +45,11 @@ test("asset scope rejects missing files, directories, encoded paths and symlink 
 	await writeFile(join(directory, "secret.js"), "secret");
 	await writeFile(join(ui, "private.json"), "private");
 	await symlink(join(directory, "secret.js"), join(ui, "assets/escaped-A123.js"));
+	await symlink(join(directory, "secret.js"), join(ui, "assets/escaped-A123.svg"));
+	await symlink(join(directory, "secret.js"), join(ui, "assets/escaped-A123.woff2"));
 	await mkdir(join(ui, "assets/directory-A123.js"));
+	await mkdir(join(ui, "assets/directory-A123.svg"));
+	await mkdir(join(ui, "assets/directory-A123.woff2"));
 	const app = new Hono().route("/", createUiAssetRoutes({ directory: ui }));
 	for (const path of [
 		"/unknown",
@@ -53,12 +59,25 @@ test("asset scope rejects missing files, directories, encoded paths and symlink 
 		"/assets/missing-A123.js",
 		"/assets/directory-A123.js",
 		"/assets/escaped-A123.js",
+		"/assets/escaped-A123.svg",
+		"/assets/escaped-A123.woff2",
+		"/assets/directory-A123.svg",
+		"/assets/directory-A123.woff2",
+		"/assets/missing-A123.svg",
+		"/assets/missing-A123.woff2",
 		"/assets/../private.json",
 		"/assets/%2e%2e%2fsecret.js",
 		"/assets/%2Fsecret.js",
 		"/assets/%5csecret.js",
 		"/assets/%ZZ.js",
+		"/assets/%2e%2e%2fsecret.svg",
+		"/assets/%2e%2e%2fsecret.woff2",
+		"/assets/%2Fsecret.svg",
+		"/assets/%5csecret.woff2",
 		"/assets/nested/file.js",
+		"/assets/nested/file.svg",
+		"/assets/nested/file.woff2",
+		"/assets/unsupported.png",
 		"/assets/index.html",
 	]) {
 		for (const method of ["GET", "HEAD", "POST"]) {

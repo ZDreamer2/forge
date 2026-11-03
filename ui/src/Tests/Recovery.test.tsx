@@ -5,8 +5,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import App from "../App";
 import { FinalBoundary } from "../Components/FinalBoundary/FinalBoundary";
 
-vi.mock("../Components/WorkspaceOverview/WorkspaceOverview", () => ({
-	WorkspaceOverview: () => {
+vi.mock("../Components/WorkspaceReview/WorkspaceReview", () => ({
+	WorkspaceReview: () => {
 		throw new Error("unexpected route render failure");
 	},
 }));

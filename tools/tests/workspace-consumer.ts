@@ -189,22 +189,43 @@ async function verifyServer(executable: string, consumer: string) {
 	for (const path of ["app", "other", "docs/<guidance>/app", "docs/<guidance>/other", "nested/docs", "docs/type"]) {
 		mkdirSync(join(workspace, path), { recursive: true });
 	}
-	writeFileSync(join(workspace, "docs/type/forge-codebase.yaml"), 'id: "fixture-parent"\n');
+	writeFileSync(join(workspace, "docs/type/forge-codebase.yaml"), 'id: "forge-base"\n');
+	mkdirSync(join(workspace, "docs/type/forge-extension"));
+	copyFileSync(
+		resolve(root, "../../../ai/bc-plugins/dev/forge/codebases/base/forge-extension/forge-extension.ts"),
+		join(workspace, "docs/type/forge-extension/forge-extension.ts"),
+	);
+	mkdirSync(join(workspace, "docs/forge/workspace/forge-extension"));
+	writeFileSync(
+		join(workspace, "docs/forge/workspace/forge-extension/forge-extension.ts"),
+		`import type { ForgeExtension } from '@zdreamer/forge/extension';
+export default {
+  api: 1,
+  annotateNode({node}) {
+    if (node.path === 'app/tracked.txt') node.emphasize('Critical browser fixture');
+    if (node.path === 'app/hidden.txt') node.hide('Hidden browser fixture');
+    if (node.path === 'app/tests/critical.txt') node.restoreNormalEmphasis('Restore browser fixture');
+  },
+} satisfies ForgeExtension;
+`,
+	);
 	for (const path of ["app", "other"]) {
 		writeFileSync(
 			join(workspace, `docs/<guidance>/${path}/forge-codebase.yaml`),
-			`id: fixture-${path}\nroot: ../../../${path}\nparents: [fixture-parent]\n`,
+			`id: fixture-${path}\nroot: ../../../${path}\nparents: [forge-base]\n`,
 		);
 	}
 	writeFileSync(join(workspace, "nested/docs/forge-codebase.yaml"), "id: nested-guide\nroot: ..\n");
 	writeFileSync(join(workspace, ".gitignore"), "nested/\n.env\n");
 	writeFileSync(join(workspace, "app/tracked.txt"), "original\n");
 	writeFileSync(join(workspace, "app/old.txt"), "rename content\n");
+	writeFileSync(join(workspace, "app/transition"), "original file\n");
 	writeFileSync(join(workspace, "nested/binary.dat"), Buffer.from([0, 1, 2]));
 	writeFileSync(
 		join(workspace, "docs/forge/workspace/forge-workspace.yaml"),
 		`display_name: ${JSON.stringify(workspaceName)}
 repositories: [., nested, not-cloned]
+parents: [forge-base]
 codebases:
   - ../../../docs/<guidance>/app/forge-codebase.yaml
   - ../../../docs/<guidance>/other/forge-codebase.yaml
@@ -288,7 +309,7 @@ codebases:
 			assert.deepEqual(await unknown.json(), { error: { code: "not_found", message: "Not found" } });
 			assert.deepEqual(sourceState(workspace), beforeStartup);
 			if (signal === "SIGTERM") {
-				await verifyInstalledUi({ address: server.address, workspace, workspaceName, sourceState });
+				await verifyInstalledUi({ address: server.address, workspace, workspaceName, sourceState, run });
 				assert.deepEqual(await (await request("/api/changes")).json(), { codebases: {}, changes: [] });
 				assert.deepEqual(sourceState(workspace), beforeStartup);
 				writeFileSync(join(workspace, "app/tracked.txt"), "staged\n");
@@ -418,6 +439,14 @@ try {
 	);
 	assert.ok(existsSync(join(installed, "dist/ui/index.html")));
 	assert.ok(readdirSync(join(installed, "dist/ui/assets")).some((name) => name.endsWith(".css")));
+	const notices = join(installed, "dist/ui/assets/licenses");
+	assert.match(readFileSync(join(notices, "OFL.txt"), "utf8"), /SIL OPEN FONT LICENSE/);
+	assert.match(readFileSync(join(notices, "OFL.txt"), "utf8"), /JetBrains/);
+	assert.match(readFileSync(join(notices, "icons-LICENSE"), "utf8"), /MIT License/);
+	assert.match(readFileSync(join(notices, "icons-LICENSE"), "utf8"), /Copyright/);
+	assert.match(readFileSync(join(notices, "icons-SOURCE.txt"), "utf8"), /Material Icon Theme/);
+	assert.match(readFileSync(join(notices, "icons-SOURCE.txt"), "utf8"), /[0-9a-f]{40}/);
+
 	assert.equal(existsSync(join(installed, "dist/protocol")), false);
 	assert.match(
 		readFileSync(join(installed, "dist/server/src/components/http-api/internal/wire.d.ts"), "utf8"),

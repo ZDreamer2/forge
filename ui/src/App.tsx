@@ -21,6 +21,8 @@ export default function App({ queryClient, env }: { queryClient?: QueryClient; e
 function createAppRouter() {
 	return createRouter({
 		routeTree,
+		parseSearch: parseAddressSearch,
+		stringifySearch: stringifyAddressSearch,
 		defaultOnCatch: reportUnexpectedError,
 		defaultErrorComponent: RouteFailure,
 		defaultNotFoundComponent: () => <p>This workspace page does not exist.</p>,
@@ -42,4 +44,35 @@ declare module "@tanstack/react-router" {
 	interface Register {
 		router: ReturnType<typeof createAppRouter>;
 	}
+}
+
+// File names are literal strings. JSON search coercion would change names such as
+// `123`, `true` or `"quoted"` before the route can validate their identity.
+function parseAddressSearch(search: string): Record<string, unknown> {
+	const result: Record<string, unknown> = Object.create(null);
+	for (const [key, value] of new URLSearchParams(search)) {
+		if (Object.hasOwn(result, key)) {
+			const previous = result[key];
+			result[key] = Array.isArray(previous) ? [...previous, value] : [previous, value];
+		} else result[key] = value;
+	}
+	// URLSearchParams repairs malformed escapes; retain an invalid value for validation.
+	for (const part of search.replace(/^\?/, "").split("&")) {
+		const [key, ...value] = part.split("=");
+		try {
+			decodeURIComponent(value.join("=").replace(/\+/g, " "));
+		} catch {
+			result[new URLSearchParams(`${key}=`).keys().next().value ?? ""] = [];
+		}
+	}
+	return result;
+}
+
+function stringifyAddressSearch(search: Record<string, unknown>): string {
+	const params = new URLSearchParams();
+	for (const [key, value] of Object.entries(search)) {
+		if (value !== undefined) params.set(key, String(value));
+	}
+	const text = params.toString();
+	return text ? `?${text}` : "";
 }
