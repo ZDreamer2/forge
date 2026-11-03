@@ -4,7 +4,9 @@ import { ChangesNavigator } from "./Components/ChangesNavigator/ChangesNavigator
 import { ChangesSummary } from "./Components/ChangesSummary/ChangesSummary";
 import { SelectionViewer } from "./Components/SelectionViewer/SelectionViewer";
 import emblem from "./Internal/Assets/forge-emblem.svg";
-import { analyzeChanges, initialFilters, resolveSelection } from "./Internal/changeAnalysis";
+import { analyzeChanges, importanceOf, initialFilters, resolveSelection } from "./Internal/changeAnalysis";
+import type { PathRequest } from "./Internal/pathRequest";
+import { analyzeSignals } from "./Internal/signalAnalysis";
 import { useChangeSetAnalysis } from "./Lib/ChangeSetData/ChangeSetData";
 import { useWorkspaceIdentity } from "./Lib/WorkspaceData/WorkspaceData";
 import styles from "./WorkspaceReview.module.css";
@@ -22,6 +24,9 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 	const { analysis } = changeSetData;
 	const updating = workspaceData.updating || changeSetData.updating;
 	const [filters, setFilters] = useState(initialFilters);
+	const [inspectionRequest, setInspectionRequest] = useState<PathRequest>();
+	const [revealRequest, setRevealRequest] = useState<PathRequest>();
+	const requestOccurrence = useRef(0);
 	const [notice, setNotice] = useState("");
 	const [copyFeedback, setCopyFeedback] = useState("");
 	const copyAttempt = useRef(0);
@@ -36,6 +41,9 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 		() => analyzeChanges(analysis.data, workspace.data, filters),
 		[analysis.data, workspace.data, filters],
 	);
+
+	// memo-reason: signal indexing traverses canonical nodes; filter and layout changes reuse it.
+	const signals = useMemo(() => analyzeSignals(analysis.data), [analysis.data]);
 
 	useEffect(() => {
 		const resize = () => setViewport(window.innerWidth);
@@ -59,7 +67,25 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 		}
 	}, [invalidSelection, selectedPath, workspace.isSuccess, analysis.isSuccess, updating, review, onNavigate]);
 
+	function inspect(path: string, reveal = false) {
+		const request = { path, occurrence: ++requestOccurrence.current };
+		setInspectionRequest(request);
+		setRevealRequest(reveal ? request : undefined);
+		setNotice("");
+		if (reveal) {
+			const node = review.subjects.get(path)?.node;
+			if (node?.kind)
+				setFilters((current) => ({
+					types: new Set([...current.types, node.classification.value]),
+					importance: new Set([...current.importance, importanceOf(node)]),
+				}));
+		}
+		if (path !== selectedPath) onNavigate(path);
+	}
+
 	function select(path: string, copy: boolean) {
+		setInspectionRequest(undefined);
+		setRevealRequest(undefined);
 		setNotice("");
 		setCopyFeedback("");
 		onNavigate(!copy && path === selectedPath ? undefined : path);
@@ -149,6 +175,9 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 				onFiltersChange={setFilters}
 				selectedPath={selectedPath}
 				onSelect={select}
+				signals={signals}
+				onInspect={inspect}
+				revealRequest={revealRequest}
 			/>
 			<hr
 				className={styles.divider}
@@ -179,7 +208,16 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 			/>
 			<div className={styles.details}>
 				{analysis.data ? (
-					<SelectionViewer review={review} selectedPath={selectedPath} codebases={analysis.data.codebases} />
+					<SelectionViewer
+						review={review}
+						selectedPath={selectedPath}
+						codebases={analysis.data.codebases}
+						signals={signals}
+						inspectionRequest={inspectionRequest}
+						onInspect={inspect}
+						onSourceNavigate={inspect}
+						onReveal={(path) => inspect(path, true)}
+					/>
 				) : (
 					<p>Waiting for change analysis.</p>
 				)}

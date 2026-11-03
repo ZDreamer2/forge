@@ -10,6 +10,7 @@ import { ForgeTheme } from "../../ForgeTheme/ForgeTheme";
 import { ChangesNavigator } from "../Components/ChangesNavigator/ChangesNavigator";
 import { SelectionViewer } from "../Components/SelectionViewer/SelectionViewer";
 import { analyzeChanges, initialFilters } from "../Internal/changeAnalysis";
+import { analyzeSignals } from "../Internal/signalAnalysis";
 import { WorkspaceReview } from "../WorkspaceReview";
 
 const suite = createTestSuiteLifecycle({
@@ -238,4 +239,214 @@ it("coordinates both public data owners while retaining filters, disclosure, sel
 	expect(screen.getByRole("button", { name: "Expand src" })).toBeInTheDocument();
 	expect(screen.getByRole("heading", { name: "src/file.ts" })).toBeInTheDocument();
 	expect(divider).toHaveAttribute("aria-valuenow", width);
+});
+
+it("consumes explicit same-path reveals once while preserving unrelated collapsed branches", async () => {
+	const user = userEvent.setup();
+	const filters = initialFilters();
+	const facts = analysis([
+		node(".", { children: ["a", "b"] }),
+		node("a", { children: ["a/file.ts"] }),
+		node("a/file.ts", { kind: "modified" }),
+		node("b", { children: ["b/file.ts"] }),
+		node("b/file.ts", { kind: "added" }),
+	]);
+	function view(occurrence?: number) {
+		return (
+			<ForgeTheme env="test">
+				<ChangesNavigator
+					review={analyzeChanges(facts, undefined, filters)}
+					analysis={facts}
+					identity={undefined}
+					filters={filters}
+					onFiltersChange={() => {}}
+					selectedPath="a/file.ts"
+					onSelect={() => {}}
+					revealRequest={occurrence === undefined ? undefined : { path: "a/file.ts", occurrence }}
+				/>
+			</ForgeTheme>
+		);
+	}
+	const rendered = render(view());
+	await user.click(screen.getByRole("button", { name: "Collapse a" }));
+	await user.click(screen.getByRole("button", { name: "Collapse b" }));
+	rendered.rerender(view(1));
+	expect(screen.getByRole("button", { name: "Select a/file.ts", pressed: true })).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Expand b" })).toBeInTheDocument();
+	await user.click(screen.getByRole("button", { name: "Collapse a" }));
+	rendered.rerender(view(1));
+	expect(screen.getByRole("button", { name: "Expand a" })).toBeInTheDocument();
+	rendered.rerender(view(2));
+	expect(screen.getByRole("button", { name: "Select a/file.ts", pressed: true })).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Expand b" })).toBeInTheDocument();
+});
+
+it("invalidates an unresolved reveal when a newer address supersedes its target", async () => {
+	const user = userEvent.setup();
+	const filters = initialFilters();
+	const first = analysis([
+		node(".", { children: ["a", "b"] }),
+		node("a", { children: ["a/old.ts"] }),
+		node("a/old.ts", { kind: "modified" }),
+		node("b", { children: ["b/file.ts"] }),
+		node("b/file.ts", { kind: "added" }),
+	]);
+	const resolved = analysis([
+		node(".", { children: ["a", "b"] }),
+		node("a", { children: ["a/old.ts", "a/late.ts"] }),
+		node("a/old.ts", { kind: "modified" }),
+		node("a/late.ts", { kind: "added" }),
+		node("b", { children: ["b/file.ts"] }),
+		node("b/file.ts", { kind: "added" }),
+	]);
+	function view(facts: WorkspaceAnalysis, selectedPath: string, occurrence: number, target: string) {
+		return (
+			<ForgeTheme env="test">
+				<ChangesNavigator
+					review={analyzeChanges(facts, undefined, filters)}
+					analysis={facts}
+					identity={undefined}
+					filters={filters}
+					onFiltersChange={() => {}}
+					selectedPath={selectedPath}
+					onSelect={() => {}}
+					revealRequest={{ path: target, occurrence }}
+				/>
+			</ForgeTheme>
+		);
+	}
+	const rendered = render(view(first, "a/late.ts", 1, "a/late.ts"));
+	await user.click(screen.getByRole("button", { name: "Collapse a" }));
+	rendered.rerender(view(first, "b/file.ts", 2, "b/file.ts"));
+	rendered.rerender(view(resolved, "b/file.ts", 2, "b/file.ts"));
+	expect(screen.getByRole("button", { name: "Expand a" })).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Select b/file.ts", pressed: true })).toBeInTheDocument();
+});
+
+it("owns signal disclosure and canonical source access independently of a navigator", async () => {
+	const user = userEvent.setup();
+	const sources: string[] = [];
+	const reveals: string[] = [];
+	const facts = analysis([
+		node(".", { children: ["transition"] }),
+		node("transition", {
+			kind: "deleted",
+			base: { path: "transition", kind: "file" },
+			current: { path: "transition", kind: "directory" },
+			children: ["transition/hidden.md"],
+			signals: [{ severity: "warning", message: "Direct transition", handler: "workspace" }],
+			signalCounts: { warning: 1, notice: 1 },
+		}),
+		node("transition/hidden.md", {
+			kind: "added",
+			classification: { value: "docs" },
+			effectiveEmphasis: { value: "hidden" },
+			signals: [{ severity: "notice", message: "Hidden descendant", handler: "codebase:docs" }],
+			signalCounts: { warning: 0, notice: 1 },
+		}),
+	]);
+	function view(path: string, occurrence?: number) {
+		return (
+			<ForgeTheme env="test">
+				<SelectionViewer
+					review={analyzeChanges(facts, identity, initialFilters())}
+					signals={analyzeSignals(facts)}
+					selectedPath={path}
+					inspectionRequest={occurrence === undefined ? undefined : { path, occurrence }}
+					onSourceNavigate={(source) => sources.push(source)}
+					onReveal={(source) => reveals.push(source)}
+				/>
+			</ForgeTheme>
+		);
+	}
+	const rendered = render(view("transition"));
+	expect(screen.queryByRole("region", { name: "Signal details" })).not.toBeInTheDocument();
+	await user.click(screen.getByRole("button", { name: "Show signal details" }));
+	const details = within(screen.getByRole("region", { name: "Signal details" }));
+	expect(details.getByText("Direct transition")).toBeInTheDocument();
+	expect(details.getByText("Hidden descendant")).toBeInTheDocument();
+	expect(details.queryByRole("button", { name: "Reveal file transition" })).not.toBeInTheDocument();
+	await user.click(details.getByRole("button", { name: "Inspect source transition" }));
+	await user.click(details.getByRole("button", { name: "Reveal file transition/hidden.md" }));
+	expect(sources).toEqual(["transition"]);
+	expect(reveals).toEqual(["transition/hidden.md"]);
+	await user.click(screen.getByRole("button", { name: "Hide signal details" }));
+	rendered.rerender(view("transition", 1));
+	expect(screen.getByRole("region", { name: "Signal details" })).toBeInTheDocument();
+	await user.click(screen.getByRole("button", { name: "Hide signal details" }));
+	rendered.rerender(view("transition", 1));
+	expect(screen.queryByRole("region", { name: "Signal details" })).not.toBeInTheDocument();
+	rendered.rerender(view("missing", 2));
+	expect(
+		screen.queryByRole("button", { name: /Inspect warnings|Inspect notices|Show signal details/ }),
+	).not.toBeInTheDocument();
+});
+
+it("does not reopen viewer details for an obsolete unresolved inspection", async () => {
+	const user = userEvent.setup();
+	const first = analysis([
+		node(".", { children: ["current"] }),
+		node("current", {
+			kind: "modified",
+			signals: [{ severity: "notice", message: "Current concern", handler: "workspace" }],
+			signalCounts: { warning: 0, notice: 1 },
+		}),
+	]);
+	const resolved = analysis([
+		...Object.values(first.nodes),
+		node("late", {
+			kind: "added",
+			signals: [{ severity: "warning", message: "Obsolete concern", handler: "workspace" }],
+			signalCounts: { warning: 1, notice: 0 },
+		}),
+	]);
+	function view(facts: WorkspaceAnalysis, path: string, occurrence: number, target: string) {
+		return (
+			<ForgeTheme env="test">
+				<SelectionViewer
+					review={analyzeChanges(facts, identity, initialFilters())}
+					signals={analyzeSignals(facts)}
+					selectedPath={path}
+					inspectionRequest={{ path: target, occurrence }}
+				/>
+			</ForgeTheme>
+		);
+	}
+	const rendered = render(view(first, "late", 1, "late"));
+	rendered.rerender(view(first, "current", 2, "current"));
+	expect(screen.getByRole("region", { name: "Signal details" })).toHaveTextContent("Current concern");
+	await user.click(screen.getByRole("button", { name: "Hide signal details" }));
+	rendered.rerender(view(resolved, "current", 2, "current"));
+	expect(screen.queryByRole("region", { name: "Signal details" })).not.toBeInTheDocument();
+});
+
+it("invalidates pending inspection after leaving its addressed target even when returning to the origin", async () => {
+	const initial = analysis([node(".", { children: ["current"] }), node("current", { kind: "modified" })]);
+	const resolved = analysis([
+		node(".", { children: ["current", "late"] }),
+		node("current", { kind: "modified" }),
+		node("late", {
+			kind: "added",
+			signals: [{ severity: "warning", message: "Late concern", handler: "workspace" }],
+			signalCounts: { notice: 0, warning: 1 },
+		}),
+	]);
+	function view(facts: WorkspaceAnalysis, path: string) {
+		return (
+			<ForgeTheme env="test">
+				<SelectionViewer
+					review={analyzeChanges(facts, identity, initialFilters())}
+					signals={analyzeSignals(facts)}
+					selectedPath={path}
+					inspectionRequest={{ path: "late", occurrence: 1 }}
+				/>
+			</ForgeTheme>
+		);
+	}
+	const rendered = render(view(initial, "current"));
+	rendered.rerender(view(initial, "late"));
+	rendered.rerender(view(initial, "current"));
+	rendered.rerender(view(resolved, "late"));
+	expect(screen.getByRole("button", { name: "Show signal details" })).toBeInTheDocument();
+	expect(screen.queryByRole("region", { name: "Signal details" })).not.toBeInTheDocument();
 });

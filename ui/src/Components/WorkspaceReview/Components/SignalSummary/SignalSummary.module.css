@@ -1,0 +1,73 @@
+.summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+}
+.indicator {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 19px;
+	height: 21px;
+	padding: 0;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	cursor: pointer;
+}
+.inherited {
+	opacity: 0.4;
+}
+.indicator:hover,
+.indicator:focus-visible {
+	opacity: 1;
+	background: #e7ece8;
+}
+.indicator:focus-visible {
+	outline: 2px solid #267553;
+	outline-offset: 1px;
+}
+.warning {
+	color: #ba8b25;
+	flex-shrink: 0;
+}
+.notice {
+	color: #7b8c98;
+	flex-shrink: 0;
+}
+.tooltip {
+	color: #45594b;
+	background: #fff;
+	border: 1px solid #e3e8e4;
+	box-shadow: 0 5px 22px #16302016;
+	padding: 10px 12px;
+	font:
+		12px / 1.6 system-ui,
+		sans-serif;
+	max-width: min(760px, calc(100vw - 16px));
+	max-height: min(65vh, 520px);
+	overflow: auto;
+	overflow-wrap: anywhere;
+}
+.messages {
+	width: 100%;
+	border-collapse: collapse;
+}
+.messages td {
+	padding: 4px 6px;
+	vertical-align: top;
+}
+.messages td:first-child {
+	width: 20px;
+	padding-left: 0;
+}
+.messages td:last-child {
+	padding-right: 0;
+}
+.path {
+	width: 35%;
+	min-width: min(180px, 25vw);
+	max-width: 250px;
+	font: 11px / 1.7 var(--tree-font, "JetBrains Mono", Consolas, ui-monospace, monospace);
+}

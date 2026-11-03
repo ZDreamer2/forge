@@ -2,7 +2,9 @@ import type { AnalysisSide, AnalysisWireNode, WorkspaceAnalysis } from "@forge/a
 import { Tooltip } from "@mantine/core";
 import type { CSSProperties } from "react";
 import { importanceLabels, importanceOf, typeLabels } from "../../../../Internal/changeAnalysis";
+import type { SignalAnalysis } from "../../../../Internal/signalAnalysis";
 import { ChangesSummary } from "../../../ChangesSummary/ChangesSummary";
+import { SignalSummary } from "../../../SignalSummary/SignalSummary";
 import type { ProjectedNode, TreeProjection } from "../../Internal/treeProjection";
 import styles from "./ChangesTree.module.css";
 import cssIcon from "./Internal/Assets/icons/css.svg";
@@ -19,6 +21,8 @@ type Codebases = WorkspaceAnalysis["codebases"];
 
 export function ChangesTree({
 	projection,
+	signals,
+	onInspect,
 	expanded,
 	selectedPath,
 	onToggle,
@@ -28,6 +32,8 @@ export function ChangesTree({
 	codebases,
 }: {
 	projection: TreeProjection;
+	signals?: SignalAnalysis | undefined;
+	onInspect?: ((path: string) => void) | undefined;
 	expanded: ReadonlySet<string>;
 	selectedPath?: string | undefined;
 	onToggle: (path: string) => void;
@@ -108,6 +114,7 @@ export function ChangesTree({
 							{node?.kind && folder && <span className={styles.ownChange}> · {node.kind}</span>}
 						</button>
 					</Tooltip>
+					{signals && onInspect && <SignalSummary signals={signals} path={path} onInspect={onInspect} />}
 					{entry.repository && (
 						<span className={styles.repositoryCount}>
 							{count.files} of {total.files}

@@ -1,6 +1,8 @@
 import type { WorkspaceAnalysis, WorkspaceIdentity } from "@forge/api-contract";
 import { useMemo } from "react";
 import type { Filters, ReviewAnalysis } from "../../Internal/changeAnalysis";
+import type { PathRequest } from "../../Internal/pathRequest";
+import type { SignalAnalysis } from "../../Internal/signalAnalysis";
 import styles from "./ChangesNavigator.module.css";
 import { ChangeFilters } from "./Components/ChangeFilters/ChangeFilters";
 import { ChangesTree } from "./Components/ChangesTree/ChangesTree";
@@ -8,6 +10,9 @@ import { projectTree } from "./Internal/treeProjection";
 import { useExpansion } from "./Internal/useExpansion";
 
 type Props = {
+	signals?: SignalAnalysis | undefined;
+	onInspect?: ((path: string) => void) | undefined;
+	revealRequest?: PathRequest | undefined;
 	review: ReviewAnalysis;
 	analysis: WorkspaceAnalysis | undefined;
 	identity: WorkspaceIdentity | undefined;
@@ -27,11 +32,14 @@ export function ChangesNavigator({
 	onFiltersChange,
 	selectedPath,
 	onSelect,
+	signals,
+	onInspect,
+	revealRequest,
 }: Props) {
 	// memo-reason: hierarchy/style projection traverses the complete canonical tree;
 	// divider and clipboard updates in the composing review do not change its inputs.
 	const projection = useMemo(() => projectTree(review), [review]);
-	const expansion = useExpansion(projection, selectedPath);
+	const expansion = useExpansion(projection, selectedPath, revealRequest);
 	return (
 		<aside className={styles.sidebar} aria-label="Changes navigator">
 			<ChangeFilters filters={filters} onChange={onFiltersChange} />
@@ -40,6 +48,8 @@ export function ChangesNavigator({
 				{analysis ? (
 					<ChangesTree
 						projection={projection}
+						signals={signals}
+						onInspect={onInspect}
 						expanded={expansion.expanded}
 						selectedPath={selectedPath}
 						codebases={analysis.codebases}

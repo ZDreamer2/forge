@@ -1,0 +1,111 @@
+.details {
+	container-type: inline-size;
+	flex: 0 1 auto;
+	min-height: 0;
+	max-height: min(34vh, 280px);
+	overflow: auto;
+	padding: 7px 26px 12px;
+	border-bottom: 1px solid #e3e8e4;
+	background: #fafbf9;
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+.messages {
+	width: 100%;
+	table-layout: fixed;
+	border-collapse: collapse;
+	text-align: left;
+}
+.messages td {
+	padding: 7px 5px;
+	vertical-align: top;
+	border-bottom: 1px solid #edf1ec;
+}
+.messages .symbol {
+	width: 23px;
+}
+.messages .source {
+	width: 35%;
+}
+.source button {
+	display: block;
+	max-width: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: #386b56;
+	font:
+		11px / 1.6 "JetBrains Mono",
+		Consolas,
+		monospace;
+	text-align: left;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+.source button:hover {
+	text-decoration: underline;
+}
+.source .reveal {
+	margin-top: 4px;
+	font:
+		11px / 1.6 system-ui,
+		sans-serif;
+}
+.attribution {
+	margin-top: 4px;
+	color: #829087;
+	font-size: 10px;
+}
+.filtered {
+	display: block;
+	color: #89713b;
+	font-size: 10px;
+}
+.details:focus-visible,
+.source button:focus-visible {
+	outline: 2px solid #267553;
+	outline-offset: 1px;
+}
+@media (max-width: 900px) {
+	.details {
+		padding-left: 18px;
+		padding-right: 18px;
+	}
+}
+@media (max-width: 600px) {
+	.details {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+}
+
+@container (max-width: 420px) {
+	.messages,
+	.messages tbody {
+		display: block;
+	}
+	.messages tr {
+		display: grid;
+		grid-template-columns: 18px minmax(0, 1fr);
+		gap: 0 4px;
+		border-bottom: 1px solid #edf1ec;
+	}
+	.messages td {
+		min-width: 0;
+		padding: 5px 0;
+		border: 0;
+	}
+	.messages .symbol {
+		width: auto;
+		grid-column: 1;
+		grid-row: 1 / 3;
+	}
+	.messages .source {
+		width: auto;
+		grid-column: 2;
+	}
+	.messages td:last-child {
+		grid-column: 2;
+		padding-top: 0;
+	}
+}

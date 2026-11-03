@@ -1,5 +1,6 @@
 import type { AnalysisSide, WorkspaceAnalysis } from "@forge/api-contract";
 import { Tooltip } from "@mantine/core";
+import { useEffect, useRef, useState } from "react";
 import {
 	importanceLabels,
 	importanceOf,
@@ -7,19 +8,49 @@ import {
 	resolveSelection,
 	typeLabels,
 } from "../../Internal/changeAnalysis";
+import { consumePathRequest, type PathRequest, type PathRequestCursor } from "../../Internal/pathRequest";
+import { type SignalAnalysis, signalMessages } from "../../Internal/signalAnalysis";
 import { ChangesSummary } from "../ChangesSummary/ChangesSummary";
+import { SignalSummary } from "../SignalSummary/SignalSummary";
+import { SignalDetails } from "./Components/SignalDetails/SignalDetails";
 import styles from "./SelectionViewer.module.css";
 
 export function SelectionViewer({
 	review,
 	selectedPath,
 	codebases,
+	signals,
+	inspectionRequest,
+	onInspect,
+	onSourceNavigate,
+	onReveal,
 }: {
 	review: ReviewAnalysis;
+	signals?: SignalAnalysis | undefined;
+	inspectionRequest?: PathRequest | undefined;
+	onInspect?: ((path: string) => void) | undefined;
+	onSourceNavigate?: ((path: string) => void) | undefined;
+	onReveal?: ((path: string) => void) | undefined;
 	selectedPath?: string | undefined;
 	codebases?: WorkspaceAnalysis["codebases"] | undefined;
 }) {
 	const selected = resolveSelection(review, selectedPath);
+	const messages = signals && selected ? signalMessages(signals, selected.path) : [];
+	const [disclosure, setDisclosure] = useState({ path: selected?.path, open: false });
+	if (disclosure.path !== selected?.path || (disclosure.open && !messages.length)) {
+		setDisclosure({ path: selected?.path, open: false });
+	}
+	const open = disclosure.path === selected?.path && disclosure.open && messages.length > 0;
+	const inspection = useRef<PathRequestCursor>({ pending: false });
+	useEffect(() => {
+		if (consumePathRequest(inspection.current, inspectionRequest, selectedPath, !!selected)) {
+			setDisclosure({ path: selected?.path, open: messages.length > 0 });
+		}
+	}, [inspectionRequest, selectedPath, selected, messages.length]);
+	function inspect(path: string) {
+		if (onInspect) onInspect(path);
+		else setDisclosure({ path, open: true });
+	}
 	const node = selected?.node;
 	const path = selected?.path;
 	const fragments = path?.split("/") ?? [];
@@ -53,6 +84,21 @@ export function SelectionViewer({
 					<h2 className={styles.title}>Workspace changes</h2>
 				)}
 			</header>
+			{selected && messages.length > 0 && signals && (
+				<div className={styles.signalSummary}>
+					<SignalSummary signals={signals} path={selected.path} onInspect={inspect} />
+					<button
+						type="button"
+						aria-expanded={open}
+						onClick={() => setDisclosure({ path: selected.path, open: !open })}
+					>
+						{open ? "Hide signal details" : "Show signal details"}
+					</button>
+				</div>
+			)}
+			{open && (
+				<SignalDetails messages={messages} review={review} onSourceNavigate={onSourceNavigate} onReveal={onReveal} />
+			)}
 			<div className={styles.content} data-testid="selection-scroll">
 				{!selected ? (
 					<div className={styles.orientation}>

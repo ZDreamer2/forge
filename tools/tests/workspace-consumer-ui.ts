@@ -23,6 +23,14 @@ function select(page: Page, path: string) {
 	return page.getByRole("button", { name: `Select ${path}`, exact: true });
 }
 
+function inspect(page: Page, path: string, severity: "warnings" | "notices") {
+	return row(page, path).getByRole("button", { name: `Inspect ${severity} for ${path}`, exact: true });
+}
+
+function signalDetails(page: Page) {
+	return page.getByRole("region", { name: "Signal details", exact: true });
+}
+
 async function summary(page: Page, label: string, files: number, removed: number, added: number) {
 	await page
 		.getByRole("button", {
@@ -52,10 +60,16 @@ async function settled(page: Page) {
 	await page.getByRole("button", { name: "Refresh", exact: true }).and(page.locator(":enabled")).waitFor();
 }
 
-async function expectPortal(page: Page, trigger: Locator) {
+async function expectPortal(page: Page, trigger: Locator, inspectTooltip?: (tooltip: Locator) => Promise<void>) {
 	await trigger.hover();
-	const tooltip = page.getByRole("tooltip");
+	await trigger.and(page.locator("[aria-describedby]")).waitFor();
+	const tooltipId = await trigger.getAttribute("aria-describedby");
+	const tooltip = page.locator(`[role="tooltip"][id=${JSON.stringify(tooltipId)}]`);
 	await tooltip.waitFor();
+	await page.waitForFunction(
+		(element) => element.ownerDocument.defaultView.getComputedStyle(element).opacity === "1",
+		await tooltip.elementHandle(),
+	);
 	assert.equal(
 		await tooltip.evaluate((element) => !element.closest("main")),
 		true,
@@ -65,8 +79,11 @@ async function expectPortal(page: Page, trigger: Locator) {
 		await tooltip.evaluate((element) => element.ownerDocument.defaultView.getComputedStyle(element).backgroundColor),
 		"rgb(255, 255, 255)",
 	);
+	await inspectTooltip?.(tooltip);
 	await page.mouse.move(1090, 1);
 	await tooltip.waitFor({ state: "hidden" });
+	// Mantine opens focus tooltips for keyboard-visible focus.
+	await page.keyboard.press("Tab");
 	await trigger.focus();
 	await tooltip.waitFor();
 	await trigger.blur();
@@ -173,6 +190,14 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		assert.equal(analysis.nodes["app/tests/critical.txt"]?.effectiveEmphasis.value, "normal");
 		assert.equal(analysis.nodes["app/tracked.txt"]?.effectiveEmphasis.value, "emphasized");
 		assert.equal(analysis.nodes["app/hidden.txt"]?.effectiveEmphasis.value, "hidden");
+		assert.deepEqual(analysis.nodes.nested?.signalCounts, { notice: 1, warning: 1 });
+		assert.deepEqual(
+			analysis.nodes.nested?.signals.map(({ severity, message }) => ({ severity, message })),
+			[{ severity: "notice", message: "Nested repository notice" }],
+		);
+		assert.deepEqual(analysis.nodes["app/hidden.txt"]?.signals[0]?.location, { side: "current", line: 1, column: 2 });
+		assert.deepEqual(analysis.nodes["other/renamed.txt"]?.signals[0]?.location, { side: "base", line: 1, column: 3 });
+		assert.equal(analysis.nodes.app?.signals[0]?.message, "Direct folder notice");
 		assert.deepEqual(sourceState(workspace), edited);
 		await waitSelected(page, "nested");
 		assert.equal(
@@ -191,6 +216,53 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await summary(page, "Visible workspace changes", 0, 0, 0);
 		await select(page, "not-cloned").waitFor();
 		await select(page, "nested").waitFor();
+		assert.equal(
+			await inspect(page, "nested", "warnings").evaluate(
+				(element) => element.ownerDocument.defaultView.getComputedStyle(element).opacity,
+			),
+			"0.4",
+			"Direct notice must not strengthen a descendant-only warning",
+		);
+		assert.equal(
+			await inspect(page, "nested", "notices").evaluate(
+				(element) => element.ownerDocument.defaultView.getComputedStyle(element).opacity,
+			),
+			"1",
+		);
+		await expectPortal(page, inspect(page, "nested", "warnings"), async (tooltip) => {
+			await tooltip.getByText("Nested repository notice", { exact: true }).waitFor();
+			await tooltip.getByText("Nested descendant warning", { exact: true }).waitFor();
+			await tooltip.getByText("nested/", { exact: true }).waitFor();
+			assert.equal(await tooltip.getByText("Severity", { exact: true }).count(), 0);
+			await page.screenshot({ path: join(screenshots, "signal-tooltip.png") });
+		});
+		await inspect(page, "nested", "warnings").click();
+		await page.waitForURL((url) => url.searchParams.get("path") === "nested");
+		await signalDetails(page).getByText("Nested repository notice", { exact: true }).waitFor();
+		await page.getByRole("tooltip", { name: "Signals for nested", exact: true }).waitFor({ state: "hidden" });
+		await signalDetails(page).getByText("Nested descendant warning", { exact: true }).waitFor();
+		await signalDetails(page)
+			.getByRole("button", { name: "Inspect source nested/browser-binary.dat", exact: true })
+			.click();
+		await page.waitForURL((url) => url.searchParams.get("path") === "nested/browser-binary.dat");
+		await summary(page, "Visible workspace changes", 0, 0, 0);
+		await signalDetails(page)
+			.getByText(/filtered out/i)
+			.waitFor();
+		await signalDetails(page)
+			.getByRole("button", { name: "Reveal file nested/browser-binary.dat", exact: true })
+			.click();
+		await select(page, "nested/browser-binary.dat").waitFor();
+		await page.getByRole("button", { name: "Hide signal details", exact: true }).click();
+		await inspect(page, "nested/browser-binary.dat", "warnings").click();
+		await signalDetails(page).getByText("Nested descendant warning", { exact: true }).waitFor();
+		await page.goBack();
+		await waitSelected(page, "nested");
+		await page.getByRole("button", { name: "Show signal details", exact: true }).waitFor();
+		await page.goForward();
+		await waitSelected(page, "nested/browser-binary.dat");
+		await page.getByRole("button", { name: "Show signal details", exact: true }).waitFor();
+		await page.getByRole("button", { name: "Deselect all types and importance levels", exact: true }).click();
 		await page.getByRole("button", { name: "Code", exact: true }).click();
 		await page.getByRole("button", { name: "High", exact: true }).click();
 		await summary(page, "Visible workspace changes", 1, 1, 2);
@@ -207,12 +279,67 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await waitSelected(page, "app/hidden.txt");
 		await page.getByRole("button", { name: "Select all types and importance levels", exact: true }).click();
 		await summary(page, "Visible workspace changes", all.files, all.removed, all.added);
+		await page.getByRole("button", { name: "Collapse app/bulk", exact: true }).click();
+		await inspect(page, ".", "warnings").click();
+		await signalDetails(page).getByText("Nested descendant warning", { exact: true }).waitFor();
+		await signalDetails(page).getByText("Direct folder notice", { exact: true }).waitFor();
+		await signalDetails(page).getByRole("button", { name: "Inspect source app", exact: true }).waitFor();
+		const signals = signalDetails(page);
+		const headerBeforeScroll = await page
+			.getByRole("region", { name: "Selection details", exact: true })
+			.getByRole("heading", { level: 2 })
+			.boundingBox();
+		await signals.evaluate((element) => {
+			element.scrollTop = element.scrollHeight;
+		});
+		assert.ok(
+			await signals.evaluate((element) => element.scrollTop > 0),
+			"Complete signal details have bounded scrolling",
+		);
+		assert.deepEqual(
+			await page
+				.getByRole("region", { name: "Selection details", exact: true })
+				.getByRole("heading", { level: 2 })
+				.boundingBox(),
+			headerBeforeScroll,
+			"Scrolling messages preserves the selected-path header",
+		);
+		await signals.evaluate((element) => {
+			element.scrollTop = 0;
+		});
+		await page.screenshot({ path: join(screenshots, "signal-details.png") });
+		await signals.getByText(/^Long source message/).scrollIntoViewIfNeeded();
+		await page.screenshot({ path: join(screenshots, "signal-details-long.png") });
+		await page.setViewportSize({ width: 360, height: 800 });
+		await signals.getByText(/^Long source message/).scrollIntoViewIfNeeded();
+		assert.ok(
+			await page.locator("body").evaluate((element) => element.scrollWidth <= 360),
+			"Long signal content stays within the narrow viewport",
+		);
+		await page.screenshot({ path: join(screenshots, "signal-details-narrow.png") });
+		await page.setViewportSize({ width: 1100, height: 800 });
+		await signalDetails(page).getByRole("button", { name: "Inspect source app/hidden.txt", exact: true }).click();
+		await waitSelected(page, "app/hidden.txt");
+		await page.getByRole("button", { name: "None", exact: true }).click();
+		await signalDetails(page).getByRole("button", { name: "Reveal file app/hidden.txt", exact: true }).click();
+		await select(page, "app/hidden.txt").waitFor();
+		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).waitFor();
+		await signalDetails(page)
+			.getByText(/current.*1.*2/i)
+			.waitFor();
+		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).click();
 		await select(page, "other/renamed.txt").click();
 		await page
 			.getByRole("region", { name: "Selection details" })
 			.getByRole("paragraph")
 			.filter({ hasText: "Renamed from app/old.txt" })
 			.waitFor();
+		await inspect(page, "other/renamed.txt", "notices").click();
+		await signalDetails(page).getByText("Renamed source notice", { exact: true }).waitFor();
+		await signalDetails(page)
+			.getByText(/base.*1.*3/i)
+			.waitFor();
+		await signalDetails(page).getByRole("button", { name: "Inspect source other/renamed.txt", exact: true }).waitFor();
 		await page
 			.getByRole("region", { name: "Selection details" })
 			.getByText(/fixture-app/)
@@ -372,11 +499,14 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await settled(page);
 		await page.goto(`${address}/?path=${encodeURIComponent("app/tracked.txt")}`);
 		await waitSelected(page, "app/tracked.txt");
+		await inspect(page, "app/tracked.txt", "warnings").click();
+		await signalDetails(page).getByText("Tracked source warning", { exact: true }).waitFor();
 		renameSync(nested, suspended);
 		moved = true;
 		await refresh.click();
 		await page.getByRole("alert").filter({ hasText: "Change summary is stale." }).waitFor();
 		await summary(page, "All workspace changes", all.files, all.removed, all.added);
+		await signalDetails(page).getByText("Tracked source warning", { exact: true }).waitFor();
 		assert.equal(new URL(page.url()).searchParams.get("path"), "app/tracked.txt");
 		renameSync(suspended, nested);
 		moved = false;
@@ -384,7 +514,10 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.getByRole("button", { name: "Retry changes", exact: true }).click();
 		await page.getByText(/selection.*unavailable|selected.*disappeared/i).waitFor();
 		await waitSelected(page);
+		assert.equal(await signalDetails(page).count(), 0, "Disappearing source removes obsolete signal details");
 		await select(page, "nested").click();
+		await inspect(page, "nested", "notices").click();
+		await signalDetails(page).getByText("Nested repository notice", { exact: true }).waitFor();
 		rmSync(join(workspace, "nested/browser-binary.dat"), { force: true });
 		await refresh.click();
 		await waitSelected(page, "nested");
@@ -392,6 +525,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.getByRole("region", { name: "Selection details" })
 			.getByText(/No changed entries/i)
 			.waitFor();
+		assert.equal(await signalDetails(page).count(), 0, "Surviving placeholder loses its obsolete signals");
 		assert.equal(await page.getByRole("alert").count(), 0);
 		assert.ok(
 			assets.some((path) => path.endsWith(".woff2")),
@@ -434,7 +568,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		assert.deepEqual(consoleErrors, []);
 		assert.deepEqual(failedRequests, []);
 		console.log(
-			`Installed Chromium navigator: real guide policies, filters/counts, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, portal tooltips, local assets and resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
+			`Installed Chromium navigator: real guide policies, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, portal tooltips, local assets and resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
 		);
 	} finally {
 		try {

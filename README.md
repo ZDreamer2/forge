@@ -6,7 +6,7 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 
 Read-only workspace server and React changes navigator using the shared
 `forge-workspace.yaml` registry. The navigator combines a compact changes tree,
-Type/Importance filters and a selected-entry metadata pane.
+Type/Importance filters, signal inspection and a selected-entry metadata pane.
 Executable: `forge`. Licensed under [MIT](LICENSE).
 
 Registry `0.1.2` is the published server baseline; the configuration and API below
@@ -146,7 +146,21 @@ and file/directory transitions. Empty and missing-at-startup registered reposito
 remain selectable. Explicit Refresh preserves filters, expansion and useful selection;
 a disappeared selection is explained after successful identity and analysis reads.
 Failed reads preserve usable content and mark retained data stale, with independent
-retry controls. File content, signal inspection and diff rendering remain future work.
+retry controls. File content and diff rendering remain future work.
+
+Hover or focus a warning triangle or notice circle for the complete source/message
+list, including filtered sources and nested repositories. Each severity is strong
+for direct signals and subdued for descendant-only concerns. Click an indicator
+to select its subject and open bounded signal details below the path header;
+details retain handler IDs and optional base/current coordinates. Ordinary selection
+and Back/Forward begin with a collapsed summary. Filters and Refresh preserve the
+disclosure choice for a surviving subject.
+
+Message paths select their canonical source and open its details while preserving
+filters. A filtered changed source offers Reveal file: it enables only missing
+Type/Importance categories, expands the source's ancestors and selects it with
+details open. Other enabled categories and unrelated expansion survive. Repeating
+inspection or reveal on the selected source reopens details without adding history.
 
 ## Workspace configuration and migration
 

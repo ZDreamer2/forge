@@ -205,6 +205,15 @@ export default {
     if (node.path === 'app/tracked.txt') node.emphasize('Critical browser fixture');
     if (node.path === 'app/hidden.txt') node.hide('Hidden browser fixture');
     if (node.path === 'app/tests/critical.txt') node.restoreNormalEmphasis('Restore browser fixture');
+    if (node.path === '.') node.notice('Workspace repository notice');
+    if (node.path === 'app') node.notice('Direct folder notice');
+    if (node.path === 'app/hidden.txt') node.warn('Hidden source warning', {side: 'current', line: 1, column: 2});
+    if (node.path === 'app/tracked.txt') node.warn('Tracked source warning');
+    if (node.path === 'nested') node.notice('Nested repository notice');
+    if (node.path === 'nested/browser-binary.dat') node.warn('Nested descendant warning');
+    if (node.path === 'other/renamed.txt') node.notice('Renamed source notice', {side: 'base', line: 1, column: 3});
+    if (node.path.startsWith('app/bulk/file-0')) node.notice('Bulk detail message ' + node.path);
+    if (node.path.startsWith('app/deep/') && node.kind) node.notice('Long source message ' + 'wrapped content '.repeat(22));
   },
 } satisfies ForgeExtension;
 `,
