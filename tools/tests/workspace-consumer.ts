@@ -194,9 +194,30 @@ async function verifyServer(executable: string, consumer: string) {
 	}
 	writeFileSync(join(workspace, "docs/type/forge-codebase.yaml"), 'id: "forge-base"\n');
 	mkdirSync(join(workspace, "docs/type/forge-extension"));
-	copyFileSync(
-		resolve(root, "../../../ai/bc-plugins/dev/forge/codebases/base/forge-extension/forge-extension.ts"),
+	writeFileSync(
 		join(workspace, "docs/type/forge-extension/forge-extension.ts"),
+		`import type { ForgeExtension } from '@zdreamer/forge/extension';
+export default {
+  api: 1,
+  classifyNode(ctx) {
+    const segments = ctx.node.path.toLowerCase().split('/');
+    const name = segments.at(-1) ?? '';
+    const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : '';
+    if (/^(?:md|markdown)$/.test(extension)) ctx.classify('docs');
+    if (/^(?:json|jsonc|yaml|yml|toml|ini)$/.test(extension)) ctx.classify('config');
+    if (/^(?:png|jpg|jpeg|gif|webp|avif|svg|ico|bmp|tif|tiff|woff|woff2|ttf|otf|eot)$/.test(extension)) ctx.classify('assets');
+    const directories = ctx.node.base?.kind === 'directory' || ctx.node.current?.kind === 'directory'
+      ? segments
+      : segments.slice(0, -1);
+    if (directories.some((segment) => /^(?:test|tests|__tests__)$/.test(segment)) || /\\.(?:test|spec)\\./.test(name)) ctx.classify('tests');
+  },
+  annotateNode({node}) {
+    if (node.base?.kind !== 'directory' && node.current?.kind !== 'directory') return;
+    const name = node.path.slice(node.path.lastIndexOf('/') + 1);
+    if (node.path === 'plans' || name === 'tests' || name === 'Tests') node.deemphasize('Fixture directory policy');
+  },
+} satisfies ForgeExtension;
+`,
 	);
 	mkdirSync(join(workspace, "docs/forge/workspace/forge-extension"));
 	writeFileSync(
