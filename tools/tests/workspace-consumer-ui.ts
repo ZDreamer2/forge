@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { chromium, type Locator, type Page } from "playwright";
 import type { AnalysisWireNode, WorkspaceAnalysis } from "../../server/src/components/api-contract/index.ts";
+import { verifyInstalledDiffs } from "./workspace-consumer-ui-diffs.ts";
 
 type Deps = {
 	address: string;
@@ -98,6 +99,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 	const nested = join(workspace, "nested");
 	const suspended = `${workspace}-suspended-repository`;
 	const created = new Set<string>();
+	const unusual = `app/deep/${"long-directory-".repeat(7)}/Unicode café # % ? \\ file.ts`;
 	const screenshots = mkdtempSync(join(tmpdir(), "forge-navigator-chromium-"));
 	let moved = false;
 	let renamed = false;
@@ -115,12 +117,17 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: address });
 		const pageErrors: string[] = [];
 		const consoleErrors: string[] = [];
+		const rejectedFilePaths: string[] = [];
 		const apiRequests: string[] = [];
 		const assets: string[] = [];
 		const assetResponses: { path: string; status: number; type: string }[] = [];
 		const failedRequests: { url: string; error?: string }[] = [];
 		page.on("pageerror", (error) => pageErrors.push(error.message));
 		page.on("console", (message) => {
+			if (message.type() === "error" && /status of 400/.test(message.text())) {
+				const rejected = new URL(message.location().url);
+				if (rejected.pathname === "/api/changes/file" && rejected.searchParams.get("path") === unusual) return;
+			}
 			if (message.type() === "error" && !/the server responded with a status of 500/.test(message.text()))
 				consoleErrors.push(message.text());
 		});
@@ -128,7 +135,14 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			failedRequests.push({ url: request.url(), error: request.failure()?.errorText }),
 		);
 		page.on("response", (response) => {
-			const path = new URL(response.url()).pathname;
+			const url = new URL(response.url());
+			const path = url.pathname;
+			if (response.status() === 400) {
+				assert.equal(path, "/api/changes/file");
+				assert.equal(url.searchParams.get("path"), unusual);
+				assert.equal(url.searchParams.get("context"), "3");
+				rejectedFilePaths.push(url.searchParams.get("path") ?? "");
+			}
 			if (path.startsWith("/assets/"))
 				assetResponses.push({ path, status: response.status(), type: response.headers()["content-type"] ?? "" });
 		});
@@ -171,7 +185,6 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		write("app/settings.json", "{}\n");
 		write("app/readme.md", "browser docs\n");
 		write("app/logo.svg", "<svg/>\n");
-		const unusual = `app/deep/${"long-directory-".repeat(7)}/Unicode café # % ? \\ file.ts`;
 		write(unusual, "encoded browser path\n");
 		for (let i = 0; i < 100; i++) write(`app/bulk/file-${String(i).padStart(3, "0")}.ts`, `bulk ${i}\n`);
 		const edited = sourceState(workspace);
@@ -207,6 +220,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		);
 
 		await select(page, "nested/browser-binary.dat").click();
+		await page.getByText("Entry metadata", { exact: true }).click();
 		await page
 			.getByRole("region", { name: "Selection details" })
 			.getByText("Binary change. Line totals are unavailable.", { exact: true })
@@ -329,6 +343,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.waitFor();
 		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).click();
 		await select(page, "other/renamed.txt").click();
+		await page.getByText("Entry metadata", { exact: true }).click();
 		await page
 			.getByRole("region", { name: "Selection details" })
 			.getByRole("paragraph")
@@ -341,11 +356,11 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.waitFor();
 		await signalDetails(page).getByRole("button", { name: "Inspect source other/renamed.txt", exact: true }).waitFor();
 		await page
-			.getByRole("region", { name: "Selection details" })
+			.getByRole("region", { name: "Selected entry metadata" })
 			.getByText(/fixture-app/)
 			.waitFor();
 		await page
-			.getByRole("region", { name: "Selection details" })
+			.getByRole("region", { name: "Selected entry metadata" })
 			.getByText(/fixture-other/)
 			.waitFor();
 		await page
@@ -363,6 +378,11 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 
 		await select(page, unusual).click();
 		await waitSelected(page, unusual);
+		await page
+			.getByRole("region", { name: "File diff", exact: true })
+			.getByRole("alert")
+			.filter({ hasText: "Could not load file" })
+			.waitFor();
 		await select(page, unusual).click({ modifiers: ["Control"] });
 		await waitSelected(page, unusual);
 		await page
@@ -527,6 +547,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.waitFor();
 		assert.equal(await signalDetails(page).count(), 0, "Surviving placeholder loses its obsolete signals");
 		assert.equal(await page.getByRole("alert").count(), 0);
+		await verifyInstalledDiffs({ page, address, workspace, sourceState, run, screenshots });
 		assert.ok(
 			assets.some((path) => path.endsWith(".woff2")),
 			"Bundled font must load",
@@ -561,12 +582,31 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		);
 		assert.ok(apiRequests.includes("/api/workspace") && apiRequests.includes("/api/changes/analysis"));
 		assert.ok(
-			apiRequests.every((path) => path === "/api/workspace" || path === "/api/changes/analysis"),
+			apiRequests.every(
+				(path) => path === "/api/workspace" || path === "/api/changes/analysis" || path === "/api/changes/file",
+			),
 			apiRequests.join(", "),
 		);
 		assert.deepEqual(pageErrors, []);
+		assert.ok(
+			rejectedFilePaths.length > 0,
+			"The literal backslash navigation fixture has an explicitly unsupported file request",
+		);
 		assert.deepEqual(consoleErrors, []);
-		assert.deepEqual(failedRequests, []);
+		assert.deepEqual(
+			failedRequests.filter(
+				(request) =>
+					!(
+						request.error === "net::ERR_ABORTED" &&
+						(new URL(request.url).pathname === "/api/changes/file" ||
+							(new URL(request.url).pathname.startsWith("/assets/") &&
+								new URL(request.url).pathname.endsWith(".js") &&
+								assetResponses.some((asset) => asset.path === new URL(request.url).pathname && asset.status === 200)))
+					),
+			),
+			[],
+		);
+
 		console.log(
 			`Installed Chromium navigator: real guide policies, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, portal tooltips, local assets and resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
 		);

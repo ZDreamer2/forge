@@ -7,12 +7,17 @@
 	color: #45594b;
 }
 .header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
 	padding: 15px 26px;
 	border-bottom: 1px solid #e3e8e4;
 	flex-shrink: 0;
 	min-width: 0;
 }
 .title {
+	flex: 1;
+	min-width: 0;
 	font-size: 12px;
 	font-weight: 650;
 	margin: 0;
@@ -156,6 +161,11 @@
 	color: #78827c;
 	font-size: 11px;
 }
+.metadata summary {
+	cursor: pointer;
+	color: #78877c;
+	font-size: 11px;
+}
 .deferred {
 	margin-top: 25px;
 	color: #829087;
@@ -176,6 +186,9 @@
 }
 @media (max-width: 900px) {
 	.header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
 		padding: 15px 18px;
 	}
 	.content {

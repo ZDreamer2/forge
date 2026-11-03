@@ -1,0 +1,76 @@
+.diff {
+	min-width: 0;
+	margin-top: 12px;
+}
+.mode {
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+	display: flex;
+	flex-shrink: 0;
+	border: 1px solid #e3e8e4;
+	border-radius: 5px;
+	overflow: hidden;
+}
+.mode button {
+	font:
+		11px / 1.6 system-ui,
+		sans-serif;
+	border: 0;
+	background: #fff;
+	padding: 3px 8px;
+	color: #78877c;
+	cursor: pointer;
+}
+.mode button[aria-pressed="true"] {
+	color: #267553;
+	background: #edf4ed;
+}
+.mode button:focus-visible {
+	outline: 2px solid #267553;
+	outline-offset: -2px;
+}
+.canvas {
+	min-width: 0;
+	overflow: hidden;
+	overflow-wrap: normal;
+}
+.facts {
+	color: #78877c;
+	font-size: 11px;
+	margin-bottom: 10px;
+}
+.facts summary {
+	cursor: pointer;
+}
+.facts dl {
+	margin: 8px 0;
+}
+.facts dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.notice {
+	background: #f6f0dd;
+	padding: 8px;
+	font-size: 11px;
+}
+.notice button {
+	font: inherit;
+	color: #267553;
+	border: 0;
+	background: none;
+	cursor: pointer;
+}
+.context {
+	margin-bottom: 8px;
+}
+
+.plainPatch {
+	font:
+		12px / 20px "JetBrains Mono",
+		Consolas,
+		monospace;
+	overflow-x: auto;
+	white-space: pre;
+}

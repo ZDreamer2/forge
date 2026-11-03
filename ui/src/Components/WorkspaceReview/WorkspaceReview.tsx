@@ -103,6 +103,9 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 	}
 
 	const root = analysis.data?.nodes["."];
+	const selectedEntry = selectedPath ? review.subjects.get(selectedPath)?.node : undefined;
+	const refresh = () =>
+		Promise.all([workspaceData.refresh(), changeSetData.refresh(selectedEntry?.kind ? selectedPath : undefined)]);
 	return (
 		<main className={styles.review} style={{ "--sidebar-width": `${width}px` } as CSSProperties}>
 			<header className={styles.header} data-workspace-header>
@@ -118,12 +121,7 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 							files
 						/>
 					)}
-					<Button
-						size="compact-sm"
-						variant="default"
-						disabled={updating}
-						onClick={() => void Promise.all([workspaceData.refresh(), changeSetData.refresh()])}
-					>
+					<Button size="compact-sm" variant="default" disabled={updating} onClick={() => void refresh()}>
 						Refresh
 					</Button>
 					<Tooltip
@@ -209,6 +207,7 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 			<div className={styles.details}>
 				{analysis.data ? (
 					<SelectionViewer
+						onRefresh={() => void refresh()}
 						review={review}
 						selectedPath={selectedPath}
 						codebases={analysis.data.codebases}

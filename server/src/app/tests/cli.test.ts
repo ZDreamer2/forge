@@ -303,11 +303,12 @@ test("CLI aborts active analysis on shutdown and reloads modules in a fresh proc
 		const pending = fetch(`http://127.0.0.1:${reservation.port}/api/changes/analysis`).catch(() => undefined);
 		for (let attempt = 0; attempt < 100; attempt++) {
 			try {
-				await readFile(marker);
-				break;
+				// Creation can precede write completion; only the payload acknowledges entry.
+				if ((await readFile(marker, "utf8")) === "started") break;
 			} catch {
-				await new Promise((resolve) => setTimeout(resolve, 10));
+				// The handler has not created its marker yet.
 			}
+			await new Promise((resolve) => setTimeout(resolve, 10));
 		}
 		assert.equal(await readFile(marker, "utf8"), "started");
 		server.child.kill("SIGTERM");

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import type { AnalysisWireNode, WorkspaceAnalysis, WorkspaceIdentity } from "@forge/api-contract";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestSuiteLifecycle } from "@zdreamer/forge-ts-react-frontend/testing";
 import { http } from "msw";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { fileHandler } from "../../../Lib/Testing/Testing";
 import { ForgeTheme } from "../../ForgeTheme/ForgeTheme";
 import { ChangesNavigator } from "../Components/ChangesNavigator/ChangesNavigator";
 import { SelectionViewer } from "../Components/SelectionViewer/SelectionViewer";
@@ -13,7 +14,15 @@ import { analyzeChanges, initialFilters } from "../Internal/changeAnalysis";
 import { analyzeSignals } from "../Internal/signalAnalysis";
 import { WorkspaceReview } from "../WorkspaceReview";
 
+vi.mock("../Components/SelectionViewer/Components/FileDiff/Internal/pierreRenderer", async () =>
+	(await import("../../../Lib/Testing/Testing")).rendererBoundary(),
+);
+
+let client: QueryClient;
 const suite = createTestSuiteLifecycle({
+	prepare() {
+		client = suite.createQueryClient();
+	},
 	browser: { documentAttributes: ["data-mantine-color-scheme"] },
 	beforeCancel: [() => cleanup()],
 	runCleanup: (finish) => act(finish),
@@ -75,11 +84,14 @@ it("inspects canonical transitions, filtered entries and repository scopes witho
 			statistics: { added: 0, removed: 0, binary: false },
 		}),
 	]);
+	suite.createHttpScenario(fileHandler(facts));
 	const review = analyzeChanges(facts, identity, initialFilters());
 	const view = (path: string, model = review) => (
-		<ForgeTheme env="test">
-			<SelectionViewer review={model} selectedPath={path} />
-		</ForgeTheme>
+		<QueryClientProvider client={client}>
+			<ForgeTheme env="test">
+				<SelectionViewer onRefresh={() => {}} review={model} selectedPath={path} />
+			</ForgeTheme>
+		</QueryClientProvider>
 	);
 	const rendered = render(view("."));
 	const details = within(screen.getByRole("region", { name: "Selection details" }));
@@ -94,7 +106,7 @@ it("inspects canonical transitions, filtered entries and repository scopes witho
 	expect(details.getByRole("region", { name: "Selected entry metadata" })).toHaveTextContent("Deleted entry");
 	expect(details.getByText(/Own change: 1 removed lines, 2 added lines/)).toBeInTheDocument();
 	rendered.rerender(view("transition/hidden.md"));
-	expect(details.getByRole("status")).toHaveTextContent("outside the current filters");
+	expect(details.getByText(/outside the current filters/)).toHaveAttribute("role", "status");
 	expect(details.getByText("Docs")).toBeInTheDocument();
 	expect(details.getByText("None")).toBeInTheDocument();
 	rendered.rerender(view("__proto__"));
@@ -132,17 +144,19 @@ it("owns initial/new expansion and reveals an address once, not again on placeho
 	]);
 	function view(facts: WorkspaceAnalysis, selectedPath: string | undefined) {
 		return (
-			<ForgeTheme env="test">
-				<ChangesNavigator
-					review={analyzeChanges(facts, repositories, filters)}
-					analysis={facts}
-					identity={repositories}
-					filters={filters}
-					onFiltersChange={() => {}}
-					selectedPath={selectedPath}
-					onSelect={() => {}}
-				/>
-			</ForgeTheme>
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<ChangesNavigator
+						review={analyzeChanges(facts, repositories, filters)}
+						analysis={facts}
+						identity={repositories}
+						filters={filters}
+						onFiltersChange={() => {}}
+						selectedPath={selectedPath}
+						onSelect={() => {}}
+					/>
+				</ForgeTheme>
+			</QueryClientProvider>
 		);
 	}
 	const rendered = render(view(first, "a/new/empty"));
@@ -176,17 +190,19 @@ it("reveals a pending address on first resolution without revealing it again on 
 	]);
 	function view(facts: WorkspaceAnalysis) {
 		return (
-			<ForgeTheme env="test">
-				<ChangesNavigator
-					review={analyzeChanges(facts, undefined, filters)}
-					analysis={facts}
-					identity={undefined}
-					filters={filters}
-					onFiltersChange={() => {}}
-					selectedPath="src/new.ts"
-					onSelect={() => {}}
-				/>
-			</ForgeTheme>
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<ChangesNavigator
+						review={analyzeChanges(facts, undefined, filters)}
+						analysis={facts}
+						identity={undefined}
+						filters={filters}
+						onFiltersChange={() => {}}
+						selectedPath="src/new.ts"
+						onSelect={() => {}}
+					/>
+				</ForgeTheme>
+			</QueryClientProvider>
 		);
 	}
 	const rendered = render(view(first));
@@ -208,6 +224,7 @@ it("coordinates both public data owners while retaining filters, disclosure, sel
 		node("src/file.ts", { kind: "modified", statistics: { added: 1, removed: 0, binary: false } }),
 	]);
 	suite.createHttpScenario(
+		fileHandler(facts),
 		http.get("http://localhost/api/workspace", () => {
 			identityReads++;
 			return Response.json(identity);
@@ -219,9 +236,11 @@ it("coordinates both public data owners while retaining filters, disclosure, sel
 	);
 	render(
 		<QueryClientProvider client={suite.createQueryClient()}>
-			<ForgeTheme env="test">
-				<WorkspaceReview selectedPath="src/file.ts" onNavigate={() => {}} />
-			</ForgeTheme>
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<WorkspaceReview selectedPath="src/file.ts" onNavigate={() => {}} />
+				</ForgeTheme>
+			</QueryClientProvider>
 		</QueryClientProvider>,
 	);
 	await screen.findByRole("button", { name: "Select src/file.ts", pressed: true });
@@ -253,18 +272,20 @@ it("consumes explicit same-path reveals once while preserving unrelated collapse
 	]);
 	function view(occurrence?: number) {
 		return (
-			<ForgeTheme env="test">
-				<ChangesNavigator
-					review={analyzeChanges(facts, undefined, filters)}
-					analysis={facts}
-					identity={undefined}
-					filters={filters}
-					onFiltersChange={() => {}}
-					selectedPath="a/file.ts"
-					onSelect={() => {}}
-					revealRequest={occurrence === undefined ? undefined : { path: "a/file.ts", occurrence }}
-				/>
-			</ForgeTheme>
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<ChangesNavigator
+						review={analyzeChanges(facts, undefined, filters)}
+						analysis={facts}
+						identity={undefined}
+						filters={filters}
+						onFiltersChange={() => {}}
+						selectedPath="a/file.ts"
+						onSelect={() => {}}
+						revealRequest={occurrence === undefined ? undefined : { path: "a/file.ts", occurrence }}
+					/>
+				</ForgeTheme>
+			</QueryClientProvider>
 		);
 	}
 	const rendered = render(view());
@@ -301,18 +322,20 @@ it("invalidates an unresolved reveal when a newer address supersedes its target"
 	]);
 	function view(facts: WorkspaceAnalysis, selectedPath: string, occurrence: number, target: string) {
 		return (
-			<ForgeTheme env="test">
-				<ChangesNavigator
-					review={analyzeChanges(facts, undefined, filters)}
-					analysis={facts}
-					identity={undefined}
-					filters={filters}
-					onFiltersChange={() => {}}
-					selectedPath={selectedPath}
-					onSelect={() => {}}
-					revealRequest={{ path: target, occurrence }}
-				/>
-			</ForgeTheme>
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<ChangesNavigator
+						review={analyzeChanges(facts, undefined, filters)}
+						analysis={facts}
+						identity={undefined}
+						filters={filters}
+						onFiltersChange={() => {}}
+						selectedPath={selectedPath}
+						onSelect={() => {}}
+						revealRequest={{ path: target, occurrence }}
+					/>
+				</ForgeTheme>
+			</QueryClientProvider>
 		);
 	}
 	const rendered = render(view(first, "a/late.ts", 1, "a/late.ts"));
@@ -345,18 +368,22 @@ it("owns signal disclosure and canonical source access independently of a naviga
 			signalCounts: { warning: 0, notice: 1 },
 		}),
 	]);
+	suite.createHttpScenario(fileHandler(facts));
 	function view(path: string, occurrence?: number) {
 		return (
-			<ForgeTheme env="test">
-				<SelectionViewer
-					review={analyzeChanges(facts, identity, initialFilters())}
-					signals={analyzeSignals(facts)}
-					selectedPath={path}
-					inspectionRequest={occurrence === undefined ? undefined : { path, occurrence }}
-					onSourceNavigate={(source) => sources.push(source)}
-					onReveal={(source) => reveals.push(source)}
-				/>
-			</ForgeTheme>
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<SelectionViewer
+						onRefresh={() => {}}
+						review={analyzeChanges(facts, identity, initialFilters())}
+						signals={analyzeSignals(facts)}
+						selectedPath={path}
+						inspectionRequest={occurrence === undefined ? undefined : { path, occurrence }}
+						onSourceNavigate={(source) => sources.push(source)}
+						onReveal={(source) => reveals.push(source)}
+					/>
+				</ForgeTheme>
+			</QueryClientProvider>
 		);
 	}
 	const rendered = render(view("transition"));
@@ -400,16 +427,20 @@ it("does not reopen viewer details for an obsolete unresolved inspection", async
 			signalCounts: { warning: 1, notice: 0 },
 		}),
 	]);
+	suite.createHttpScenario(fileHandler(resolved));
 	function view(facts: WorkspaceAnalysis, path: string, occurrence: number, target: string) {
 		return (
-			<ForgeTheme env="test">
-				<SelectionViewer
-					review={analyzeChanges(facts, identity, initialFilters())}
-					signals={analyzeSignals(facts)}
-					selectedPath={path}
-					inspectionRequest={{ path: target, occurrence }}
-				/>
-			</ForgeTheme>
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<SelectionViewer
+						onRefresh={() => {}}
+						review={analyzeChanges(facts, identity, initialFilters())}
+						signals={analyzeSignals(facts)}
+						selectedPath={path}
+						inspectionRequest={{ path: target, occurrence }}
+					/>
+				</ForgeTheme>
+			</QueryClientProvider>
 		);
 	}
 	const rendered = render(view(first, "late", 1, "late"));
@@ -431,16 +462,20 @@ it("invalidates pending inspection after leaving its addressed target even when 
 			signalCounts: { notice: 0, warning: 1 },
 		}),
 	]);
+	suite.createHttpScenario(fileHandler(resolved));
 	function view(facts: WorkspaceAnalysis, path: string) {
 		return (
-			<ForgeTheme env="test">
-				<SelectionViewer
-					review={analyzeChanges(facts, identity, initialFilters())}
-					signals={analyzeSignals(facts)}
-					selectedPath={path}
-					inspectionRequest={{ path: "late", occurrence: 1 }}
-				/>
-			</ForgeTheme>
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<SelectionViewer
+						onRefresh={() => {}}
+						review={analyzeChanges(facts, identity, initialFilters())}
+						signals={analyzeSignals(facts)}
+						selectedPath={path}
+						inspectionRequest={{ path: "late", occurrence: 1 }}
+					/>
+				</ForgeTheme>
+			</QueryClientProvider>
 		);
 	}
 	const rendered = render(view(initial, "current"));

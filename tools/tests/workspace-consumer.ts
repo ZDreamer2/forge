@@ -3,10 +3,12 @@ import { spawn, spawnSync } from "node:child_process";
 import {
 	copyFileSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
+	readlinkSync,
 	realpathSync,
 	renameSync,
 	rmSync,
@@ -104,7 +106,8 @@ function snapshot(directory: string, omitGit = false): Record<string, string> {
 		const path = join(directory, entry.name);
 		if (entry.isDirectory()) {
 			for (const [name, bytes] of Object.entries(snapshot(path, omitGit))) files[`${entry.name}/${name}`] = bytes;
-		} else files[entry.name] = readFileSync(path).toString("base64");
+		} else if (entry.isSymbolicLink()) files[entry.name] = `symlink:${readlinkSync(path)}`;
+		else files[entry.name] = `${omitGit ? `${lstatSync(path).mode}:` : ""}${readFileSync(path).toString("base64")}`;
 	}
 	return files;
 }
@@ -229,6 +232,21 @@ export default {
 	writeFileSync(join(workspace, "app/tracked.txt"), "original\n");
 	writeFileSync(join(workspace, "app/old.txt"), "rename content\n");
 	writeFileSync(join(workspace, "app/transition"), "original file\n");
+	writeFileSync(
+		join(workspace, "app/diff-context.ts"),
+		Array.from({ length: 160 }, (_, i) => `export const line${i + 1} = ${i + 1};\n`).join(""),
+	);
+	writeFileSync(join(workspace, "app/diff-delete.txt"), "deleted text\n");
+	writeFileSync(join(workspace, "app/diff-empty-delete.txt"), "");
+	writeFileSync(join(workspace, "app/diff-crlf.txt"), "\uFEFFold\r\nlast\r\n");
+	writeFileSync(join(workspace, "app/diff-eof.txt"), "old\r");
+	writeFileSync(join(workspace, "app/diff-mode.txt"), "unchanged mode text\n");
+	writeFileSync(join(workspace, "app/diff-rename.txt"), "pure rename payload\n");
+	writeFileSync(
+		join(workspace, "app/diff-rename-edited.txt"),
+		"first rename line\nsecond rename line\nthird rename line\n",
+	);
+	writeFileSync(join(workspace, "app/diff-link.txt"), "regular text\n");
 	writeFileSync(join(workspace, "nested/binary.dat"), Buffer.from([0, 1, 2]));
 	writeFileSync(
 		join(workspace, "docs/forge/workspace/forge-workspace.yaml"),
@@ -449,6 +467,10 @@ try {
 	assert.ok(existsSync(join(installed, "dist/ui/index.html")));
 	assert.ok(readdirSync(join(installed, "dist/ui/assets")).some((name) => name.endsWith(".css")));
 	const notices = join(installed, "dist/ui/assets/licenses");
+	const dependencyNotices = readFileSync(join(notices, "dependencies.md"), "utf8");
+	assert.match(dependencyNotices, /@pierre\/diffs - 1\.6\.2/);
+	assert.match(dependencyNotices, /Apache License/);
+	assert.match(dependencyNotices, /@shikijs\/core/);
 	assert.match(readFileSync(join(notices, "OFL.txt"), "utf8"), /SIL OPEN FONT LICENSE/);
 	assert.match(readFileSync(join(notices, "OFL.txt"), "utf8"), /JetBrains/);
 	assert.match(readFileSync(join(notices, "icons-LICENSE"), "utf8"), /MIT License/);

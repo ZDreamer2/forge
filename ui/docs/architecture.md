@@ -20,7 +20,7 @@ URL is the only record of selected path.
 | --- | --- |
 | WorkspaceReview | Composes panes; owns filters, cross-pane selection/copy actions, layout and coordinated explicit Refresh |
 | Owned WorkspaceData | Workspace identity and repository-context reads, independent failure/retry and freshness |
-| Owned ChangeSetData | Comparison analysis reads and freshness; the owning seam for related patch reads when delivered |
+| Owned ChangeSetData | Comparison analysis and selected short/complete patch reads, cancellation, freshness and coordinated Refresh |
 | ChangesNavigator | Controlled filters, hierarchy presentation, private tree projection and expansion/reveal lifecycle |
 | SelectionViewer | Canonical selected-entry metadata, folder/repository summaries, signal details/disclosure and no-selection orientation, independently of navigator rows |
 | ChangesSummary | Shared count/line-breakdown presentation used by header, navigator and viewer |
@@ -43,8 +43,9 @@ layout and clipboard updates.
 
 ## Selected-entry presentation
 
-SelectionViewer displays metadata and signals; file content and diffs remain future
-work. Signal sources come from direct server annotations and canonical child links,
+SelectionViewer composes the canonical subject, secondary analysis metadata, signals
+and an owned FileDiff. Structural folders and repository placeholders issue no file
+reads; an own changed entry still has a diff when it also has children. Signal sources come from direct server annotations and canonical child links,
 including nested repositories and filtered entries. Inclusive server counts own
 indicator presence; direct annotations determine strength independently per severity.
 A shared traversal index retains each attributed message once and derives subject
@@ -67,5 +68,42 @@ them, and failed reads mark retained analysis stale through the existing data ow
 Navigator address resolution and explicit reveal have separate lifetimes, so a
 topology-only Refresh does not reopen manually collapsed ancestors.
 
-Future diff capabilities extend these boundaries; renderer-specific models remain
-frontend-owned and file failures must not disable navigation.
+## Selected-file observations
+
+ChangeSetData owns path/context query identity and the shared manual/offline read
+policy. Selection acquires a fresh short observation; leaving cancels its reads
+and releases inactive patch data. Explicit expansion alone acquires complete
+context. Every new short request and coordinated Refresh retires complete context,
+including when the short reload fails and leaves visibly stale usable content.
+Expansion resumes only after the short read recovers successfully.
+Refresh awaits analysis and the active short read; workspace-context retry remains
+independent. Filters, signals and view mode do not change file request identity.
+
+FileDiff owns the unified/split preference for the mounted review, observation-local
+parser models, context compatibility, expansion and local recovery. Its private
+presentation session accepts complete observations once and keeps short, hydrated,
+incompatible, refused and failed context mutually exclusive. The view consumes the
+session's model and recovery action; it does not maintain parallel lifecycle flags.
+Incompatibility survives complete-context retirement and failed reloads until a
+successful short-observation replacement mounts a new session. Its cooperating
+header control shares only that presentation scope. Query caches renderer-neutral
+API responses; mutable Pierre models stay inside FileDiff. File-response sides,
+modes, ownership and baseline describe the displayed patch; analysis continues to
+own the canonical tree, signals and totals. A disagreement labels the older summary
+and offers coordinated Refresh.
+
+Complete context is another live observation. Before hydrating short Git hunks,
+the adapter verifies canonical side/baseline identity, changed-block coordinates,
+payload/EOF and every represented short context line against reconstructed full
+sides. Hunk merging alone does not reject compatibility. A mismatch preserves the
+older short view and requires Reload file; this is no snapshot guarantee.
+HTTP failures/refusals keep the short diff usable. Strict parser, renderer and
+asynchronous highlighting failures stay within the file capability and report once
+through the existing console destination. A failed renderer offers the literal plain
+patch as a reading fallback. Metadata, signals and tree remain usable.
+
+Pierre renders read-only Shadow DOM using its supported styling surface, bundled
+Shiki JS resources and the fixed light theme. The released vanilla renderer exposes
+the async highlight error callback needed for local containment; a small adapter
+connects it to React's file view. No editor, worker pool or external resource loader
+participates.

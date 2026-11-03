@@ -48,6 +48,7 @@ export default defineConfig({
 		],
 	},
 	build: {
+		license: { fileName: "assets/licenses/dependencies.md" },
 		assetsInlineLimit: 0,
 		outDir: fileURLToPath(new URL("../dist/ui", import.meta.url)),
 		emptyOutDir: true,

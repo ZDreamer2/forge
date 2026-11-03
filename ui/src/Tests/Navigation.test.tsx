@@ -6,6 +6,12 @@ import { createTestSuiteLifecycle } from "@zdreamer/forge-ts-react-frontend/test
 import { http } from "msw";
 import { expect, it, vi } from "vitest";
 import App from "../App";
+import { fileHandler } from "../Lib/Testing/Testing";
+
+vi.mock(
+	"../Components/WorkspaceReview/Components/SelectionViewer/Components/FileDiff/Internal/pierreRenderer",
+	async () => (await import("../Lib/Testing/Testing")).rendererBoundary(),
+);
 
 const suite = createTestSuiteLifecycle({
 	browser: { documentAttributes: ["data-mantine-color-scheme"] },
@@ -61,6 +67,7 @@ function observe(path?: string) {
 }
 function serve(analysis = fixture()) {
 	return suite.createHttpScenario(
+		fileHandler(analysis),
 		http.get("http://localhost/api/workspace", () => Response.json(identity)),
 		http.get("http://localhost/api/changes/analysis", () => Response.json(analysis)),
 	);

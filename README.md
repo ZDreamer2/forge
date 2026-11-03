@@ -146,7 +146,25 @@ and file/directory transitions. Empty and missing-at-startup registered reposito
 remain selectable. Explicit Refresh preserves filters, expansion and useful selection;
 a disappeared selection is explained after successful identity and analysis reads.
 Failed reads preserve usable content and mark retained data stale, with independent
-retry controls. File content and diff rendering remain future work.
+retry controls.
+
+Select a changed entry to read its syntax-highlighted Git diff, including entries
+that also contain changed descendants. Unified starts selected; the header's
+Unified/Split preference survives selection and Refresh during the review. Entry
+metadata discloses analysis facts; File observation discloses the displayed patch's
+sides, modes, ownership and baseline. Empty sides, pure renames, mode changes,
+binary, unsupported encoding and size refusals have explicit explanations.
+
+Load omitted context acquires complete represented context on demand, then Pierre's
+hunk controls expand leading, middle or trailing unchanged lines. The short diff
+stays usable if context fails or exceeds a limit. Complete context is a fresh live
+read: if represented lines or side identity changed, Reload file obtains a new short
+observation before expansion can proceed. Refresh updates analysis and the selected
+short diff, discarding prior complete context. Retry file affects only that file;
+parser/rendering failure offers Reload file and Show plain patch without closing
+metadata or navigation.
+No read promises a coherent cross-request snapshot. All renderer resources and
+licenses ship within the installed same-origin assets.
 
 Hover or focus a warning triangle or notice circle for the complete source/message
 list, including filtered sources and nested repositories. Each severity is strong

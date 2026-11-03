@@ -4,8 +4,14 @@ import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestSuiteLifecycle } from "@zdreamer/forge-ts-react-frontend/testing";
 import { http } from "msw";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import App from "../App";
+import { fileHandler } from "../Lib/Testing/Testing";
+
+vi.mock(
+	"../Components/WorkspaceReview/Components/SelectionViewer/Components/FileDiff/Internal/pierreRenderer",
+	async () => (await import("../Lib/Testing/Testing")).rendererBoundary(),
+);
 
 const suite = createTestSuiteLifecycle({
 	browser: { documentAttributes: ["data-mantine-color-scheme"] },
@@ -147,6 +153,7 @@ function fixture(): WorkspaceAnalysis {
 }
 function start() {
 	suite.createHttpScenario(
+		fileHandler(fixture()),
 		http.get("http://localhost/api/workspace", () => Response.json(identity)),
 		http.get("http://localhost/api/changes/analysis", () => Response.json(fixture())),
 	);
