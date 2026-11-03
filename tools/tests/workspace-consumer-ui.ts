@@ -67,11 +67,13 @@ async function expectPortal(page: Page, trigger: Locator, inspectTooltip?: (tool
 	const tooltipId = await trigger.getAttribute("aria-describedby");
 	const tooltip = page.locator(`[role="tooltip"][id=${JSON.stringify(tooltipId)}]`);
 	await tooltip.waitFor();
-	await page.waitForFunction(
-		(element) => element.ownerDocument.defaultView.getComputedStyle(element).opacity === "1",
-		await tooltip.elementHandle(),
-		{ timeout: 30_000 },
-	);
+	const deadline = Date.now() + 30_000;
+	while (
+		(await tooltip.evaluate((element) => element.ownerDocument.defaultView.getComputedStyle(element).opacity)) !== "1"
+	) {
+		assert.ok(Date.now() < deadline, "Tooltip must reach its final opacity");
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
 	assert.equal(
 		await tooltip.evaluate((element) => !element.closest("main")),
 		true,

@@ -31,7 +31,7 @@
 	"packageManager": "pnpm@11.15.1",
 	"scripts": {
 		"build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && vite build --config ui/vite.config.ts",
-		"check": "tsc --noEmit && biome check . && corepack pnpm --config.verify-deps-before-run=error run check:server && depcruise --config .dependency-cruiser.mjs server/src ui/src && node --test tools/tests/*.test.ts && corepack pnpm --config.verify-deps-before-run=error run check:ui && corepack pnpm --config.verify-deps-before-run=error run test:workspace --built",
+		"check": "tsc --noEmit && biome check . && corepack pnpm --config.verify-deps-before-run=error run check:server && depcruise --config .dependency-cruiser.mjs server/src ui/src && node --test --test-concurrency=1 tools/tests/*.test.ts && corepack pnpm --config.verify-deps-before-run=error run check:ui && corepack pnpm --config.verify-deps-before-run=error run test:workspace --built",
 		"check:server": "node tools/check-test-layout.ts && tsc -p server/tsconfig.json --noEmit && tsc -p server/tsconfig.contract.json --noEmit && biome check server && cd server && depcruise --config .dependency-cruiser.mjs 'src/**/*.ts' && node --test",
 		"test:workspace": "node tools/tests/workspace-consumer.ts",
 		"check:ui": "node tools/check-ui.ts && tsc -p ui/tsconfig.json && tsc -p ui/tsconfig.tests.json && biome check ui && vitest run --config ui/vitest.config.ts && corepack pnpm --config.verify-deps-before-run=error run build",
