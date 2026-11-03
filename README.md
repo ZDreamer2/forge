@@ -5,12 +5,14 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 # @zdreamer/forge
 
 Read-only workspace server and React changes navigator using the shared
-`forge-workspace.yaml` registry. The navigator combines a compact changes tree,
-Type/Importance filters, signal inspection and a selected-entry metadata pane.
+`forge-workspace.yaml` registry. The viewer combines a compact changes tree,
+Type/Importance filters, signal inspection, selected-entry metadata and
+syntax-highlighted unified/split file diffs with on-demand context expansion.
 Executable: `forge`. Licensed under [MIT](LICENSE).
 
-Registry `0.1.2` is the published server baseline; the configuration and API below
-describe the current source. The React overview is unreleased.
+Version `0.2.0` delivers the read-only viewer and unified-guide configuration
+migration described below. Upgrade older installations using the migration notes;
+package publication and workspace adoption are separate operations.
 
 The `0.x` configuration contract is provisional. Breaking changes require a minor
 release with migration notes. Source acceptance, publication and hosting adoption

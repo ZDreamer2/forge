@@ -2,23 +2,26 @@
 
 ## Release notes
 
-- `0.1.2` (unreleased candidate): foreground read-only workspace server with identity/current-change
-  APIs and a minimal browser diagnostic at `/`. Refresh reads current changes;
-  restart reloads YAML configuration and repository participation. The candidate
-  now includes a breaking shared-registry/concrete-root migration: the old
-  `./workspace` export, executable policy and `inspect-workspace` CLI are removed.
-  A future release needs an appropriate minor version; the candidate version has
-  not been changed. See [migration instructions](../README.md#workspace-configuration-and-migration). No diff/file browsing,
-  Git mutations or agent interaction. Publication and consumer registry adoption
-  remain pending; the published `0.1.1` has no server or browser page.
+- `0.2.0`: read-only workspace review UI with canonical tree navigation,
+  Type/Importance filters, attributed signals and filtered-source reveal, plus
+  syntax-highlighted Pierre unified/split diffs and on-demand context expansion.
+  Breaking migration: unified `forge-codebase.yaml` guides with stable IDs and
+  ordered parents replace codebase types; fixed guide extension modules replace
+  YAML handler lists and the `/analysis` export. Use the `/extension` authoring
+  entry. See [migration instructions](../README.md#workspace-configuration-and-migration)
+  and [guide extensions](../README.md#guide-extensions). Refresh observes live
+  changes; restart reloads configuration and guide modules. No Git mutations,
+  agent controls or snapshot guarantees are provided.
+- `0.1.2`: published read-only workspace server baseline with bounded file patches.
+  The complete React viewer and unified-guide migration are delivered in `0.2.0`.
 - `0.1.1`: validates GitHub Actions trusted publishing and provenance. No runtime,
   policy-contract or toolchain changes from bootstrap `0.1.0`.
 - `0.1.0`: initial MIT policy-contract/diagnostic prototype.
 
 ## Release boundary
 
-This public MIT package has a provisional configuration contract. The unreleased source
-adds a read-only server/browser diagnostic; it is not the full review UI. Review
+This public MIT package has a provisional configuration contract. It supplies the
+read-only workspace server and review UI, not an agent collaboration product. Review
 both source history and the packed artifact for private material before upload.
 Package contents are limited to built `dist/`, package metadata, README and
 LICENSE; no install hooks run.
