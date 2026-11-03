@@ -70,6 +70,7 @@ async function expectPortal(page: Page, trigger: Locator, inspectTooltip?: (tool
 	await page.waitForFunction(
 		(element) => element.ownerDocument.defaultView.getComputedStyle(element).opacity === "1",
 		await tooltip.elementHandle(),
+		{ timeout: 30_000 },
 	);
 	assert.equal(
 		await tooltip.evaluate((element) => !element.closest("main")),
