@@ -4,17 +4,6 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 
 # Forge application verification
 
-## Temporary: checker transition
-
-Server and UI personal checkers now run their scoped gates. The installation
-checker still invokes root `check`. Until its package/tooling/integration target
-is separated and verified, a passing root `check` is required
-for acceptance. A passing automatic root `check` invocation can satisfy this
-requirement; separate execution is unnecessary. Report failures in
-other checker invocations even when root acceptance passes. This temporary rule
-overrides the local-acceptance rule below. Remove this section when the transition
-is verified.
-
 ## Application context
 
 Server, UI and installation tooling are separate codebases sharing one package,
@@ -34,8 +23,11 @@ checker. Inherited guidance does not automatically invoke parent checkers.
 - UI: frontend structure/collection, types, lint, architecture, behavior tests and
   frontend build.
 - Server: server and API-contract types, lint, architecture and behavior tests.
-- Installation: package/configuration and shared tooling validation, packaging and
-  packed installed API/browser integration.
+- Installation (`check:installation`): test layout, tooling types, installation-scoped lint,
+  tooling/configuration regression tests, cross-component architecture, a clean
+  application build and packed installed API/browser integration. It does not run
+  component source suites. Documentation and deletion-only changes still run this
+  gate; build-generated route-source/tree writes are reported.
 
 Use the CLI's execution report and findings to determine what actually ran and
 passed; process completion alone is not validation success. Successful personal
@@ -59,6 +51,7 @@ corepack pnpm --config.verify-deps-before-run=error run <script>
 | API-contract changes, including server-only edits affecting the UI consumer | `check:ui` for consumer types and UI behavior; add or update tests for affected behavior |
 | Shared dependencies, compiler, lint, architecture or build configuration | `check:server` and/or `check:ui` for affected components; use `check` when effects span the installation or are unclear |
 | Package contents, startup, asset delivery or server/UI integration | `test:workspace` for a fresh build, pack and installed API/Chromium acceptance |
+| Installation tooling/configuration, cross-component boundaries and delivery | `check:installation` |
 | Complete application acceptance, including shared tooling/configuration | `check` |
 
 `check:server` and `check:ui` provide the component coverage listed above.

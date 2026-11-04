@@ -32,7 +32,9 @@
 	"scripts": {
 		"build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && corepack pnpm --config.verify-deps-before-run=error run build:ui",
 		"build:ui": "vite build --config ui/vite.config.ts",
-		"check": "tsc --noEmit && biome check . && corepack pnpm --config.verify-deps-before-run=error run check:server && depcruise --config .dependency-cruiser.mjs server/src ui/src && node --test --test-concurrency=1 tools/tests/*.test.ts && corepack pnpm --config.verify-deps-before-run=error run check:ui:source && corepack pnpm --config.verify-deps-before-run=error run build && corepack pnpm --config.verify-deps-before-run=error run test:workspace --built",
+		"check": "corepack pnpm --config.verify-deps-before-run=error run check:installation:source && corepack pnpm --config.verify-deps-before-run=error run check:server && corepack pnpm --config.verify-deps-before-run=error run check:ui:source && corepack pnpm --config.verify-deps-before-run=error run test:workspace",
+		"check:installation": "corepack pnpm --config.verify-deps-before-run=error run check:installation:source && corepack pnpm --config.verify-deps-before-run=error run test:workspace",
+		"check:installation:source": "node tools/check-test-layout.ts && tsc --noEmit && node tools/lint-installation.ts && depcruise --config .dependency-cruiser.mjs server/src ui/src && node --test --test-concurrency=1 tools/tests/*.test.ts",
 		"check:server": "node tools/check-test-layout.ts && tsc -p server/tsconfig.json --noEmit && tsc -p server/tsconfig.contract.json --noEmit && biome check server && cd server && depcruise --config .dependency-cruiser.mjs 'src/**/*.ts' && node --test",
 		"test:workspace": "node tools/tests/workspace-consumer.ts",
 		"check:ui": "corepack pnpm --config.verify-deps-before-run=error run check:ui:source && corepack pnpm --config.verify-deps-before-run=error run build:ui",

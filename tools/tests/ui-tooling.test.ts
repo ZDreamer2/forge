@@ -53,8 +53,8 @@ test("UI and aggregate gates compose source checking and builds without server c
 	assert.equal(scripts["build:ui"], "vite build --config ui/vite.config.ts");
 	assert.match(scripts["check:ui:source"], /tsc -p ui\/tsconfig.tools.json --noEmit/);
 	assert.match(scripts.check, /run check:ui:source/);
-	assert.match(scripts.check, /run build &&/);
-	assert.match(scripts.check, /run test:workspace --built/);
+	assert.match(scripts.check, /run test:workspace$/);
+	assert.doesNotMatch(scripts.check, /run build(?:\s|$)/);
 });
 
 test("UI configuration has its own Node-side TypeScript coverage", () => {

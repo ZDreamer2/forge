@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -9,11 +9,13 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const serverRoot = join(root, "server");
 
-test("standalone server acceptance rejects lint violations", () => {
+test("server acceptance includes lint and its configured linter rejects violations", () => {
+	const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+	assert.match(manifest.scripts["check:server"], /(?:^| && )biome check server(?: && |$)/);
 	const fixture = mkdtempSync(join(serverRoot, "src/app/server-lint-fixture-"));
 	try {
 		writeFileSync(join(fixture, "example.ts"), "debugger;\n");
-		const result = spawnSync("corepack", ["pnpm", "--config.verify-deps-before-run=error", "run", "check:server"], {
+		const result = spawnSync(join(root, "node_modules/.bin/biome"), ["check", "server"], {
 			cwd: root,
 			encoding: "utf8",
 			timeout: 30_000,

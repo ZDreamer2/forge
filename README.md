@@ -61,12 +61,15 @@ chromium`). Checks install neither packages nor browsers.
 corepack pnpm --config.verify-deps-before-run=error run check
 ```
 
-Root `check` covers server and UI source checks, frontend behavior/build, then
-packed installed API and Chromium acceptance. It builds and packs once; CI uses
-this same gate and retains the checked artifact.
+Root `check` composes installation validation, server and UI source checks, then
+fresh packed installed API and Chromium acceptance. It builds and packs once; CI
+uses this same gate and retains the checked artifact.
 
 Focused scripts use `corepack pnpm --config.verify-deps-before-run=error run <name>`:
 
+- `check:installation`: tooling types/lint/tests, shared boundaries and clean packed
+  installed integration, without component source suites.
+- `check:installation:source`: installation validation without building or packing.
 - `check:server`: server/contract checks and tests, without a UI build or `dist/`.
 - `test:ui`: frontend behavior suites.
 - `check:ui`: frontend structure/collection/types/configuration/lint/behavior and frontend-only build.

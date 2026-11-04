@@ -120,6 +120,7 @@ test("test placement rejects flat, uppercase and internal-adjacent tests", () =>
 		"server/src/app/misplaced.test.ts",
 		"server/src/components/workspace-tree/Tests/misplaced.test.ts",
 		"server/src/components/workspace-tree/internal/misplaced.test.ts",
+		"tools/misplaced.test.ts",
 		"tests/misplaced.test.ts",
 	]) {
 		const temporary = mkdtempSync(join(tmpdir(), "forge-layout-"));
