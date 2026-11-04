@@ -178,7 +178,7 @@ it("counts own entries once, retains repository denominators and honors independ
 	totals("Visible workspace changes", 12, 19, 36);
 	expect(row(".")).toHaveTextContent("11 of 12");
 	expect(row("tools/nested")).toHaveTextContent("1 of 1");
-	expect(row("external/empty")).toHaveTextContent("0 of 0");
+	expect(screen.queryByRole("button", { name: "Select external/empty" })).not.toBeInTheDocument();
 	expect(row("missing")).toBeInTheDocument();
 	expect(screen.getByText("Missing at startup")).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select external" })).not.toBeInTheDocument();

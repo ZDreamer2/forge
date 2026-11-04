@@ -54,7 +54,7 @@ function totals(nodes: AnalysisWireNode[]) {
 
 async function waitSelected(page: Page, path?: string) {
 	await page.waitForURL((url) => url.searchParams.get("path") === (path ?? null));
-	if (path) await select(page, path).waitFor({ state: "attached" });
+	if (path) await page.getByRole("heading", { name: path, exact: true }).waitFor();
 }
 
 async function settled(page: Page) {
@@ -167,7 +167,10 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.getByRole("region", { name: "Selection details" })
 			.getByText(/Missing at startup/i)
 			.waitFor();
-		await select(page, "nested").click();
+		assert.equal(await select(page, "nested").count(), 0, "Known-empty repositories are omitted");
+		assert.equal(await page.getByText("No changed entries.", { exact: true }).count(), 0);
+		await page.goto(`${address}/?path=nested`);
+		await page.getByRole("heading", { name: "nested", exact: true }).waitFor();
 		await waitSelected(page, "nested");
 		await page
 			.getByRole("region", { name: "Selection details" })
@@ -548,6 +551,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.getByRole("region", { name: "Selection details" })
 			.getByText(/No changed entries/i)
 			.waitFor();
+		assert.equal(await select(page, "nested").count(), 0, "Last change disappearing hides its repository");
 		assert.equal(await signalDetails(page).count(), 0, "Surviving placeholder loses its obsolete signals");
 		assert.equal(await page.getByRole("alert").count(), 0);
 		await verifyInstalledDiffs({ page, address, workspace, sourceState, run, screenshots });

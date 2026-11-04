@@ -121,7 +121,13 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 							files
 						/>
 					)}
-					<Button size="compact-sm" variant="default" disabled={updating} onClick={() => void refresh()}>
+					<Button
+						className={styles.refresh}
+						variant="default"
+						leftSection={<span aria-hidden="true">↻</span>}
+						disabled={updating}
+						onClick={() => void refresh()}
+					>
 						Refresh
 					</Button>
 					<Tooltip

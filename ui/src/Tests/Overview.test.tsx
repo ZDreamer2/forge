@@ -89,7 +89,7 @@ it("shows canonical entries including metadata and renames, distinct totals and 
 		screen.getByRole("button", { name: "All workspace changes: 3 changed files, 7 removed lines, 20 added lines" }),
 	).toBeInTheDocument();
 	expect(screen.getByTitle("/tmp/<workspace>")).toHaveTextContent(identity.workspace.name);
-	expect(screen.getByRole("button", { name: "Select <script>repository</script>" })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select <script>repository</script>" })).not.toBeInTheDocument();
 	expect(screen.getByText("Missing at startup")).toBeInTheDocument();
 	expect(document.querySelector("script, img[onerror]")).toBeNull();
 	expect(requests.sort()).toEqual(["/api/changes/analysis", "/api/workspace"]);
@@ -107,7 +107,8 @@ it("retains identity while analysis loads and distinguishes a true empty result"
 	);
 	expect(screen.queryByRole("button", { name: /All workspace changes:/ })).not.toBeInTheDocument();
 	await act(async () => response.release(Response.json(analysis(true))));
-	expect(await screen.findByText("No changed entries.")).toBeInTheDocument();
+	await summary();
+	expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
 	expectTotal("0");
 	expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
 });
@@ -143,7 +144,8 @@ it("keeps malformed JSON failure local and never shows unknown changes as zero",
 		expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
 		network.use(analysisHandler(true));
 		await userEvent.setup().click(screen.getByRole("button", { name: "Retry changes" }));
-		expect(await screen.findByText("No changed entries.")).toBeInTheDocument();
+		await summary();
+		expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
 		expect(report).not.toHaveBeenCalled();
 	} finally {
 		report.mockRestore();
@@ -169,7 +171,8 @@ it("acknowledges refresh, preserves pending totals and visibly marks failure sta
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => retry.handle(request)));
 	await userEvent.setup().click(screen.getByRole("button", { name: "Retry changes" }));
 	await act(async () => retry.release(Response.json(analysis(true))));
-	expect(await screen.findByText("No changed entries.")).toBeInTheDocument();
+	await waitFor(() => expectTotal("0"));
+	expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
 	expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
@@ -239,7 +242,8 @@ it("refreshes and retries the loopback API while the browser reports offline", a
 			}),
 		);
 		await userEvent.setup().click(screen.getByRole("button", { name: "Retry changes" }));
-		expect(await screen.findByText("No changed entries.")).toBeInTheDocument();
+		await waitFor(() => expectTotal("0"));
+		expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
 		expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 		await act(async () => {
 			window.dispatchEvent(new Event("online"));

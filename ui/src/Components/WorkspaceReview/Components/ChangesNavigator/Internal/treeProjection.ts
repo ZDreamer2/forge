@@ -57,12 +57,14 @@ export function projectTree(review: ReviewAnalysis): TreeProjection {
 		if (kinds.size === 1) entry.kind = [...kinds][0];
 		const importance = (["high", "medium", "low", "none"] as Importance[]).find((value) => priorities.includes(value));
 		if (importance) entry.importance = importance;
+		const hasVisibleChild = entry.children.some((path) => nodes.get(path)?.visible);
 		entry.visible =
-			entry.path === "." ||
-			entry.repository !== undefined ||
+			(entry.path === "." && !entry.repository) ||
+			(entry.repository !== undefined &&
+				(entry.repository.status === "missing" || (entry.repositoryTotal?.files ?? 0) > 0)) ||
 			entry.shown.files > 0 ||
-			(!entry.node?.kind && entry.total.files === 0) ||
-			entry.children.some((path) => nodes.get(path)?.visible);
+			(!entry.repository && !entry.node?.kind && entry.total.files === 0) ||
+			hasVisibleChild;
 		if (entry.children.length) branches.add(entry.path);
 		return kinds;
 	}

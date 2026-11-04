@@ -123,6 +123,45 @@ it("inspects canonical transitions, filtered entries and repository scopes witho
 	expect(details.getByText("This repository was unavailable when the server started.")).toBeInTheDocument();
 });
 
+it("omits a known-empty root but retains ancestors of a repository with only filtered changes", () => {
+	const repositories: WorkspaceIdentity = {
+		...identity,
+		repositories: identity.repositories.filter((repository) => repository.status === "available"),
+	};
+	const filters = initialFilters();
+	function view(facts: WorkspaceAnalysis) {
+		return (
+			<ForgeTheme env="test">
+				<ChangesNavigator
+					review={analyzeChanges(facts, repositories, filters)}
+					analysis={facts}
+					identity={repositories}
+					filters={filters}
+					onFiltersChange={() => {}}
+					selectedPath={undefined}
+					onSelect={() => {}}
+				/>
+			</ForgeTheme>
+		);
+	}
+	const rendered = render(view(analysis([node(".")])));
+	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select nested" })).not.toBeInTheDocument();
+	rendered.rerender(
+		view(
+			analysis([
+				node(".", { children: ["nested"] }),
+				node("nested", { children: ["nested/hidden.ts"] }),
+				node("nested/hidden.ts", { kind: "added", repo: "nested", effectiveEmphasis: { value: "hidden" } }),
+			]),
+		),
+	);
+	expect(screen.getByRole("button", { name: "Select ." })).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Select nested" })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select nested/hidden.ts" })).not.toBeInTheDocument();
+	expect(screen.getByRole("navigation", { name: "Changed files" })).toHaveTextContent("0 of 1");
+});
+
 it("owns initial/new expansion and reveals an address once, not again on placeholder reparenting", async () => {
 	const user = userEvent.setup();
 	const filters = initialFilters();
@@ -172,7 +211,7 @@ it("owns initial/new expansion and reveals an address once, not again on placeho
 	rendered.rerender(view(refreshed, "."));
 	rendered.rerender(view(refreshed, "a/new/empty"));
 	expect(screen.getByRole("button", { name: "Collapse a" })).toBeInTheDocument();
-	expect(screen.getByRole("button", { name: "Select a/new/empty", pressed: true })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select a/new/empty" })).not.toBeInTheDocument();
 });
 
 it("reveals a pending address on first resolution without revealing it again on later observations", async () => {

@@ -84,7 +84,10 @@ it.each([".", "src", "src/a.ts", "repos/empty", "missing", special, "123", "true
 	async (path) => {
 		serve();
 		observe(path);
-		expect(await screen.findByRole("button", { name: `Select ${path}`, pressed: true })).toBeInTheDocument();
+		await screen.findByRole("region", { name: "Selection details" });
+		if (path === "repos/empty")
+			expect(screen.queryByRole("button", { name: `Select ${path}` })).not.toBeInTheDocument();
+		else expect(screen.getByRole("button", { name: `Select ${path}`, pressed: true })).toBeInTheDocument();
 		expect(selectedPath()).toBe(path);
 		expect(details().getByRole("heading", { name: path })).toBeInTheDocument();
 	},
@@ -147,11 +150,11 @@ it("keeps current interactions through pending refresh, failure, and successful 
 	const pending = network.deferResponse();
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => pending.handle(request)));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await user.click(screen.getByRole("button", { name: "Select repos/empty" }));
+	await user.click(screen.getByRole("button", { name: "Select missing" }));
 	await user.click(screen.getByRole("button", { name: "Code" }));
 	await act(async () => pending.release(new Response("failed", { status: 503 })));
 	expect(await screen.findByRole("alert")).toHaveTextContent("Change summary is stale");
-	expect(selectedPath()).toBe("repos/empty");
+	expect(selectedPath()).toBe("missing");
 	expect(screen.getByRole("button", { name: "Code" })).toHaveAttribute("aria-pressed", "false");
 	expect(screen.queryByRole("button", { name: "Select src" })).not.toBeInTheDocument();
 	const retry = network.deferResponse();
@@ -162,7 +165,7 @@ it("keeps current interactions through pending refresh, failure, and successful 
 	expect(await screen.findByRole("button", { name: "Select new/child.ts" })).toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "Expand src" })).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select src/a.ts" })).not.toBeInTheDocument();
-	expect(selectedPath()).toBe("repos/empty");
+	expect(selectedPath()).toBe("missing");
 });
 
 it("keeps filtered selection metadata and repairs disappearing paths only after successful required reads", async () => {
@@ -188,7 +191,9 @@ it("keeps filtered selection metadata and repairs disappearing paths only after 
 it("upgrades and downgrades a declared repository selection without changing its URL", async () => {
 	const network = serve(fixture([]));
 	const user = observe("repos/empty");
-	await screen.findByRole("button", { name: "Select repos/empty", pressed: true });
+	await screen.findByRole("region", { name: "Selection details" });
+	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
 	network.use(
 		http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["repos/empty/child.ts"]))),
 	);
@@ -197,15 +202,18 @@ it("upgrades and downgrades a declared repository selection without changing its
 	expect(selectedPath()).toBe("repos/empty");
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture([]))));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByText("No changed entries.");
-	expect(screen.getByRole("button", { name: "Select repos/empty", pressed: true })).toBeInTheDocument();
+	await screen.findByRole("button", { name: /All workspace changes: 0 changed files/ });
+	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
+	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
 	expect(selectedPath()).toBe("repos/empty");
 });
 
 it("preserves collapsed ancestors when Refresh reparents a selected repository placeholder", async () => {
 	const network = serve(fixture([]));
 	const user = observe("repos/empty");
-	await screen.findByRole("button", { name: "Select repos/empty", pressed: true });
+	await screen.findByRole("region", { name: "Selection details" });
+	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Collapse ." }));
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["repos/new.ts"]))));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
@@ -215,5 +223,5 @@ it("preserves collapsed ancestors when Refresh reparents a selected repository p
 	expect(selectedPath()).toBe("repos/empty");
 	await user.click(screen.getByRole("button", { name: "Expand ." }));
 	expect(screen.getByRole("button", { name: "Select repos/new.ts" })).toBeInTheDocument();
-	expect(screen.getByRole("button", { name: "Select repos/empty", pressed: true })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
 });

@@ -35,8 +35,10 @@ this feature; external consumers enter through the feature's public interfaces.
 
 Shared pure review analysis derives canonical selection subjects and count scopes
 from server facts. It contains no rendered hierarchy or expansion. The navigator
-alone projects display topology, including registered-repository placeholders;
-filtering or collapsing it cannot remove the viewer's access to a selected subject.
+alone projects display topology. It keeps repositories with real changes even when
+filters hide every entry, retains unavailable repository placeholders whose state is
+unknown, and omits available repositories confirmed to have no changes. Filtering,
+omission or collapsing cannot remove the viewer's access to a selected subject.
 Tree counts and selection summaries share the own-entry counting implementation,
 not competing derivations. Derived analysis/projections are reused across unrelated
 layout and clipboard updates.

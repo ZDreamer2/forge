@@ -44,7 +44,6 @@ export function ChangesNavigator({
 		<aside className={styles.sidebar} aria-label="Changes navigator">
 			<ChangeFilters filters={filters} onChange={onFiltersChange} />
 			<div className={styles.treeScroll}>
-				{analysis && review.all.files === 0 && <p className={styles.unknown}>No changed entries.</p>}
 				{analysis ? (
 					<ChangesTree
 						projection={projection}

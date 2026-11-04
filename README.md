@@ -144,8 +144,10 @@ repositories; subtree summaries include them. Binary and zero-line entries still
 count as changes. Count tooltips show independent Type and Importance breakdowns.
 
 Filtering preserves selected metadata, including rename sources, both-side ownership
-and file/directory transitions. Empty and missing-at-startup registered repositories
-remain selectable. Explicit Refresh preserves filters, expansion and useful selection;
+and file/directory transitions. Repositories with changes stay visible even when every
+change is filtered out; available repositories with no changes are omitted. Missing-at-startup
+repositories remain visible because their change state is unknown, and direct links to omitted
+repository roots remain valid. Explicit Refresh preserves filters, expansion and useful selection;
 a disappeared selection is explained after successful identity and analysis reads.
 Failed reads preserve usable content and mark retained data stale, with independent
 retry controls.
