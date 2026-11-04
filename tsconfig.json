@@ -1,6 +1,6 @@
 {
 	"extends": "@zdreamer/forge-ts-service/tsconfig",
-	"include": ["tools/**/*.ts", "ui/*.config.ts"],
+	"include": ["tools/**/*.ts"],
 	"compilerOptions": {
 		"paths": {
 			"@forge/api-contract": ["./server/src/components/api-contract/index.ts"]

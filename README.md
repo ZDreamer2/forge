@@ -69,8 +69,9 @@ Focused scripts use `corepack pnpm --config.verify-deps-before-run=error run <na
 
 - `check:server`: server/contract checks and tests, without a UI build or `dist/`.
 - `test:ui`: frontend behavior suites.
-- `check:ui`: frontend structure/collection/type/lint/behavior and production build.
-- `build`: clean server compilation and Vite emission to `dist/ui/`.
+- `check:ui`: frontend structure/collection/types/configuration/lint/behavior and frontend-only build.
+- `build:ui`: frontend-only Vite emission to `dist/ui/`, including route-tree generation.
+- `build`: clean application assembly: server compilation and `build:ui`.
 - `test:workspace`: self-contained build, pack and installed API/browser acceptance.
 
 Keep exact pins, the seven-day third-party release-age floor and explicit lifecycle

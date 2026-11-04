@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -44,6 +44,29 @@ function fixture(run: (directory: string, write: (path: string, contents: string
 		rmSync(directory, { recursive: true, force: true });
 	}
 }
+
+test("UI and aggregate gates compose source checking and builds without server compilation in UI acceptance", () => {
+	const scripts = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts;
+	assert.match(scripts["check:ui"], /run check:ui:source/);
+	assert.match(scripts["check:ui"], /run build:ui/);
+	assert.doesNotMatch(scripts["check:ui"], /run build(?:\s|$)/);
+	assert.equal(scripts["build:ui"], "vite build --config ui/vite.config.ts");
+	assert.match(scripts["check:ui:source"], /tsc -p ui\/tsconfig.tools.json --noEmit/);
+	assert.match(scripts.check, /run check:ui:source/);
+	assert.match(scripts.check, /run build &&/);
+	assert.match(scripts.check, /run test:workspace --built/);
+});
+
+test("UI configuration has its own Node-side TypeScript coverage", () => {
+	fixture((directory, write) => {
+		cpSync(join(root, "tsconfig.json"), join(directory, "tsconfig.json"));
+		cpSync(join(root, "ui/tsconfig.tools.json"), join(directory, "ui/tsconfig.tools.json"));
+		write("server/src/invalid.ts", 'const server: number = "not part of UI tooling";');
+		assert.doesNotThrow(() => runTool(directory, "tsc", ["-p", "ui/tsconfig.tools.json", "--noEmit"]));
+		write("ui/probe.config.ts", 'const config: number = "invalid UI config"; export default config;');
+		assert.throws(() => runTool(directory, "tsc", ["-p", "ui/tsconfig.tools.json", "--noEmit"]), /TS2322/);
+	});
+});
 
 test("standalone adapter checks actual TypeScript, Vitest and parsed graph collections", () => {
 	fixture((directory, write) => {

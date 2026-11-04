@@ -6,6 +6,8 @@ export default defineConfig({
 	root: fileURLToPath(new URL(".", import.meta.url)),
 	plugins: [react()],
 	test: {
+		// App-level jsdom suites otherwise compete for CPU and exceed unchanged interaction deadlines.
+		maxWorkers: 2,
 		environment: "node",
 		include: ["src/**/Tests/**/*.test.{ts,tsx}"],
 		setupFiles: ["./vitest.setup.ts"],

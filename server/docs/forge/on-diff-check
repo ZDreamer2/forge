@@ -10,10 +10,10 @@ def main() -> int:
     try:
         input_text = sys.stdin.read()
         payload = json.loads(input_text)
-        scripts = Path(payload["root"]) / "ai/bc-plugins/dev/forge/codebases/ts-service/scripts"
+        scripts = Path(payload["root"]) / "ai/bc-plugins/dev/forge/scripts"
         sys.dont_write_bytecode = True
         sys.path.insert(0, str(scripts))
-        from ts_service_diff_check import main as check
+        from pnpm_diff_check import main as check
 
         return check(input_text, check_script="check:server")
     except (ImportError, OSError, KeyError, TypeError, ValueError) as error:
