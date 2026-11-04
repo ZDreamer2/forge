@@ -171,7 +171,7 @@ function row(path: string): HTMLElement {
 	return element;
 }
 
-it("counts own entries once, retains repository denominators and honors independent server classifications and emphasis", async () => {
+it("reviews default breakdowns, filters both dimensions and inspects metadata without losing canonical counts", async () => {
 	start();
 	await screen.findByRole("button", { name: "Select src/high.ts" });
 	totals("All workspace changes", 13, 19, 43);
@@ -192,6 +192,26 @@ it("counts own entries once, retains repository denominators and honors independ
 	expect(screen.queryByRole("button", { name: "Select docs/hidden.md" })).not.toBeInTheDocument();
 
 	const user = userEvent.setup();
+	const visibleTotals = totals("Visible workspace changes", 12, 19, 36);
+	await user.hover(visibleTotals);
+	const tooltip = within(await screen.findByRole("tooltip"));
+	const types = within(tooltip.getByRole("table", { name: "Type" }));
+	const importance = within(tooltip.getByRole("table", { name: "Importance" }));
+	// Code includes the explicit override under a Tests directory; columns are removed, then added.
+	expect(
+		within(types.getByRole("row", { name: "Code −6 +19" }))
+			.getAllByRole("cell")
+			.map((cell) => cell.textContent),
+	).toEqual(["−6", "+19"]);
+	expect(types.getByRole("row", { name: "Tests −5 +3" })).toBeInTheDocument();
+	expect(
+		within(importance.getByRole("row", { name: "High −2 +10" }))
+			.getAllByRole("cell")
+			.map((cell) => cell.textContent),
+	).toEqual(["−2", "+10"]);
+	expect(importance.queryByRole("rowheader", { name: "None" })).not.toBeInTheDocument();
+	await user.unhover(visibleTotals);
+
 	await user.click(screen.getByRole("button", { name: "Low" }));
 	totals("Visible workspace changes", 10, 10, 25);
 	expect(row("tools/nested")).toHaveTextContent("0 of 1");
@@ -204,12 +224,7 @@ it("counts own entries once, retains repository denominators and honors independ
 	totals("Visible workspace changes", 4, 4, 13);
 	expect(row("docs/hidden.md")).toBeInTheDocument();
 	totals("All workspace changes", 13, 19, 43);
-});
 
-it("selects and clears both dimensions together while preserving zero-line and binary changed entries", async () => {
-	start();
-	await screen.findByRole("button", { name: "Select src/zero.ts" });
-	const user = userEvent.setup();
 	await user.click(screen.getByRole("button", { name: "Deselect all types and importance levels" }));
 	totals("Visible workspace changes", 0, 0, 0);
 	expect(row(".")).toHaveTextContent("0 of 12");
@@ -221,30 +236,25 @@ it("selects and clears both dimensions together while preserving zero-line and b
 	expect(row("src/moved.ts")).toBeInTheDocument();
 	expect(row("assets/logo.png")).toBeInTheDocument();
 	expect(row("docs/hidden.md")).toBeInTheDocument();
-	await user.click(screen.getByRole("button", { name: "Select src/transition" }));
-	const details = screen.getByRole("region", { name: "Selection details" });
-	expect(details).toHaveTextContent(/modified/i);
-	expect(details).toHaveTextContent("directory");
-	await user.click(screen.getByRole("button", { name: "Select src/moved.ts" }));
-	expect(details).toHaveTextContent("old/moved.ts");
-	expect(details).toHaveTextContent("old-owner");
-	expect(details).toHaveTextContent("application");
-});
-
-it("explains exact visible line totals using independent Type and Importance breakdowns", async () => {
-	start();
-	await screen.findByRole("button", { name: "Select src/high.ts" });
-	const user = userEvent.setup();
-	await user.hover(totals("Visible workspace changes", 12, 19, 36));
-	const tooltip = await screen.findByRole("tooltip");
-	expect(tooltip).toHaveTextContent("Code");
-	expect(tooltip).toHaveTextContent("Tests");
-	// The Code row includes explicit code classification under a Tests directory.
-	const code = within(tooltip).getByText("Code").closest("tr");
-	expect(code).toHaveTextContent("19");
-	expect(code).toHaveTextContent("6");
-	const high = within(tooltip).getByText("High").closest("tr");
-	expect(high).toHaveTextContent("10");
-	expect(high).toHaveTextContent("2");
-	expect(within(tooltip).queryByText("None")).not.toBeInTheDocument();
-});
+	async function inspectMetadata(path: string) {
+		await user.click(screen.getByRole("button", { name: `Select ${path}` }));
+		const metadata = within(screen.getByRole("region", { name: "Selected entry metadata" }));
+		const disclosure = metadata.getByText("Entry metadata");
+		if (!disclosure.closest("details")?.open) await user.click(disclosure);
+		return metadata;
+	}
+	const zero = await inspectMetadata("src/zero.ts");
+	expect(zero.getByText(/No line changes were reported/)).toBeVisible();
+	const binary = await inspectMetadata("assets/logo.png");
+	expect(binary.getByText("Binary change. Line totals are unavailable.")).toBeVisible();
+	const transition = await inspectMetadata("src/transition");
+	expect(transition.getByRole("heading", { name: "Modified entry" })).toBeVisible();
+	expect(transition.getByText(/^directory ·/)).toBeVisible();
+	const renamed = await inspectMetadata("src/moved.ts");
+	expect(renamed.getByText(/^Renamed from/)).toBeVisible();
+	expect(renamed.getByText(/^Renamed from/)).toHaveTextContent("old/moved.ts");
+	expect(renamed.getByText(/Codebase: old-owner/)).toBeVisible();
+	expect(renamed.getByText(/Codebase: application/)).toBeVisible();
+	expect(renamed.getByText("Rename has no reported content change.")).toBeVisible();
+	totals("All workspace changes", 13, 19, 43);
+}, 10_000);

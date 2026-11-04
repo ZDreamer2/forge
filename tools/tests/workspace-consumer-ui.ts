@@ -54,11 +54,28 @@ function totals(nodes: AnalysisWireNode[]) {
 
 async function waitSelected(page: Page, path?: string) {
 	await page.waitForURL((url) => url.searchParams.get("path") === (path ?? null));
-	if (path) await page.getByRole("heading", { name: path, exact: true }).waitFor();
+	const viewer = page.getByRole("region", { name: "Selection details", exact: true });
+	await viewer.getByRole("heading", { name: path ?? "Workspace changes", exact: true }).waitFor();
 }
 
 async function settled(page: Page) {
 	await page.getByRole("button", { name: "Refresh", exact: true }).and(page.locator(":enabled")).waitFor();
+}
+
+async function refreshAnalysis(page: Page): Promise<WorkspaceAnalysis> {
+	await settled(page);
+	// Arm both reads before the click: an unchanged summary or collapsed row
+	// cannot acknowledge a new Refresh. Callers still assert the resulting UI.
+	const workspace = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/workspace");
+	const analysis = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/changes/analysis");
+	await page.getByRole("button", { name: "Refresh", exact: true }).click();
+	const [workspaceResponse, analysisResponse] = await Promise.all([workspace, analysis]);
+	assert.equal(workspaceResponse.status(), 200);
+	assert.equal(analysisResponse.status(), 200);
+	await workspaceResponse.finished();
+	const facts = (await analysisResponse.json()) as WorkspaceAnalysis;
+	await settled(page);
+	return facts;
 }
 
 async function expectPortal(page: Page, trigger: Locator, inspectTooltip?: (tooltip: Locator) => Promise<void>) {
@@ -195,10 +212,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		for (let i = 0; i < 100; i++) write(`app/bulk/file-${String(i).padStart(3, "0")}.ts`, `bulk ${i}\n`);
 		const edited = sourceState(workspace);
 		const refresh = page.getByRole("button", { name: "Refresh", exact: true });
-		await refresh.click();
-		const analysisResponse = await fetch(`${address}/api/changes/analysis`);
-		assert.equal(analysisResponse.status, 200);
-		const analysis = (await analysisResponse.json()) as WorkspaceAnalysis;
+		const analysis = await refreshAnalysis(page);
 		const changes = Object.values(analysis.nodes).filter((node) => node.kind);
 		const all = totals(changes);
 		const visible = totals(changes.filter((node) => node.effectiveEmphasis.value !== "hidden"));
@@ -453,7 +467,8 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 
 		await page.getByRole("button", { name: "Collapse app/bulk", exact: true }).click();
 		assert.equal(new URL(page.url()).searchParams.get("path"), unusual, "Disclosure preserves selection");
-		await refresh.click();
+		await refreshAnalysis(page);
+		await waitSelected(page, unusual);
 		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).click();
 		const summaryColumns = await page

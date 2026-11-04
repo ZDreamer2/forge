@@ -54,7 +54,11 @@ function fixture(paths = ["src/a.ts", "src/b.ts", special, "123", "true", '"quot
 			}
 			parent = key;
 		}
-		nodes[path] = node(path, { kind: "modified", repo: ".", statistics: { added: 1, removed: 0, binary: false } });
+		nodes[path] = node(path, {
+			kind: "modified",
+			repo: path.startsWith("repos/empty/") ? "repos/empty" : ".",
+			statistics: { added: 1, removed: 0, binary: false },
+		});
 	}
 	nodes["."].rawTotals = { added: paths.length, removed: 0 };
 	return { root: ".", nodes, handlers: {}, codebases: {} };
@@ -150,6 +154,7 @@ it("keeps current interactions through pending refresh, failure, and successful 
 	const pending = network.deferResponse();
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => pending.handle(request)));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
+	await waitFor(() => expect(pending.request).toBeDefined());
 	await user.click(screen.getByRole("button", { name: "Select missing" }));
 	await user.click(screen.getByRole("button", { name: "Code" }));
 	await act(async () => pending.release(new Response("failed", { status: 503 })));
@@ -160,6 +165,7 @@ it("keeps current interactions through pending refresh, failure, and successful 
 	const retry = network.deferResponse();
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => retry.handle(request)));
 	await user.click(screen.getByRole("button", { name: "Retry changes" }));
+	await waitFor(() => expect(retry.request).toBeDefined());
 	await user.click(screen.getByRole("button", { name: "Code" }));
 	await act(async () => retry.release(Response.json(fixture(["src/b.ts", "new/child.ts"]))));
 	expect(await screen.findByRole("button", { name: "Select new/child.ts" })).toBeInTheDocument();
@@ -175,40 +181,37 @@ it("keeps filtered selection metadata and repairs disappearing paths only after 
 	await user.click(screen.getByRole("button", { name: "Code" }));
 	expect(details().getByText(/outside the current filters/i)).toBeInTheDocument();
 	expect(details().getByRole("heading", { name: "src/a.ts" })).toBeInTheDocument();
+	const workspace = network.deferResponse();
+	const changes = network.deferResponse();
 	network.use(
-		http.get("http://localhost/api/workspace", () => new Response("failed", { status: 503 })),
-		http.get("http://localhost/api/changes/analysis", () => Response.json(fixture([]))),
+		http.get("http://localhost/api/workspace", ({ request }) => workspace.handle(request)),
+		http.get("http://localhost/api/changes/analysis", ({ request }) => changes.handle(request)),
 	);
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("alert");
+	await waitFor(() => {
+		expect(workspace.request).toBeDefined();
+		expect(changes.request).toBeDefined();
+	});
+	await act(async () => changes.release(Response.json(fixture([]))));
+	await screen.findByRole("button", { name: /All workspace changes: 0 changed files/ });
+	expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
 	expect(selectedPath()).toBe("src/a.ts");
-	network.use(http.get("http://localhost/api/workspace", () => Response.json(identity)));
+	expect(screen.queryByText(/Selection is unavailable/)).not.toBeInTheDocument();
+
+	await act(async () => workspace.release(new Response("failed", { status: 503 })));
+	expect(await screen.findByRole("alert")).toHaveTextContent("Workspace identity is stale");
+	expect(selectedPath()).toBe("src/a.ts");
+	const retry = network.deferResponse();
+	network.use(http.get("http://localhost/api/workspace", ({ request }) => retry.handle(request)));
 	await user.click(screen.getByRole("button", { name: "Retry workspace" }));
+	await waitFor(() => expect(retry.request).toBeDefined());
+	expect(selectedPath()).toBe("src/a.ts");
+	await act(async () => retry.release(Response.json(identity)));
 	expect(await screen.findByText(/Selection is unavailable: src\/a.ts/)).toBeInTheDocument();
 	await waitFor(() => expect(selectedPath()).toBeNull());
 });
 
-it("upgrades and downgrades a declared repository selection without changing its URL", async () => {
-	const network = serve(fixture([]));
-	const user = observe("repos/empty");
-	await screen.findByRole("region", { name: "Selection details" });
-	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
-	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
-	network.use(
-		http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["repos/empty/child.ts"]))),
-	);
-	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("button", { name: "Select repos/empty/child.ts" });
-	expect(selectedPath()).toBe("repos/empty");
-	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture([]))));
-	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("button", { name: /All workspace changes: 0 changed files/ });
-	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
-	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
-	expect(selectedPath()).toBe("repos/empty");
-});
-
-it("preserves collapsed ancestors when Refresh reparents a selected repository placeholder", async () => {
+it("preserves a repository address and expansion as Refresh reparents it, adds changes and removes its last change", async () => {
 	const network = serve(fixture([]));
 	const user = observe("repos/empty");
 	await screen.findByRole("region", { name: "Selection details" });
@@ -224,4 +227,33 @@ it("preserves collapsed ancestors when Refresh reparents a selected repository p
 	await user.click(screen.getByRole("button", { name: "Expand ." }));
 	expect(screen.getByRole("button", { name: "Select repos/new.ts" })).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
+
+	network.use(
+		http.get("http://localhost/api/changes/analysis", () =>
+			Response.json(fixture(["repos/new.ts", "repos/empty/child.ts"])),
+		),
+	);
+	await user.click(screen.getByRole("button", { name: "Refresh" }));
+	await screen.findByRole("button", { name: "Select repos/empty/child.ts" });
+	expect(screen.getByRole("button", { name: "Select repos/empty", pressed: true })).toBeInTheDocument();
+	expect(
+		screen.getByRole("button", {
+			name: "repos/empty repository changes: 1 changed files, 0 removed lines, 1 added lines",
+		}),
+	).toBeInTheDocument();
+	expect(selectedPath()).toBe("repos/empty");
+
+	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["repos/new.ts"]))));
+	await user.click(screen.getByRole("button", { name: "Refresh" }));
+	await screen.findByRole("button", { name: "All workspace changes: 1 changed files, 0 removed lines, 1 added lines" });
+	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
+	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
+	expect(selectedPath()).toBe("repos/empty");
+
+	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture([]))));
+	await user.click(screen.getByRole("button", { name: "Refresh" }));
+	await screen.findByRole("button", { name: /All workspace changes: 0 changed files/ });
+	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
+	expect(details().getByRole("heading", { name: "repos/empty" })).toBeVisible();
+	expect(selectedPath()).toBe("repos/empty");
 });
