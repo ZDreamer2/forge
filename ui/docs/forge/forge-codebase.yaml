@@ -2,3 +2,4 @@ id: bico/forge-ui
 root: ../..
 parents:
   - g.bt.su/bico/ai-agent-plugins/dev/forge/codebases/ts-react-frontend
+  - bico/forge
