@@ -6,11 +6,12 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 
 ## Temporary: checker transition
 
-The sections below define the intended verification contract. Personal checkers
-currently all invoke root `check`; `check:ui` also builds the server. Until scoped
-checker bindings and script separation are implemented and verified, a passing
-root `check` is required for acceptance. A passing automatic invocation can
-satisfy this requirement; separate execution is unnecessary. Report failures in
+The sections below define the intended verification contract. The server checker
+runs `check:server`; UI and installation checkers still invoke root `check`, and
+`check:ui` also builds the server. Until the remaining scoped checker bindings and
+script separation are implemented and verified, a passing root `check` is required
+for acceptance. A passing automatic root `check` invocation can satisfy this
+requirement; separate execution is unnecessary. Report failures in
 other checker invocations even when root acceptance passes. This temporary rule
 overrides the local-acceptance rule below. Remove this section when the transition
 is verified.

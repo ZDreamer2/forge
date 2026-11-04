@@ -5,8 +5,9 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 # Forge server verification
 
 Run the pinned installation from the repository root, not `server/`; the
-[README](../../../README.md#develop) owns commands and setup. `check:server`
-verifies server source and the browser-safe contract without `dist/`. Assembled
+[README](../../../README.md#develop) owns commands and setup. The personal checker
+runs `check:server`: server source and browser-safe contract verification, without
+`dist/`, UI suites or packed installation acceptance. Assembled
 HTTP tests inject temporary assets. The root gate adds packed installed API and
 browser acceptance; [UI guidance](../../../ui/docs/forge/on-build.md) owns frontend
 verification.

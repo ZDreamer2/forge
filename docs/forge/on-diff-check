@@ -15,7 +15,7 @@ def main() -> int:
         sys.path.insert(0, str(scripts))
         from ts_service_diff_check import main as check
 
-        return check(input_text)
+        return check(input_text, check_script="check")
     except (ImportError, OSError, KeyError, TypeError, ValueError) as error:
         print(f"on-diff-check: {error}", file=sys.stderr)
         return 1
