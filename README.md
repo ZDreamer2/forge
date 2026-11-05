@@ -10,6 +10,9 @@ Type/Importance filters, signal inspection, selected-entry metadata and
 syntax-highlighted unified/split file diffs with on-demand context expansion.
 Executable: `forge`. Licensed under [MIT](LICENSE).
 
+Read the [codebase overview](docs/overview.md) for repository orientation and routes
+to task-specific documentation.
+
 Version `0.2.0` delivers the read-only viewer and unified-guide configuration
 migration described below. Upgrade older installations using the migration notes;
 package publication and workspace adoption are separate operations.

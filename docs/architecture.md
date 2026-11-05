@@ -1,7 +1,3 @@
----
-edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
----
-
 # Forge application architecture
 
 Forge interprets one authoritative workspace checkout and exposes it to browser and
