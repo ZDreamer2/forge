@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Forge · Workspace review prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="sidebar-header"><div class="workspace-identity"><span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path class="mark-letter" d="M9 7h15l-2 4H13v4h8l-2 4h-6v7H9z"/><path class="mark-glint" d="M9.5 7.5h13.7M9.5 8v17"/></svg></span><h1 title="~/bico/newbicotender.ru">Bico 2</h1></div></div><div class="header-separator" aria-hidden="true"></div>
+    <div class="workspace-actions"><div id="totals" title="All workspace changes · HEAD → working tree, including untracked files"></div><button id="refresh" class="refresh">↻ <span>Refresh</span></button>
+      <button class="icon-button shortcut-help" aria-label="Keyboard shortcuts" data-tooltip="&lt;table class=&quot;shortcut-table&quot;&gt;&lt;caption&gt;Shortcuts&lt;/caption&gt;&lt;tbody&gt;&lt;tr&gt;&lt;th scope=&quot;row&quot;&gt;&lt;kbd&gt;Ctrl&lt;/kbd&gt; + click&lt;/th&gt;&lt;td&gt;Select and copy a tree item’s path&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th scope=&quot;row&quot;&gt;&lt;kbd&gt;←&lt;/kbd&gt; / &lt;kbd&gt;→&lt;/kbd&gt;&lt;/th&gt;&lt;td&gt;Resize sidebar when divider is focused&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th scope=&quot;row&quot;&gt;&lt;kbd&gt;Esc&lt;/kbd&gt;&lt;/th&gt;&lt;td&gt;Dismiss tooltip&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M5 7h1m3 0h1m3 0h1M5 10h1m3 0h1m3 0h1M6 13h8"/></svg></button>
+      <details class="prototype-info"><summary title="Prototype information and examples" aria-label="Prototype information and examples">i</summary><div class="prototype-panel"><strong>Design prototype</strong><p>Fictional workspace data. This page does not read your checkout.</p><label class="scenario-label">Example <select id="scenario"><option value="normal">Workspace changes</option><option value="large">100-file workspace</option><option value="failed">Refresh failed</option><option value="empty">No changes</option></select></label><p>Counts and excerpts are authored separately. Diff rendering and context expansion are illustrative; production will use Pierre.</p></div></details>
+    </div>
+  </header>
+  <div id="notice" role="status"></div>
+  <main class="review">
+    <aside id="sidebar">
+      <section class="filter-bar" aria-label="Change filters">
+        <div class="filter-options">
+          <fieldset id="type-filters"><legend>Type</legend></fieldset>
+          <fieldset id="importance-filters"><legend>Importance</legend></fieldset>
+        </div>
+        <div class="filter-actions"><button id="select-all-filters" class="icon-button" title="Select all types and importance levels" aria-label="Select all types and importance levels"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="m6 10 3 3 5-6"/></svg></button><button id="deselect-all-filters" class="icon-button" title="Deselect all types and importance levels" aria-label="Deselect all types and importance levels"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="m7 7 6 6m0-6-6 6"/></svg></button></div>
+      </section>
+      <div class="tree-content">
+        <div class="visible-summary"><div class="changes-heading"><div class="tree-actions"><button id="collapse" class="icon-button" title="Collapse all" aria-label="Collapse all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 3 4 4 4-4M6 17l4-4 4 4M4 10h12"/></svg></button><button id="expand" class="icon-button" title="Expand all" aria-label="Expand all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 4-4 4 4M6 14l4 4 4-4M4 10h12"/></svg></button></div><h2>Changes <span id="count"></span></h2></div><div id="visible-summary"></div></div>
+        <nav id="tree" aria-label="Changed files"></nav>
+      </div>
+    </aside>
+    <div id="resize" role="separator" tabindex="0" aria-label="Resize changes sidebar" aria-orientation="vertical" aria-valuemin="240" aria-valuemax="600" aria-valuenow="430"></div>
+    <section class="viewer" aria-label="Selected file"><div id="file-header"></div><div id="file-signals"></div><div id="diff"></div></section>
+  </main>
+  <div id="copy-status" class="copy-status" role="status" hidden></div>
+  <script src="fixtures.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

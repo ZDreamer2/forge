@@ -1,0 +1,10 @@
+Material Icon Theme
+https://github.com/material-extensions/vscode-material-icon-theme
+Commit: e8982b88eaea91f3955cd42ca4b564275fbd9c6a
+License: MIT (see LICENSE)
+
+Local adaptation: folder-neutral.svg uses folder-src.svg silhouette with a neutral gray fill and removes the source-code motif.
+
+icons.js contains inline monochrome adaptations: colored fills use currentColor; white detail fills are retained.
+
+repository.svg is an original icon authored for this prototype (folder outline with Git branch motif); it is not from Material Icon Theme.

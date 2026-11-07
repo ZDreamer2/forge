@@ -59,6 +59,18 @@ files. The application architecture owns their responsibility and dependency map
 | Change publication or release operations | [Release operations](releasing.md) |
 | Plan or implement repository changes through Forge | [Application planning](forge/on-plan.md) and [build guidance](forge/on-build.md), plus the selected server or UI guides |
 
+## UI design prototype
+
+The maintained [UI prototype](../ui/prototype/README.md) lives in
+`ui/prototype/`. Prototype new UI features and interaction changes there first,
+then implement the agreed design in the production UI. Keep the prototype and its
+design notes up to date as the interface evolves; it is a current design sandbox,
+not an archived issue artifact.
+
+Open `ui/prototype/index.html` directly in a browser; no build or running Forge
+server is needed. Its fictional data and simplified rendering support design
+iteration, not verification of production API behavior or performance.
+
 ## Development and verification
 
 The root installation supplies focused installation, server and UI checks as well as
