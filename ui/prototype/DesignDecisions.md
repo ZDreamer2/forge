@@ -7,7 +7,7 @@ Updated: 2026-11-01. [UiSpec](UiSpec.md) owns the intended experience, behavior,
 - Keep the fixed-light appearance. The sidebar/main split continues through the header and shares one width value during resizing.
 - The workspace name is Bico 2 at 20px, including narrower viewport widths. The F-to-name gap is 9px.
 - Use JetBrains Mono at 13px for tree names, with Consolas/system monospace fallbacks. Code excerpts use 12px.
-- Use compact 25px tree rows with minimal name/disclosure padding. Repository roots occupy ordinary rows in the workspace hierarchy, without separate group spacing or repository-owned file counts.
+- Use compact 25px tree rows with minimal name/disclosure padding. Disclosure arrows sit immediately left of folder icons, inside the indentation gutter rather than a separate spaced flex column. Root icons start 19px from the sidebar edge; files and folders at the same depth share icon/name alignment. Each nesting level shifts exactly one 17px icon width to the right, including on narrower viewports. Repository roots occupy ordinary rows in the workspace hierarchy, without separate group spacing or repository-owned file counts.
 - Keep line-count columns right-aligned and in the same scrolling area as the sidebar summary so scrollbar width does not shift their alignment.
 - Use subtle row hover backgrounds without underlining or changing name styling. Selection uses a background and left marker.
 

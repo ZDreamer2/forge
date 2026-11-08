@@ -379,14 +379,16 @@ aside {
 	align-items: center;
 }
 #tree {
+	--tree-indent: 17px;
 	padding-bottom: 20px;
 }
 .tree-row {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 6px;
 	min-height: 25px;
-	padding: 0 10px 0 calc(8px + var(--depth) * 14px);
+	padding: 0 10px 0 calc(16px + var(--depth) * var(--tree-indent));
 	border-left: 3px solid transparent;
 	color: #45594b;
 }
@@ -417,16 +419,18 @@ aside {
 	text-decoration: none;
 }
 .disclosure {
+	position: absolute;
+	left: calc(var(--depth) * var(--tree-indent));
+	width: 16px;
 	border: 0;
 	background: none;
-	padding: 1px;
-	flex: 0 0 16px;
+	padding: 1px 2px 1px 0;
+	text-align: right;
 	color: #7f8e83;
 	font-size: 13px;
 }
 .disclosure-spacer {
-	width: 16px;
-	flex: 0 0 16px;
+	display: none;
 }
 .type-icon {
 	width: 17px;
@@ -699,9 +703,6 @@ aside {
 @media (max-width: 1000px) {
 	:root {
 		--sidebar-width: 370px;
-	}
-	.tree-row {
-		padding-left: calc(4px + var(--depth) * 10px);
 	}
 	.line-counts {
 		font-size: 9px;
