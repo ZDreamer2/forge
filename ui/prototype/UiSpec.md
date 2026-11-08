@@ -54,7 +54,7 @@ Forge-base assigns Docs, Config, Assets and finally Tests using its path rules; 
 
 Each category name is a toggle. Categories within a dimension combine with OR; the dimensions combine with AND. All types and High/Medium/Low start enabled; None starts disabled. Adjacent select-all and deselect-all actions affect both dimensions. This gives the developer control over attention while keeping lower-priority work accessible.
 
-Workspace header file and line totals always cover all changes. The sidebar's matching/total file count retains the complete denominator; sidebar/folder line totals follow matching changes. Filtered totals are never presented as the full size of the workspace change.
+Workspace header file and line totals always cover all changes. The sidebar's matching/total file count retains the complete denominator. Folder line totals, including the workspace root, cover all matching descendant files regardless of expansion. The Changes-line totals are labeled Shown and cover only matching files with no collapsed ancestor, counting each file once and never including folder aggregates. They recalculate when expansion or filters change. The Shown label has a hover/focus tooltip explaining that collapsed descendants are excluded and scrolling does not affect the total. Filtered totals are never presented as the full size of the workspace change.
 
 Removed lines occupy the left numeric column, added lines the right. Consistent right alignment supports scanning additions and deletions independently. Zero values are blank while their column space remains; binary changes and pure renames can have no displayed line counts without ceasing to be changes.
 

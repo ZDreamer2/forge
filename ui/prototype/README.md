@@ -9,7 +9,8 @@ Open `index.html` in a browser. No installation, build, live Forge server, or ne
 - Toggle file types and importance categories. The None importance category starts disabled; all types and High/Medium/Low start enabled. Select-all/deselect-all icons affect both dimensions.
 - Explore one workspace tree: the `Bico 2` root (workspace-relative path `.`) contains the nested repository at `library/tools/forge`, marked with the repository icon. Filters prune all empty branches, including repository roots; ancestor summaries include matching nested-repository files once.
 - Select files or folders; click the selected name again to clear selection. Ctrl+Click selects and copies its workspace-relative path.
-- Use disclosure arrows or the collapse/expand icons beside Changes. Resize the sidebar by dragging the divider or focusing it and using Left/Right.
+- Use disclosure arrows or the collapse/expand icons beside Changes. Shown counts line changes in matching files exposed by expansion, not the scroll viewport; hover or focus its label for an explanation. Folder counters always include all matching descendants.
+- Resize the sidebar by dragging the divider or focusing it and using Left/Right.
 - Switch unified/split views. Hover or focus line counts for breakdowns and signal icons for structured messages.
 - Click a signal icon to open details below the main header. BiCo includes a warning on filtered-out plans; Reveal file enables the needed categories and expands its ancestors. Forge includes a direct repository notice and a located file notice.
 - Use browser Back/Forward to revisit selections. The keyboard icon lists shortcuts.

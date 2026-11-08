@@ -377,6 +377,10 @@ aside {
 #visible-summary {
 	display: flex;
 	align-items: center;
+	gap: 6px;
+}
+.shown-label {
+	cursor: help;
 }
 #tree {
 	--tree-indent: 17px;

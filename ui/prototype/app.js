@@ -170,7 +170,7 @@
 		folders = new Map();
 		$("count").textContent = `· ${visible.length} of ${all.length}`;
 		$("totals").innerHTML = `<span><strong>${all.length}</strong> files</span>${counters(all)}`;
-		$("visible-summary").innerHTML = counters(visible);
+		const shown = [];
 		const repositories = new Map(fixtures.map((file) => [file.root, file.repo]));
 		const makeFolder = (name, path) => ({
 			name,
@@ -213,6 +213,7 @@
 				"none";
 			const folderRow = `<div class="tree-row folder-row ${node.repository ? "repository-row" : ""} change-${homogeneous} importance-${folderImportance} ${selected === key ? "active" : ""}" style="--depth:${depth}"><button class="disclosure" data-toggle="${escape(key)}" aria-label="${closed.has(key) ? "Expand" : "Collapse"} ${escape(node.name)}" aria-expanded="${!closed.has(key)}">${closed.has(key) ? "▸" : "▾"}</button>${window.forgeIcons["folder-neutral"]}<button class="node-label" data-folder="${escape(key)}" aria-pressed="${selected === key}" title="${node.repository ? "Repository · " : ""}${escape(node.path)} · ${node.entries.length ? kinds[homogeneous] + " changes · " + importance[folderImportance] + " importance" : "No visible changes"}">${escape(node.name)}</button>${signalBadges(scopeSignals(node.path), key, true, node.path)}${counters(node.entries)}</div>`;
 			if (closed.has(key)) return folderRow;
+			shown.push(...node.files);
 			return (
 				folderRow +
 				[...node.children.values()].map((child) => branch(child, depth + 1)).join("") +
@@ -227,6 +228,8 @@
 		$("tree").innerHTML = visible.length
 			? branch(root)
 			: '<div class="empty"><strong>No matching changes</strong>Adjust the type or importance filters.</div>';
+		$("visible-summary").innerHTML =
+			`<span class="shown-label" tabindex="0" data-tooltip="Line changes in matching files exposed by expanded folders. Files inside collapsed folders are excluded. Scrolling does not affect this total.">Shown</span>${counters(shown)}`;
 		const selectedFile = all.find((file) => file.path === selected);
 		if (selected && !visible.some((file) => file.path === selected) && !folders.has(selected)) {
 			$("tree").insertAdjacentHTML(
