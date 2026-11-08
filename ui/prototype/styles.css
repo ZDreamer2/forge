@@ -386,7 +386,7 @@ aside {
 	position: relative;
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 3px;
 	min-height: 25px;
 	padding: 0 10px 0 calc(16px + var(--depth) * var(--tree-indent));
 	border-left: 3px solid transparent;
