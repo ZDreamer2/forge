@@ -7,6 +7,7 @@ Open `index.html` in a browser. No installation, build, live Forge server, or ne
 ## Explore the demo
 
 - Toggle file types and importance categories. The None importance category starts disabled; all types and High/Medium/Low start enabled. Select-all/deselect-all icons affect both dimensions.
+- Explore one workspace tree: the `.` repository contains the nested repository at `library/tools/forge`, marked with the repository icon. Filters prune all empty branches, including repository roots; ancestor summaries include matching nested-repository files once.
 - Select files or folders; click the selected name again to clear selection. Ctrl+Click selects and copies its workspace-relative path.
 - Use disclosure arrows or the collapse/expand icons beside Changes. Resize the sidebar by dragging the divider or focusing it and using Left/Right.
 - Switch unified/split views. Hover or focus line counts for breakdowns and signal icons for structured messages.
@@ -30,4 +31,4 @@ This is a design sandbox, not delivery of Chunks 10–13. Types, importance, tre
 
 Diff rendering has no syntax highlighting, aligned split rows, patch parsing, or real context loading. Refresh, failure, and empty states are demonstrations, not API integration. Production retains the accepted API/data owner and uses Pierre.
 
-Browser visual verification by the agent remains pending because the available browser tool blocked local-file navigation. Syntax and fixture-interaction checks have been used during iteration; they are not application acceptance.
+For browser automation that blocks local-file navigation, serve this directory over loopback HTTP. Prototype visual and fixture-interaction checks are not production application acceptance.

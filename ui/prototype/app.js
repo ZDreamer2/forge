@@ -60,14 +60,14 @@
 	const within = (path, scope) => !scope || scope === "." || path === scope || path.startsWith(scope + "/");
 	const directSignals = (entry, folder = false) =>
 		(entry.signals || []).map((signal) => ({ ...signal, path: entry.path, repo: entry.repo, folder }));
-	function scopeSignals(repo, path) {
+	function scopeSignals(path) {
 		if (!files().length) return [];
 		return [
 			...files()
-				.filter((file) => file.repo === repo && within(file.path, path))
+				.filter((file) => within(file.path, path))
 				.flatMap((file) => directSignals(file)),
 			...(window.forgeFolderSignals || [])
-				.filter((folder) => folder.repo === repo && within(folder.path, path))
+				.filter((folder) => within(folder.path, path))
 				.flatMap((folder) => directSignals(folder, true)),
 		];
 	}
@@ -107,11 +107,7 @@
 	}
 	function renderSignals() {
 		const file = files().find((file) => file.path === selected);
-		const records = selectedFolder
-			? scopeSignals(selectedFolder.repo, selectedFolder.path)
-			: file
-				? directSignals(file)
-				: [];
+		const records = selectedFolder ? scopeSignals(selectedFolder.path) : file ? directSignals(file) : [];
 		const host = $("file-signals");
 		if (!records.length) {
 			host.innerHTML = "";
@@ -135,21 +131,16 @@
 	function selectFolder(key, force = false) {
 		const node = folders.get(key);
 		if (!node) return;
-		const repo = key.slice(0, key.indexOf(":"));
-		const root = fixtures.find((file) => file.repo === repo).root;
-		const path = node.path ? (root === "." ? node.path : root + "/" + node.path) : "";
-		select(key, { repo, path, label: node.name }, force);
-		return path || root;
+		select(key, { path: node.path, label: node.name }, force);
+		return node.path;
 	}
 	function revealSignalFile(path) {
 		const file = files().find((file) => file.path === path);
 		if (!file) return;
 		enabled.type.add(file.type);
 		enabled.importance.add(file.importance);
-		const relative = file.root === "." ? path : path.slice(file.root.length + 1);
 		for (const key of closed) {
-			const prefix = file.repo + ":";
-			if (key.startsWith(prefix) && within(relative, key.slice(prefix.length))) closed.delete(key);
+			if (within(path, key.slice("folder:".length))) closed.delete(key);
 		}
 		select(path, null, true);
 		signalsOpen = true;
@@ -180,36 +171,51 @@
 		$("count").textContent = `· ${visible.length} of ${all.length}`;
 		$("totals").innerHTML = `<span><strong>${all.length}</strong> files</span>${counters(all)}`;
 		$("visible-summary").innerHTML = counters(visible);
-		const roots = [...new Set(fixtures.map((file) => file.repo))];
-		function branch(node, repo, root, depth = 0) {
+		const repositories = new Map(fixtures.map((file) => [file.root, file.repo]));
+		const makeFolder = (name, path) => ({
+			name,
+			path,
+			repository: repositories.get(path),
+			children: new Map(),
+			files: [],
+			entries: [],
+		});
+		const root = makeFolder(".", ".");
+		for (const file of visible) {
+			const parts = file.path.split("/");
+			parts.pop();
+			let parent = root;
+			let path = "";
+			root.entries.push(file);
+			for (const name of parts) {
+				path = path ? `${path}/${name}` : name;
+				if (!parent.children.has(name)) parent.children.set(name, makeFolder(name, path));
+				parent = parent.children.get(name);
+				parent.entries.push(file);
+			}
+			parent.files.push(file);
+		}
+		function branch(node, depth = 0) {
 			// Compact chains of directories while keeping a single canonical path per row.
-			while (!node.files.length && node.children.size === 1 && depth > 0) {
+			while (!node.repository && !node.files.length && node.children.size === 1 && depth > 0) {
 				const child = [...node.children.values()][0];
+				if (child.repository) break;
 				node = { ...child, name: node.name + "/" + child.name };
 			}
-			const key = `${repo}:${node.path}`;
+			const key = `folder:${node.path}`;
 			folders.set(key, node);
 			const homogeneous =
 				node.entries.length && node.entries.every((file) => file.kind === node.entries[0].kind)
 					? node.entries[0].kind
 					: "M";
-			const repoCount =
-				depth === 0
-					? `<span class="repo-count">${node.entries.length} of ${all.filter((file) => file.repo === repo).length}</span>`
-					: "";
 			const folderImportance =
 				["high", "medium", "low", "none"].find((level) => node.entries.some((file) => file.importance === level)) ||
 				"none";
-			const folderRow = `<div class="tree-row folder-row ${depth === 0 ? "repository-row" : ""} change-${homogeneous} importance-${folderImportance} ${selected === key ? "active" : ""}" style="--depth:${depth}"><button class="disclosure" data-toggle="${escape(key)}" aria-label="${closed.has(key) ? "Expand" : "Collapse"} ${escape(node.name)}" aria-expanded="${!closed.has(key)}">${closed.has(key) ? "▸" : "▾"}</button>${window.forgeIcons["folder-neutral"]}<button class="node-label" data-folder="${escape(key)}" aria-pressed="${selected === key}" title="${depth === 0 ? "Repository · " : ""}${escape((root === "." ? node.path : [root, node.path].filter(Boolean).join("/")) || root)} · ${node.entries.length ? kinds[homogeneous] + " changes · " + importance[folderImportance] + " importance" : "No visible changes"}">${escape(node.name)}${repoCount}</button>${signalBadges(scopeSignals(repo, node.path ? (root === "." ? node.path : root + "/" + node.path) : ""), key, true, node.path ? (root === "." ? node.path : root + "/" + node.path) : root)}${counters(node.entries)}</div>`;
+			const folderRow = `<div class="tree-row folder-row ${node.repository ? "repository-row" : ""} change-${homogeneous} importance-${folderImportance} ${selected === key ? "active" : ""}" style="--depth:${depth}"><button class="disclosure" data-toggle="${escape(key)}" aria-label="${closed.has(key) ? "Expand" : "Collapse"} ${escape(node.name)}" aria-expanded="${!closed.has(key)}">${closed.has(key) ? "▸" : "▾"}</button>${window.forgeIcons["folder-neutral"]}<button class="node-label" data-folder="${escape(key)}" aria-pressed="${selected === key}" title="${node.repository ? "Repository · " : ""}${escape(node.path)} · ${node.entries.length ? kinds[homogeneous] + " changes · " + importance[folderImportance] + " importance" : "No visible changes"}">${escape(node.name)}</button>${signalBadges(scopeSignals(node.path), key, true, node.path)}${counters(node.entries)}</div>`;
 			if (closed.has(key)) return folderRow;
-			if (!node.entries.length)
-				return (
-					folderRow +
-					`<div class="repo-empty">${all.some((file) => file.repo === repo) ? "No changes match the filters" : "No changes"}</div>`
-				);
 			return (
 				folderRow +
-				[...node.children.values()].map((child) => branch(child, repo, root, depth + 1)).join("") +
+				[...node.children.values()].map((child) => branch(child, depth + 1)).join("") +
 				node.files
 					.map(
 						(file) =>
@@ -218,31 +224,9 @@
 					.join("")
 			);
 		}
-		$("tree").innerHTML =
-			roots
-				.map((repo) => {
-					const entries = visible.filter((file) => file.repo === repo);
-					const rootPath = fixtures.find((file) => file.repo === repo).root;
-					const root = { name: repo, path: "", children: new Map(), files: [], entries };
-					for (const file of entries) {
-						const relative = rootPath === "." ? file.path : file.path.slice(rootPath.length + 1);
-						const parts = relative.split("/");
-						parts.pop();
-						let parent = root;
-						let path = "";
-						for (const name of parts) {
-							path = path ? `${path}/${name}` : name;
-							if (!parent.children.has(name))
-								parent.children.set(name, { name, path, children: new Map(), files: [], entries: [] });
-							parent = parent.children.get(name);
-							parent.entries.push(file);
-						}
-						parent.files.push(file);
-					}
-					return `<div class="repo-group">${branch(root, repo, rootPath)}</div>`;
-				})
-				.join("") ||
-			'<div class="empty"><strong>No matching changes</strong>Adjust the type or importance filters.</div>';
+		$("tree").innerHTML = visible.length
+			? branch(root)
+			: '<div class="empty"><strong>No matching changes</strong>Adjust the type or importance filters.</div>';
 		const selectedFile = all.find((file) => file.path === selected);
 		if (selected && !visible.some((file) => file.path === selected) && !folders.has(selected)) {
 			$("tree").insertAdjacentHTML(
@@ -255,13 +239,9 @@
 	function renderFile() {
 		renderSignals();
 		if (selectedFolder) {
-			const entries = visibleFiles().filter(
-				(file) =>
-					file.repo === selectedFolder.repo &&
-					(selectedFolder.path === "" || file.path.startsWith(selectedFolder.path + "/")),
-			);
+			const entries = visibleFiles().filter((file) => within(file.path, selectedFolder.path));
 			$("file-header").innerHTML =
-				`<div class="selected-file-bar"><h2 class="workspace-file-path" title="Workspace-relative folder path">${escape(selectedFolder.path || fixtures.find((file) => file.repo === selectedFolder.repo)?.root || ".")}/</h2></div>`;
+				`<div class="selected-file-bar"><h2 class="workspace-file-path" title="Workspace-relative folder path">${escape(selectedFolder.path)}/</h2></div>`;
 			$("diff").innerHTML =
 				`<div class="empty"><strong>${entries.length} visible changed files</strong>Select a file to inspect its diff. Folder counts follow the current filters.</div>`;
 			return;
@@ -463,16 +443,10 @@
 		selected = params.get("file") || params.get("folder") || "";
 		selectedFolder = null;
 		if (params.has("folder")) {
-			const split = selected.indexOf(":");
-			const repo = selected.slice(0, split),
-				path = selected.slice(split + 1);
-			const entry = fixtures.find((file) => file.repo === repo);
-			if (entry)
-				selectedFolder = {
-					repo,
-					path: path ? (entry.root === "." ? path : entry.root + "/" + path) : "",
-					label: path || repo,
-				};
+			if (selected.startsWith("folder:")) {
+				const path = selected.slice("folder:".length);
+				selectedFolder = { path, label: path };
+			}
 		}
 		expandedContext = false;
 		signalsOpen = false;

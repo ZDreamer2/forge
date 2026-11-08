@@ -381,9 +381,6 @@ aside {
 #tree {
 	padding-bottom: 20px;
 }
-.repo-group {
-	margin-bottom: 9px;
-}
 .tree-row {
 	display: flex;
 	align-items: center;
@@ -799,23 +796,7 @@ aside {
 	font-family: var(--tree-font);
 }
 
-.repo-count {
-	margin-left: 8px;
-	font:
-		11px / 1.6 Inter,
-		ui-sans-serif,
-		system-ui,
-		sans-serif;
-	font-weight: 400;
-	color: #8a968d;
-}
-
-/* Retain repository anchors and shorten the middle of long selected paths. */
-.repo-empty {
-	color: #96a097;
-	font-size: 11px;
-	padding: 5px 18px 9px 39px;
-}
+/* Shorten the middle of long selected paths. */
 .file-path-fragments {
 	display: flex;
 	flex: 0 1 auto;
