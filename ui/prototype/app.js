@@ -180,7 +180,7 @@
 			files: [],
 			entries: [],
 		});
-		const root = makeFolder(".", ".");
+		const root = makeFolder("Bico 2", ".");
 		for (const file of visible) {
 			const parts = file.path.split("/");
 			parts.pop();
