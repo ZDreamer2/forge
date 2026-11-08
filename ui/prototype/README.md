@@ -9,12 +9,30 @@ Open `index.html` in a browser. No installation, build, live Forge server, or ne
 - Toggle file types and importance categories. The None importance category starts disabled; all types and High/Medium/Low start enabled. Select-all/deselect-all icons affect both dimensions.
 - Explore one workspace tree: the `Bico 2` root (workspace-relative path `.`) contains the nested repository at `library/tools/forge`, marked with the repository icon. Filters prune all empty branches, including repository roots; ancestor summaries include matching nested-repository files once.
 - Select files or folders; click the selected name again to clear selection. Ctrl+Click selects and copies its workspace-relative path.
+- Low/None-only matching branches start collapsed; branches containing Medium/High changes start expanded. Filter changes preserve established expansion choices.
 - Use disclosure arrows or the collapse/expand icons beside Changes. Shown counts line changes in matching files exposed by expansion, not the scroll viewport; hover or focus its label for an explanation. Folder counters always include all matching descendants.
-- Resize the sidebar by dragging the divider or focusing it and using Left/Right.
-- Switch unified/split views. Hover or focus line counts for breakdowns and signal icons for structured messages.
+- Select a folder for matching/total file counts, line totals, and a Type-by-Importance matrix with All totals first and count / +added / −removed in each cell. Expansion does not affect the folder page; binary-only and rename-only groups retain their file counts.
+- Resize the sidebar by dragging the divider or focusing it and using Left/Right. Its width is restored from LocalStorage on subsequent visits.
+- Switch unified/split views; TenderList includes long text and an unbroken URL to demonstrate wrapping. Tree names and change counters have no tooltips; hover or focus signal icons for structured messages.
 - Click a signal icon to open details below the main header. BiCo includes a warning on filtered-out plans; Reveal file enables the needed categories and expands its ancestors. Forge includes a direct repository notice and a located file notice.
 - Use browser Back/Forward to revisit selections. The keyboard icon lists shortcuts.
 - Open the information button for the Example menu: normal, 100-file, failed-refresh, and empty-workspace scenarios. Retry restores the normal example.
+
+## Importance examples
+
+These are authored fixture outcomes, not executable classification rules. Use the High/Medium/Low filters and folder matrix to inspect them:
+
+| Example | Importance and scope |
+| --- | --- |
+| `src/Modules/Tender/styles/list.css` and Forge's `ui/src/review.css` | Low: global CSS suffix rule applies in both repositories. |
+| `src/Core/Review/ReviewPolicy.php` | High: Bicotender Core path policy. |
+| `src/Domain/Review/ReviewScope.php` and `src/Modules/Tender/Domain/Tender.php` | High: Bicotender Domain directories at different depths under `src/`. |
+| `src/Core/Review/panel.css`, `panel.phtml`, and `src/Modules/Tender/Domain/Templates/panel.blade.php` | Low: global suffix rules take precedence over high-importance paths. |
+| `library/vendor/example/Normalizer.php` | Low: Bicotender vendor path policy. |
+| `TenderList.tsx`, `EmptyState.tsx`, and Forge's `WorkspaceHeader.tsx` | Medium: ordinary-code fallback. |
+| Forge's `server/src/Core/ReviewPolicy.ts` and `library/vendor/example/Normalizer.ts` | Medium: Bicotender path policy does not apply in the independent Forge repository. |
+
+Core/Domain folders containing High files remain expanded while their Low-only branches collapse by default. Tests remain Low and planning/lockfile examples retain None as separate illustrative annotations; those are not additional digest importance rules. The 100-file scenario retains these cases and fills the remaining rows with ordinary Medium files and Low test examples. No digest hidden/map-only modes are imported.
 
 ## Files and assets
 

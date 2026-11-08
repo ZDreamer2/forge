@@ -22,7 +22,9 @@ The tile is 34 by 36px with 7px corners. Keep it static and compact. Its future 
 - File icons use neutral gray. Ordinary folder icons use muted yellow; repository roots use the same folder silhouette in blue-violet.
 - Added/deleted/renamed names use green/red/blue respectively, with neutral text for modified or mixed entries. High importance is bold; Low and None use softer versions of the same change color. UiSpec owns their meanings and aggregation rules.
 - Warning symbols are amber and notice symbols quieter blue-gray. Descendant-only signal indicators use 40% opacity, increasing on hover/focus; direct sources remain at full strength.
-- Tooltips use light surfaces and surrounding text/count colors. Numeric breakdowns have aligned removal/addition columns. Signal tables use a narrow icon column followed by path and message.
+- Tree names and change counters have no tooltips. Folder counters use subdued aggregate styling; file counters remain stronger. Signal and help tooltips use light surfaces. Signal tables use a narrow icon column followed by path and message.
+- Folder pages show a compact scope summary and a Type-by-Importance matrix. Both axes use equally weighted, non-interactive filter-style tiles with a subtle green fill. The table uses its natural content width rather than stretching across the pane. Subtle vertical dividers separate columns, matching the horizontal row rules. Cells use one compact line in count / +added / −removed order, explained by a small legend; nonempty cells retain explicit zero counters. The first All row and data column have no background fill; their labels use the same tiles as other axis labels. File counts retain binary/rename-only categories; empty intersections use a dash. The matrix scrolls horizontally when space is limited.
+- Long diff lines wrap within both unified and split panes, including unbroken tokens. Gutters stay anchored at the first visual line.
 - Type and importance names act as subtly filled toggle buttons; their group labels remain available to assistive tools.
 
 ## Asset provenance

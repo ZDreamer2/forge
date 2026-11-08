@@ -24,6 +24,14 @@ window.forgeFixtures = [
 			[" ", "  return ("],
 			["-", '    <div className="tender-list">'],
 			["+", '    <section aria-label="Search results" className="tender-list">'],
+			[
+				"+",
+				'      <p className="review-note">Search results include active tenders from every selected region, with matching procurement categories, publication dates, customer details, and submission deadlines available without leaving the review.</p>',
+			],
+			[
+				"+",
+				'      <a href="https://example.invalid/tenders/very-long-workspace-reference-without-breaks-0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz">Open tender reference</a>',
+			],
 			[" ", "      {tenders.map((tender) => ("],
 			[" ", "        <TenderCard key={tender.id} tender={tender} />"],
 			[" ", "      ))}"],
@@ -146,13 +154,13 @@ window.forgeFixtures = [
 
 // Explicit, fictional analysis metadata. The production server owns classification.
 const fixtureMetadata = [
-	["code", "high"],
 	["code", "medium"],
 	["code", "medium"],
+	["code", "low"],
 	["doc", "medium"],
 	["assets", "medium"],
 	["config", "none"],
-	["code", "high"],
+	["code", "medium"],
 	["code", "medium"],
 ];
 window.forgeFixtures.forEach((file, index) => {
@@ -268,6 +276,169 @@ window.forgeFolderSignals = [
 	},
 ];
 
+// Authored importance outcomes, not a browser-side policy implementation.
+// Suffix examples are global; Core/Domain/vendor path examples belong to BiCo only.
+window.forgeFixtures.push(
+	{
+		repo: "BiCo",
+		root: ".",
+		codebase: "Web application",
+		path: "src/Core/Review/ReviewPolicy.php",
+		type: "code",
+		importance: "high",
+		kind: "M",
+		added: 6,
+		removed: 2,
+		lines: [
+			[" ", "<?php"],
+			["-", "return $changes;"],
+			["+", "return $policy->review($changes);"],
+		],
+	},
+	{
+		repo: "BiCo",
+		root: ".",
+		codebase: "Web application",
+		path: "src/Domain/Review/ReviewScope.php",
+		type: "code",
+		importance: "high",
+		kind: "M",
+		added: 4,
+		removed: 1,
+		lines: [
+			[" ", "<?php"],
+			["-", "return $repository;"],
+			["+", "return $workspace->reviewScope();"],
+		],
+	},
+	{
+		repo: "BiCo",
+		root: ".",
+		codebase: "Web application",
+		path: "src/Modules/Tender/Domain/Tender.php",
+		type: "code",
+		importance: "high",
+		kind: "M",
+		added: 5,
+		removed: 2,
+		lines: [
+			[" ", "<?php"],
+			["-", "return $this->deadline;"],
+			["+", "return $this->submissionDeadline();"],
+		],
+	},
+	{
+		repo: "BiCo",
+		root: ".",
+		codebase: "Web application",
+		path: "src/Core/Review/panel.css",
+		type: "code",
+		importance: "low",
+		kind: "M",
+		added: 3,
+		removed: 1,
+		lines: [
+			[" ", ".review-panel {"],
+			["-", "  gap: 12px;"],
+			["+", "  gap: 8px;"],
+			[" ", "}"],
+		],
+	},
+	{
+		repo: "BiCo",
+		root: ".",
+		codebase: "Web application",
+		path: "src/Core/Review/panel.phtml",
+		type: "code",
+		importance: "low",
+		kind: "M",
+		added: 2,
+		removed: 1,
+		lines: [
+			["-", "<h2>Changes</h2>"],
+			["+", "<h2>Matching changes</h2>"],
+		],
+	},
+	{
+		repo: "BiCo",
+		root: ".",
+		codebase: "Web application",
+		path: "src/Modules/Tender/Domain/Templates/panel.blade.php",
+		type: "code",
+		importance: "low",
+		kind: "M",
+		added: 2,
+		removed: 1,
+		lines: [
+			["-", "<h2>{{ $tender->name }}</h2>"],
+			["+", "<h2>{{ $tender->displayName() }}</h2>"],
+		],
+	},
+	{
+		repo: "BiCo",
+		root: ".",
+		codebase: "Web application",
+		path: "library/vendor/example/Normalizer.php",
+		type: "code",
+		importance: "low",
+		kind: "M",
+		added: 2,
+		removed: 1,
+		lines: [
+			[" ", "<?php"],
+			["-", "return trim($value);"],
+			["+", "return trim((string) $value);"],
+		],
+	},
+	{
+		repo: "Forge",
+		root: "library/tools/forge",
+		codebase: "Forge UI",
+		path: "library/tools/forge/ui/src/review.css",
+		type: "code",
+		importance: "low",
+		kind: "M",
+		added: 2,
+		removed: 1,
+		lines: [
+			[" ", ".review {"],
+			["-", "  gap: 12px;"],
+			["+", "  gap: 8px;"],
+			[" ", "}"],
+		],
+	},
+	{
+		repo: "Forge",
+		root: "library/tools/forge",
+		codebase: "Forge server",
+		path: "library/tools/forge/server/src/Core/ReviewPolicy.ts",
+		type: "code",
+		importance: "medium",
+		kind: "M",
+		added: 3,
+		removed: 1,
+		lines: [
+			["-", "return changes;"],
+			["+", "return review(changes);"],
+		],
+	},
+	{
+		repo: "Forge",
+		root: "library/tools/forge",
+		codebase: "Forge tooling",
+		path: "library/tools/forge/library/vendor/example/Normalizer.ts",
+		type: "code",
+		importance: "medium",
+		kind: "M",
+		added: 2,
+		removed: 1,
+		lines: [
+			["-", "return value.trim();"],
+			["+", "return String(value).trim();"],
+		],
+	},
+);
+
 // A bounded 100-file design example, not a suggested review batch size.
 window.forgeLargeFixtures = [...window.forgeFixtures];
 const exampleModules = ["Tender", "Search", "Notifications", "Accounts", "Reports", "Subscriptions"];
@@ -275,10 +446,10 @@ for (let index = 0; window.forgeLargeFixtures.length < 100; index++) {
 	const forge = index % 3 === 0;
 	const moduleName = exampleModules[index % exampleModules.length];
 	const type = ["code", "code", "tests", "doc", "config", "assets"][index % 6];
-	const importance = ["high", "medium", "low", "none"][index % 4];
+	const importance = type === "tests" ? "low" : "medium";
 	const kind = ["M", "M", "A", "D", "R"][index % 5];
 	const extension = { code: "tsx", tests: "test.tsx", doc: "md", config: "yaml", assets: "png" }[type];
-	const filename = `${index % 7 === 0 ? "WorkspaceChangeNotificationPreferences" : moduleName + "View"}${String(index + 1).padStart(2, "0")}.${extension}`;
+	const filename = `${index % 7 === 0 ? "WorkspaceChangeNotificationPreferences" : `${moduleName}View`}${String(index + 1).padStart(2, "0")}.${extension}`;
 	const folder = forge
 		? `library/tools/forge/ui/src/Components/Review/${moduleName}/Details`
 		: `src/Modules/${moduleName}/Components/Management/Preferences/Details`;

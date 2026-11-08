@@ -1,6 +1,6 @@
 (() => {
 	const $ = (id) => document.getElementById(id);
-	const escape = (value) =>
+	const escapeHtml = (value) =>
 		String(value).replace(
 			/[&<>"']/g,
 			(char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
@@ -10,6 +10,7 @@
 	let mode = "unified";
 	let expandedContext = false;
 	const closed = new Set();
+	const initializedFolders = new Set();
 	const types = { code: "Code", tests: "Tests", doc: "Docs", config: "Config", assets: "Assets" };
 	const importance = { high: "High", medium: "Medium", low: "Low", none: "None" };
 	const enabled = { type: new Set(Object.keys(types)), importance: new Set(["high", "medium", "low"]) };
@@ -25,23 +26,25 @@
 		removed: entries.reduce((sum, file) => sum + file.removed, 0),
 	});
 	function breakdown(entries) {
-		return [
-			["Type", types, "type"],
-			["Importance", importance, "importance"],
-		]
-			.map(([label, values, field]) => {
-				const rows = Object.entries(values)
-					.map(([key, name]) => {
-						const count = totals(entries.filter((file) => file[field] === key));
-						if (count.added === 0 && count.removed === 0) return "";
-						return `<tr><th scope="row">${name}</th><td class="removed">${count.removed ? `−${count.removed}` : ""}</td><td class="added">${count.added ? `+${count.added}` : ""}</td></tr>`;
-					})
-					.join("");
-				return rows ? `<table><caption>${label}</caption><tbody>${rows}</tbody></table>` : "";
-			})
-			.join("");
+		const columns = Object.entries(importance).filter(([key]) => entries.some((file) => file.importance === key));
+		columns.unshift(["all", "All"]);
+		const rows = Object.entries(types).filter(([key]) => entries.some((file) => file.type === key));
+		rows.unshift(["all", "All"]);
+		return `<table><caption>Type × importance<span class="matrix-legend">Files / added / removed</span></caption><thead><tr><th scope="col">Type / Importance</th>${columns.map(([key, name]) => `<th scope="col"${key === "all" ? ' class="matrix-total"' : ""}><span class="matrix-label">${name}</span></th>`).join("")}</tr></thead><tbody>${rows
+			.map(
+				([type, name]) =>
+					`<tr${type === "all" ? ' class="matrix-total"' : ""}><th scope="row"><span class="matrix-label">${name}</span></th>${columns
+						.map(([level]) => {
+							const matching = entries.filter(
+								(file) => (type === "all" || file.type === type) && (level === "all" || file.importance === level),
+							);
+							const count = totals(matching);
+							return `<td${level === "all" ? ' class="matrix-total"' : ""}>${matching.length ? `<span class="matrix-values" aria-label="${matching.length} files, ${count.added} added lines, ${count.removed} removed lines"><span>${matching.length}</span><span class="matrix-separator"> / </span><span class="added">+${count.added}</span><span class="matrix-separator"> / </span><span class="removed">−${count.removed}</span></span>` : '<span class="matrix-empty" aria-label="No matching files">—</span>'}</td>`;
+						})
+						.join("")}</tr>`,
+			)
+			.join("")}</tbody></table>`;
 	}
-	const kinds = { M: "Modified", A: "Added", D: "Deleted", R: "Renamed" };
 	function icon(file) {
 		const extension = file.path.split(".").pop().toLowerCase();
 		const name =
@@ -54,10 +57,9 @@
 	}
 	function counters(entries) {
 		const count = totals(entries);
-		const tooltip = breakdown(entries);
-		return `<span class="line-counts" ${tooltip ? `tabindex="0" aria-label="Line counts and breakdown" data-tooltip="${escape(tooltip)}"` : 'aria-label="No line changes"'}><span class="removed">${count.removed ? `−${count.removed}` : ""}</span><span class="added">${count.added ? `+${count.added}` : ""}</span></span>`;
+		return `<span class="line-counts" aria-label="${count.removed} removed lines, ${count.added} added lines"><span class="removed">${count.removed ? `−${count.removed}` : ""}</span><span class="added">${count.added ? `+${count.added}` : ""}</span></span>`;
 	}
-	const within = (path, scope) => !scope || scope === "." || path === scope || path.startsWith(scope + "/");
+	const within = (path, scope) => !scope || scope === "." || path === scope || path.startsWith(`${scope}/`);
 	const directSignals = (entry, folder = false) =>
 		(entry.signals || []).map((signal) => ({ ...signal, path: entry.path, repo: entry.repo, folder }));
 	function scopeSignals(path) {
@@ -84,12 +86,12 @@
 				const path = record.path + (record.folder && !record.path.endsWith("/") ? "/" : "");
 				const pathLabel =
 					interactive && !record.folder
-						? `<button class="text-button" data-open-signal-file="${escape(record.path)}">${escape(path)}</button>`
-						: `<code>${escape(path)}</code>`;
+						? `<button class="text-button" data-open-signal-file="${escapeHtml(record.path)}">${escapeHtml(path)}</button>`
+						: `<code>${escapeHtml(path)}</code>`;
 				const metadata = interactive
-					? `<div class="signal-meta"><span>${escape(record.handler)}</span>${record.location ? `<span>${record.location.side === "base" ? "Base" : "Current"} · line ${record.location.line}${record.location.column ? ":" + record.location.column : ""}</span>` : ""}${hidden ? `<button class="text-button" data-reveal-signal="${escape(record.path)}">Reveal file</button>` : ""}</div>`
+					? `<div class="signal-meta"><span>${escapeHtml(record.handler)}</span>${record.location ? `<span>${record.location.side === "base" ? "Base" : "Current"} · line ${record.location.line}${record.location.column ? `:${record.location.column}` : ""}</span>` : ""}${hidden ? `<button class="text-button" data-reveal-signal="${escapeHtml(record.path)}">Reveal file</button>` : ""}</div>`
 					: "";
-				return `<tr class="signal-${record.severity}"><td class="signal-severity"><span class="signal-severity-icon" role="img" aria-label="${record.severity === "warning" ? "Warning" : "Notice"}" title="${record.severity === "warning" ? "Warning" : "Notice"}">${signalIcon(record.severity)}</span></td><td class="signal-path">${pathLabel}${hidden ? '<span class="signal-filtered">Filtered out</span>' : ""}</td><td class="signal-message-cell">${escape(record.message)}${metadata}</td></tr>`;
+				return `<tr class="signal-${record.severity}"><td class="signal-severity"><span class="signal-severity-icon" role="img" aria-label="${record.severity === "warning" ? "Warning" : "Notice"}" title="${record.severity === "warning" ? "Warning" : "Notice"}">${signalIcon(record.severity)}</span></td><td class="signal-path">${pathLabel}${hidden ? '<span class="signal-filtered">Filtered out</span>' : ""}</td><td class="signal-message-cell">${escapeHtml(record.message)}${metadata}</td></tr>`;
 			})
 			.join("")}</tbody></table>`;
 	}
@@ -101,7 +103,7 @@
 				const inheritedOnly = folder && !entries.some((record) => record.folder && record.path === sourcePath);
 				const symbol = signalIcon(severity);
 				const summary = signalTable(records);
-				return `<button class="signal-badge signal-${severity}${inheritedOnly ? " signal-inherited" : ""}" data-signal-target="${escape(target)}" data-signal-folder="${folder}" data-tooltip="${escape(summary)}" aria-label="${entries.length} ${severity}${entries.length > 1 ? "s" : ""}${inheritedOnly ? " in descendants" : ""}; show analysis messages">${symbol}</button>`;
+				return `<button class="signal-badge signal-${severity}${inheritedOnly ? " signal-inherited" : ""}" data-signal-target="${escapeHtml(target)}" data-signal-folder="${folder}" data-tooltip="${escapeHtml(summary)}" aria-label="${entries.length} ${severity}${entries.length > 1 ? "s" : ""}${inheritedOnly ? " in descendants" : ""}; show analysis messages">${symbol}</button>`;
 			})
 			.join("");
 	}
@@ -139,6 +141,7 @@
 		if (!file) return;
 		enabled.type.add(file.type);
 		enabled.importance.add(file.importance);
+		renderTree();
 		for (const key of closed) {
 			if (within(path, key.slice("folder:".length))) closed.delete(key);
 		}
@@ -195,23 +198,33 @@
 			}
 			parent.files.push(file);
 		}
-		function branch(node, depth = 0) {
+		function prepare(node, depth = 0) {
 			// Compact chains of directories while keeping a single canonical path per row.
 			while (!node.repository && !node.files.length && node.children.size === 1 && depth > 0) {
 				const child = [...node.children.values()][0];
 				if (child.repository) break;
-				node = { ...child, name: node.name + "/" + child.name };
+				node = { ...child, name: `${node.name}/${child.name}` };
 			}
 			const key = `folder:${node.path}`;
+			node.importance =
+				["high", "medium", "low", "none"].find((level) => node.entries.some((file) => file.importance === level)) ||
+				"none";
+			if (!initializedFolders.has(key)) {
+				initializedFolders.add(key);
+				if (node.importance === "low" || node.importance === "none") closed.add(key);
+			}
 			folders.set(key, node);
+			node.children = new Map([...node.children].map(([name, child]) => [name, prepare(child, depth + 1)]));
+			return node;
+		}
+		function branch(node, depth = 0) {
+			const key = `folder:${node.path}`;
+			const folderImportance = node.importance;
 			const homogeneous =
 				node.entries.length && node.entries.every((file) => file.kind === node.entries[0].kind)
 					? node.entries[0].kind
 					: "M";
-			const folderImportance =
-				["high", "medium", "low", "none"].find((level) => node.entries.some((file) => file.importance === level)) ||
-				"none";
-			const folderRow = `<div class="tree-row folder-row ${node.repository ? "repository-row" : ""} change-${homogeneous} importance-${folderImportance} ${selected === key ? "active" : ""}" style="--depth:${depth}"><button class="disclosure" data-toggle="${escape(key)}" aria-label="${closed.has(key) ? "Expand" : "Collapse"} ${escape(node.name)}" aria-expanded="${!closed.has(key)}">${closed.has(key) ? "▸" : "▾"}</button>${window.forgeIcons["folder-neutral"]}<button class="node-label" data-folder="${escape(key)}" aria-pressed="${selected === key}" title="${node.repository ? "Repository · " : ""}${escape(node.path)} · ${node.entries.length ? kinds[homogeneous] + " changes · " + importance[folderImportance] + " importance" : "No visible changes"}">${escape(node.name)}</button>${signalBadges(scopeSignals(node.path), key, true, node.path)}${counters(node.entries)}</div>`;
+			const folderRow = `<div class="tree-row folder-row ${node.repository ? "repository-row" : ""} change-${homogeneous} importance-${folderImportance} ${selected === key ? "active" : ""}" style="--depth:${depth}"><button class="disclosure" data-toggle="${escapeHtml(key)}" aria-label="${closed.has(key) ? "Expand" : "Collapse"} ${escapeHtml(node.name)}" aria-expanded="${!closed.has(key)}">${closed.has(key) ? "▸" : "▾"}</button>${window.forgeIcons["folder-neutral"]}<button class="node-label" data-folder="${escapeHtml(key)}" aria-pressed="${selected === key}">${escapeHtml(node.name)}</button>${signalBadges(scopeSignals(node.path), key, true, node.path)}${counters(node.entries)}</div>`;
 			if (closed.has(key)) return folderRow;
 			shown.push(...node.files);
 			return (
@@ -220,13 +233,13 @@
 				node.files
 					.map(
 						(file) =>
-							`<div class="tree-row change-${file.kind} importance-${file.importance} ${selected === file.path ? "active" : ""}" style="--depth:${depth + 1}"><span class="disclosure-spacer"></span>${icon(file)}<button class="node-label" data-file="${escape(file.path)}" aria-pressed="${selected === file.path}" title="${escape(file.path)} · ${types[file.type]} · ${importance[file.importance]} · ${kinds[file.kind]}">${escape(file.path.split("/").pop())}</button>${signalBadges(directSignals(file), file.path)}${counters([file])}</div>`,
+							`<div class="tree-row change-${file.kind} importance-${file.importance} ${selected === file.path ? "active" : ""}" style="--depth:${depth + 1}"><span class="disclosure-spacer"></span>${icon(file)}<button class="node-label" data-file="${escapeHtml(file.path)}" aria-pressed="${selected === file.path}">${escapeHtml(file.path.split("/").pop())}</button>${signalBadges(directSignals(file), file.path)}${counters([file])}</div>`,
 					)
 					.join("")
 			);
 		}
 		$("tree").innerHTML = visible.length
-			? branch(root)
+			? branch(prepare(root))
 			: '<div class="empty"><strong>No matching changes</strong>Adjust the type or importance filters.</div>';
 		$("visible-summary").innerHTML =
 			`<span class="shown-label" tabindex="0" data-tooltip="Line changes in matching files exposed by expanded folders. Files inside collapsed folders are excluded. Scrolling does not affect this total.">Shown</span>${counters(shown)}`;
@@ -244,9 +257,11 @@
 		if (selectedFolder) {
 			const entries = visibleFiles().filter((file) => within(file.path, selectedFolder.path));
 			$("file-header").innerHTML =
-				`<div class="selected-file-bar"><h2 class="workspace-file-path" title="Workspace-relative folder path">${escape(selectedFolder.path)}/</h2></div>`;
+				`<div class="selected-file-bar"><h2 class="workspace-file-path" title="Workspace-relative folder path">${escapeHtml(selectedFolder.path)}/</h2></div>`;
+			const allEntries = files().filter((file) => within(file.path, selectedFolder.path));
+			const count = totals(entries);
 			$("diff").innerHTML =
-				`<div class="empty"><strong>${entries.length} visible changed files</strong>Select a file to inspect its diff. Folder counts follow the current filters.</div>`;
+				`<section class="folder-details" aria-label="Folder changes"><div class="folder-summary"><h3>${entries.length} matching files <span>of ${allEntries.length} changed files</span></h3>${counters(entries)}</div><p class="folder-scope">Matching descendants, including nested repositories. Folder expansion does not affect these totals.</p>${!entries.length ? '<p class="folder-empty">No changes match the current filters.</p>' : `${!count.added && !count.removed ? '<p class="folder-empty">No line changes. Binary files and pure renames still count as changed files.</p>' : ""}<div class="folder-breakdowns">${breakdown(entries)}</div>`}</section>`;
 			return;
 		}
 		const file = files().find((entry) => entry.path === selected);
@@ -259,15 +274,17 @@
 		const kind = { M: "Modified", A: "Added", D: "Deleted", R: "Renamed" }[file.kind];
 		const parts = file.path.split("/");
 		const filename = parts.pop();
-		const first = parts.length ? parts.shift() + "/" : "";
-		const parent = parts.length ? parts.pop() + "/" : "";
-		const middle = parts.length ? parts.join("/") + "/" : "";
-		const renameNote = file.from ? `<div class="rename-note">Renamed from <code>${escape(file.from)}</code></div>` : "";
+		const first = parts.length ? `${parts.shift()}/` : "";
+		const parent = parts.length ? `${parts.pop()}/` : "";
+		const middle = parts.length ? `${parts.join("/")}/` : "";
+		const renameNote = file.from
+			? `<div class="rename-note">Renamed from <code>${escapeHtml(file.from)}</code></div>`
+			: "";
 		$("file-header").innerHTML =
-			`<div class="selected-file-bar"><h2 class="workspace-file-path file-path-fragments" aria-label="${escape(file.path)}" title="${escape(file.path)} · ${kind}"><span class="path-first">${escape(first)}</span><span class="path-middle">${escape(middle)}</span><span class="path-parent">${escape(parent)}</span><strong>${escape(filename)}</strong></h2><div class="segments" aria-label="Diff layout"><button data-mode="unified" class="${mode === "unified" ? "active" : ""}" aria-pressed="${mode === "unified"}">Unified</button><button data-mode="split" class="${mode === "split" ? "active" : ""}" aria-pressed="${mode === "split"}">Split</button></div></div>`;
+			`<div class="selected-file-bar"><h2 class="workspace-file-path file-path-fragments" aria-label="${escapeHtml(file.path)}" title="${escapeHtml(file.path)} · ${kind}"><span class="path-first">${escapeHtml(first)}</span><span class="path-middle">${escapeHtml(middle)}</span><span class="path-parent">${escapeHtml(parent)}</span><strong>${escapeHtml(filename)}</strong></h2><div class="segments" aria-label="Diff layout"><button data-mode="unified" class="${mode === "unified" ? "active" : ""}" aria-pressed="${mode === "unified"}">Unified</button><button data-mode="split" class="${mode === "split" ? "active" : ""}" aria-pressed="${mode === "split"}">Split</button></div></div>`;
 		if (file.message) {
 			$("diff").innerHTML =
-				`${renameNote}<div class="empty"><strong>${kind} file</strong>${escape(file.message)}</div>`;
+				`${renameNote}<div class="empty"><strong>${kind} file</strong>${escapeHtml(file.message)}</div>`;
 			return;
 		}
 		let oldLine = 18,
@@ -279,7 +296,7 @@
 			current: sign === "-" ? "" : newLine++,
 		}));
 		const row = (entry, side) =>
-			`<div class="code-row ${entry.sign === "+" ? "ins" : entry.sign === "-" ? "del" : ""}">${side ? `<span class="num">${side === "old" ? entry.old : entry.current}</span>` : `<span class="num">${entry.old}</span><span class="num">${entry.current}</span>`}<span class="sign">${escape(entry.sign)}</span><span class="code">${escape(entry.code)}</span></div>`;
+			`<div class="code-row ${entry.sign === "+" ? "ins" : entry.sign === "-" ? "del" : ""}">${side ? `<span class="num">${side === "old" ? entry.old : entry.current}</span>` : `<span class="num">${entry.old}</span><span class="num">${entry.current}</span>`}<span class="sign">${escapeHtml(entry.sign)}</span><span class="code">${escapeHtml(entry.code)}</span></div>`;
 		const body =
 			mode === "unified"
 				? rows.map((entry) => row(entry)).join("")
@@ -340,7 +357,7 @@
 	});
 	$("refresh").addEventListener("click", refresh);
 	$("collapse").addEventListener("click", () => {
-		folders.forEach((_, key) => closed.add(key));
+		for (const key of folders.keys()) closed.add(key);
 		renderTree();
 	});
 	$("expand").addEventListener("click", () => {
@@ -475,8 +492,8 @@
 		tooltip.hidden = false;
 		target.setAttribute("aria-describedby", tooltip.id);
 		const rect = target.getBoundingClientRect();
-		tooltip.style.left = Math.max(8, Math.min(rect.left, innerWidth - tooltip.offsetWidth - 8)) + "px";
-		tooltip.style.top = Math.max(8, Math.min(rect.bottom + 7, innerHeight - tooltip.offsetHeight - 8)) + "px";
+		tooltip.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - tooltip.offsetWidth - 8))}px`;
+		tooltip.style.top = `${Math.max(8, Math.min(rect.bottom + 7, innerHeight - tooltip.offsetHeight - 8))}px`;
 	}
 	document.addEventListener("pointerover", (event) => {
 		const target = event.target.closest("[data-tooltip]");
@@ -499,6 +516,17 @@
 		const bounded = Math.max(240, Math.min(600, width));
 		document.body.style.setProperty("--sidebar-width", `${bounded}px`);
 		resize.setAttribute("aria-valuenow", bounded);
+		try {
+			localStorage.setItem("forge-prototype-sidebar-width", String(bounded));
+		} catch {
+			// Resizing remains usable when browser storage is unavailable.
+		}
+	}
+	try {
+		const saved = localStorage.getItem("forge-prototype-sidebar-width");
+		if (saved !== null && Number.isFinite(Number(saved))) setWidth(Number(saved));
+	} catch {
+		// Keep the default width when browser storage is unavailable.
 	}
 	resize.addEventListener("pointerdown", (event) => {
 		resize.setPointerCapture(event.pointerId);
