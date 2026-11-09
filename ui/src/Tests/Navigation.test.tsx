@@ -186,14 +186,14 @@ it("keeps current interactions through pending refresh, failure, and successful 
 	await user.click(screen.getByRole("button", { name: "Expand low" }));
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["src/a.ts"]))));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("button", { name: /All workspace changes: 1 changed files/ });
+	await screen.findByRole("img", { name: /All workspace changes: 1 changed files/ });
 	network.use(
 		http.get("http://localhost/api/changes/analysis", () =>
 			Response.json(fixture(["src/a.ts", "low/child.ts"], ["low/child.ts"])),
 		),
 	);
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("button", { name: /All workspace changes: 2 changed files/ });
+	await screen.findByRole("img", { name: /All workspace changes: 2 changed files/ });
 	expect(screen.getByRole("button", { name: "Expand low" })).toBeInTheDocument();
 });
 
@@ -216,7 +216,7 @@ it("keeps filtered selection metadata and repairs disappearing paths only after 
 		expect(changes.request).toBeDefined();
 	});
 	await act(async () => changes.release(Response.json(fixture([]))));
-	await screen.findByRole("button", { name: /All workspace changes: 0 changed files/ });
+	await screen.findByRole("img", { name: /All workspace changes: 0 changed files/ });
 	expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
 	expect(selectedPath()).toBe("src/a.ts");
 	expect(screen.queryByText(/Selection is unavailable/)).not.toBeInTheDocument();
@@ -243,7 +243,7 @@ it("preserves a repository address while Refresh adds and removes its first and 
 	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["repos/new.ts"]))));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("button", { name: "All workspace changes: 1 changed files, 0 removed lines, 1 added lines" });
+	await screen.findByRole("img", { name: "All workspace changes: 1 changed files, 0 removed lines, 1 added lines" });
 	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
 	expect(selectedPath()).toBe("repos/empty");
 	await user.click(screen.getByRole("button", { name: "Collapse ." }));
@@ -263,7 +263,7 @@ it("preserves a repository address while Refresh adds and removes its first and 
 	await screen.findByRole("button", { name: "Select repos/empty/child.ts" });
 	expect(screen.getByRole("button", { name: "Select repos/empty", pressed: true })).toBeInTheDocument();
 	expect(
-		within(screen.getByRole("navigation", { name: "Changed files" })).getByRole("button", {
+		within(screen.getByRole("navigation", { name: "Changed files" })).getByRole("img", {
 			name: "repos/empty visible subtree: 1 changed files, 0 removed lines, 1 added lines",
 		}),
 	).toBeInTheDocument();
@@ -271,14 +271,14 @@ it("preserves a repository address while Refresh adds and removes its first and 
 
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["repos/new.ts"]))));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("button", { name: "All workspace changes: 1 changed files, 0 removed lines, 1 added lines" });
+	await screen.findByRole("img", { name: "All workspace changes: 1 changed files, 0 removed lines, 1 added lines" });
 	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
 	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
 	expect(selectedPath()).toBe("repos/empty");
 
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture([]))));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("button", { name: /All workspace changes: 0 changed files/ });
+	await screen.findByRole("img", { name: /All workspace changes: 0 changed files/ });
 	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
 	expect(details().getByRole("heading", { name: "repos/empty" })).toBeVisible();
 	expect(selectedPath()).toBe("repos/empty");

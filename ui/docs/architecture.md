@@ -18,12 +18,12 @@ URL is the only record of selected path.
 
 | Owner | Responsibility |
 | --- | --- |
-| WorkspaceReview | Composes panes; owns filters, cross-pane selection/copy actions, layout and coordinated explicit Refresh |
+| WorkspaceReview | Composes panes; owns filters, cross-pane selection/copy actions, layout with persisted sidebar preference and coordinated explicit Refresh |
 | Owned WorkspaceData | Workspace identity and repository-context reads, independent failure/retry and freshness |
 | Owned ChangeSetData | Comparison analysis and selected short/complete patch reads, cancellation, freshness and coordinated Refresh |
 | ChangesNavigator | Controlled filters, hierarchy presentation, private tree projection and expansion/reveal lifecycle |
-| SelectionViewer | Canonical selected-entry metadata, folder/repository summaries, signal details/disclosure and no-selection orientation, independently of navigator rows |
-| ChangesSummary | Shared count/line-breakdown presentation used by header, navigator and viewer |
+| SelectionViewer | Canonical selected-entry metadata, folder/repository summaries and Type-by-Importance matrix, signal details/disclosure and no-selection orientation, independently of navigator rows |
+| ChangesSummary | Shared informational file and line counters used by header, navigator and viewer |
 | SignalSummary | Shared warning/notice indicators and complete informational tooltip lists |
 
 ## Data and derived state

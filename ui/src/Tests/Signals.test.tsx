@@ -289,7 +289,7 @@ it("removes vanished messages, resets a surviving subject and clears a disappear
 	const empty: WorkspaceAnalysis = { root: ".", nodes: { ".": node(".") }, handlers: {}, codebases: {} };
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(empty)));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("button", { name: /All workspace changes: 0 changed files/ });
+	await screen.findByRole("img", { name: /All workspace changes: 0 changed files/ });
 	expect(within(screen.getByRole("navigation", { name: "Changed files" })).getByText("No changes")).toBeInTheDocument();
 	expect(selectedPath()).toBe("nested");
 	expect(screen.queryByRole("region", { name: "Signal details" })).not.toBeInTheDocument();

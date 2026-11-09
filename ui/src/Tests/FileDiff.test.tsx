@@ -345,7 +345,7 @@ it("loads a transition's own diff alongside its subtree and supports signal-sour
 	const { reads } = serve();
 	const user = start("transition");
 	await loaded("transition");
-	expect(screen.getByText(/2 visible changed files/)).toBeInTheDocument();
+	expect(screen.getByText(/2 matching changed files/)).toBeInTheDocument();
 	expect(screen.getByRole("region", { name: "Selected entry metadata" })).toHaveTextContent("directory");
 	await user.click(screen.getByRole("button", { name: "Inspect warnings for ." }));
 	await user.click(screen.getByRole("button", { name: "Inspect source a.ts" }));

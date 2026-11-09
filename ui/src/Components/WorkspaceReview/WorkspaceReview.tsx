@@ -31,7 +31,14 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 	const [copyFeedback, setCopyFeedback] = useState("");
 	const copyAttempt = useRef(0);
 	const [viewport, setViewport] = useState(() => window.innerWidth);
-	const [sidebarWidth, setSidebarWidth] = useState(390);
+	const [sidebarWidth, setSidebarWidth] = useState(() => {
+		try {
+			const saved = Number(window.localStorage.getItem("forge-sidebar-width"));
+			return Number.isFinite(saved) && saved > 0 ? saved : 390;
+		} catch {
+			return 390;
+		}
+	});
 	const sidebarMin = Math.min(240, Math.floor(viewport * 0.55));
 	const sidebarMax = Math.max(sidebarMin, Math.min(600, viewport - Math.min(280, viewport * 0.4)));
 	const width = Math.max(sidebarMin, Math.min(sidebarMax, sidebarWidth));
@@ -66,6 +73,16 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 			onNavigate(undefined, true);
 		}
 	}, [invalidSelection, selectedPath, workspace.isSuccess, analysis.isSuccess, updating, review, onNavigate]);
+
+	function resizeSidebar(next: number) {
+		const preferred = Math.max(sidebarMin, Math.min(sidebarMax, next));
+		setSidebarWidth(preferred);
+		try {
+			window.localStorage.setItem("forge-sidebar-width", String(preferred));
+		} catch {
+			// Storage can be unavailable; the current view must still resize.
+		}
+	}
 
 	function inspect(path: string, reveal = false) {
 		const request = { path, occurrence: ++requestOccurrence.current };
@@ -196,8 +213,7 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 					event.preventDefault();
 				}}
 				onPointerMove={(event) => {
-					if (event.currentTarget.hasPointerCapture(event.pointerId))
-						setSidebarWidth(Math.max(sidebarMin, Math.min(sidebarMax, event.clientX)));
+					if (event.currentTarget.hasPointerCapture(event.pointerId)) resizeSidebar(event.clientX);
 				}}
 				onPointerUp={(event) => {
 					if (event.currentTarget.hasPointerCapture(event.pointerId))
@@ -206,7 +222,7 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 				onKeyDown={(event) => {
 					if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
 						event.preventDefault();
-						setSidebarWidth(Math.max(sidebarMin, Math.min(sidebarMax, width + (event.key === "ArrowLeft" ? -20 : 20))));
+						resizeSidebar(width + (event.key === "ArrowLeft" ? -20 : 20));
 					}
 				}}
 			/>

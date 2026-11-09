@@ -1,7 +1,7 @@
-import type { AnalysisSide, AnalysisWireNode, WorkspaceAnalysis } from "@forge/api-contract";
+import type { AnalysisWireNode, WorkspaceAnalysis } from "@forge/api-contract";
 import { Tooltip } from "@mantine/core";
 import type { CSSProperties } from "react";
-import { importanceLabels, importanceOf, type Summary, typeLabels } from "../../../../Internal/changeAnalysis";
+import type { Summary } from "../../../../Internal/changeAnalysis";
 import type { SignalAnalysis } from "../../../../Internal/signalAnalysis";
 import { ChangesSummary } from "../../../ChangesSummary/ChangesSummary";
 import { SignalSummary } from "../../../SignalSummary/SignalSummary";
@@ -87,9 +87,7 @@ export function ChangesTree({
 						>
 							{isExpanded ? "▾" : "▸"}
 						</button>
-					) : (
-						<span className={styles.disclosureSpacer} />
-					)}
+					) : null}
 					{folder ? (
 						<span
 							aria-hidden="true"
@@ -100,23 +98,16 @@ export function ChangesTree({
 					) : (
 						<img className={styles.fileIcon} src={fileIcon(node)} alt="" />
 					)}
-					<Tooltip
-						multiline
-						events={{ hover: true, focus: true, touch: true }}
-						classNames={{ tooltip: styles.tooltip }}
-						label={<NodeFacts entry={entry} codebases={codebases} />}
+					<button
+						type="button"
+						className={styles.name}
+						aria-label={`Select ${path}`}
+						aria-pressed={selectedPath === path}
+						onClick={(event) => onSelect(path, event.ctrlKey)}
 					>
-						<button
-							type="button"
-							className={styles.name}
-							aria-label={`Select ${path}`}
-							aria-pressed={selectedPath === path}
-							onClick={(event) => onSelect(path, event.ctrlKey)}
-						>
-							{name}
-							{node?.kind && folder && <span className={styles.ownChange}> · {node.kind}</span>}
-						</button>
-					</Tooltip>
+						{name}
+						{node?.kind && folder && <span className={styles.ownChange}> · {node.kind}</span>}
+					</button>
 					{signals && onInspect && <SignalSummary signals={signals} path={path} onInspect={onInspect} />}
 					{boundaries.map(({ side, kind, root, owner }) => (
 						<Tooltip
@@ -130,7 +121,7 @@ export function ChangesTree({
 							</button>
 						</Tooltip>
 					))}
-					<ChangesSummary summary={count} label={`${path} visible subtree`} />
+					<ChangesSummary summary={count} label={`${path} visible subtree`} aggregate={folder} />
 				</div>
 				{isExpanded &&
 					entry.children.map((child) => {
@@ -182,50 +173,6 @@ export function ChangesTree({
 			</nav>
 		</div>
 	);
-}
-
-function NodeFacts({ entry, codebases }: { entry: ProjectedNode; codebases?: Codebases | undefined }) {
-	const node = entry.node;
-	return (
-		<div className={styles.nodeFacts}>
-			<strong>{entry.path}</strong>
-			{entry.repository && (
-				<div>Repository · {entry.repository.status === "missing" ? "Missing at startup" : "Available"}</div>
-			)}
-			{node && (
-				<>
-					<div>
-						{node.kind ?? "Structural folder"}
-						{node.from ? ` · Renamed from ${node.from}` : ""}
-					</div>
-					<div>
-						{typeLabels[node.classification.value]}
-						{node.classification.reason ? ` · ${node.classification.reason}` : ""}
-						{node.classification.handler ? ` · Handler: ${node.classification.handler}` : ""}
-					</div>
-					<div>
-						{importanceLabels[importanceOf(node)]} importance
-						{node.effectiveEmphasis.reason ? ` · ${node.effectiveEmphasis.reason}` : ""}
-						{node.effectiveEmphasis.handler ? ` · Handler: ${node.effectiveEmphasis.handler}` : ""}
-						{node.effectiveEmphasis.origin ? ` · Origin: ${node.effectiveEmphasis.origin}` : ""}
-					</div>
-					{(["base", "current"] as const).map(
-						(side) =>
-							node[side] && (
-								<div key={side}>
-									{side === "base" ? "Base" : "Current"}: {sideDescription(node[side], codebases)}
-								</div>
-							),
-					)}
-				</>
-			)}
-		</div>
-	);
-}
-
-function sideDescription(side: AnalysisSide | undefined, codebases?: Codebases | undefined) {
-	if (!side) return "Absent";
-	return `${side.kind} · ${side.path}${side.repository === undefined ? "" : ` · Repository: ${side.repository}`}${side.codebase === undefined ? "" : ` · Codebase: ${codebases?.[side.codebase]?.id ?? side.codebase} (${side.codebase})`}`;
 }
 
 function fileIcon(node: AnalysisWireNode | undefined) {

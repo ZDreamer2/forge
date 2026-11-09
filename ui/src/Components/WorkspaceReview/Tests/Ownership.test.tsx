@@ -19,12 +19,20 @@ vi.mock("../Components/SelectionViewer/Components/FileDiff/Internal/pierreRender
 );
 
 let client: QueryClient;
+let viewportDescriptor: PropertyDescriptor | undefined;
 const suite = createTestSuiteLifecycle({
 	prepare() {
 		client = suite.createQueryClient();
+		viewportDescriptor = Object.getOwnPropertyDescriptor(window, "innerWidth");
 	},
 	browser: { documentAttributes: ["data-mantine-color-scheme"] },
-	beforeCancel: [() => cleanup()],
+	beforeCancel: [
+		() => cleanup(),
+		() => {
+			vi.restoreAllMocks();
+			if (viewportDescriptor) Object.defineProperty(window, "innerWidth", viewportDescriptor);
+		},
+	],
 	runCleanup: (finish) => act(finish),
 });
 
@@ -95,13 +103,14 @@ it("inspects canonical transitions, filtered entries and inclusive subtrees with
 	);
 	const rendered = render(view("."));
 	const details = within(screen.getByRole("region", { name: "Selection details" }));
-	expect(details.getByText(/3 visible changed files/)).toHaveTextContent("of 4 in this subtree");
+	expect(details.getByText(/3 matching changed files/)).toHaveTextContent("of 4 in this subtree");
 	expect(
-		details.getByRole("button", { name: ". visible subtree: 3 changed files, 1 removed lines, 2 added lines" }),
+		details.getByLabelText(". matching subtree: 3 changed files, 1 removed lines, 2 added lines"),
 	).toBeInTheDocument();
 
+	expect(details.getByRole("table", { name: "Matching changes by type and importance" })).toBeInTheDocument();
 	rendered.rerender(view("transition"));
-	expect(details.getByText(/1 visible changed files/)).toHaveTextContent("of 2 in this subtree");
+	expect(details.getByText(/1 matching changed files/)).toHaveTextContent("of 2 in this subtree");
 	expect(details.getByRole("region", { name: "Selected entry metadata" })).toHaveTextContent("Deleted entry");
 	expect(details.getByText(/Own change: 1 removed lines, 2 added lines/)).toBeInTheDocument();
 	rendered.rerender(view("transition/hidden.md"));
@@ -556,4 +565,92 @@ it("invalidates pending inspection after leaving its addressed target even when 
 	rendered.rerender(view(resolved, "late"));
 	expect(screen.getByRole("button", { name: "Show signal details" })).toBeInTheDocument();
 	expect(screen.queryByRole("region", { name: "Signal details" })).not.toBeInTheDocument();
+});
+
+it("restores the sidebar preference across remounts without losing it to temporary viewport bounds", async () => {
+	const user = userEvent.setup();
+	const facts = analysis([node(".")]);
+	suite.createHttpScenario(
+		http.get("http://localhost/api/workspace", () => Response.json(identity)),
+		http.get("http://localhost/api/changes/analysis", () => Response.json(facts)),
+	);
+	function mount() {
+		return render(
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<WorkspaceReview onNavigate={() => {}} />
+				</ForgeTheme>
+			</QueryClientProvider>,
+		);
+	}
+	window.localStorage.setItem("forge-sidebar-width", "510");
+	let rendered = mount();
+	let divider = screen.getByRole("separator", { name: "Resize changes sidebar" });
+	expect(divider).toHaveAttribute("aria-valuenow", "510");
+	divider.focus();
+	await user.keyboard("{ArrowLeft}");
+	expect(divider).toHaveAttribute("aria-valuenow", "490");
+	expect(window.localStorage.getItem("forge-sidebar-width")).toBe("490");
+	Object.defineProperty(window, "innerWidth", { configurable: true, value: 600 });
+	act(() => window.dispatchEvent(new Event("resize")));
+	expect(divider).toHaveAttribute("aria-valuenow", "360");
+	expect(window.localStorage.getItem("forge-sidebar-width")).toBe("490");
+	rendered.unmount();
+	rendered = mount();
+	divider = screen.getByRole("separator", { name: "Resize changes sidebar" });
+	expect(divider).toHaveAttribute("aria-valuenow", "360");
+	Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
+	act(() => window.dispatchEvent(new Event("resize")));
+	expect(divider).toHaveAttribute("aria-valuenow", "490");
+	rendered.unmount();
+	for (const saved of ["", " ", "not-a-width", "Infinity", "0", "-20"]) {
+		window.localStorage.setItem("forge-sidebar-width", saved);
+		rendered = mount();
+		expect(screen.getByRole("separator")).toHaveAttribute("aria-valuenow", "390");
+		rendered.unmount();
+	}
+	for (const [saved, displayed] of [
+		["1", "240"],
+		["900", "600"],
+	] as const) {
+		window.localStorage.setItem("forge-sidebar-width", saved);
+		rendered = mount();
+		expect(screen.getByRole("separator")).toHaveAttribute("aria-valuenow", displayed);
+		expect(window.localStorage.getItem("forge-sidebar-width")).toBe(saved);
+		rendered.unmount();
+	}
+});
+
+it("keeps resizing usable when storage access, reads or writes are blocked", async () => {
+	const user = userEvent.setup();
+	const facts = analysis([node(".")]);
+	suite.createHttpScenario(
+		http.get("http://localhost/api/workspace", () => Response.json(identity)),
+		http.get("http://localhost/api/changes/analysis", () => Response.json(facts)),
+	);
+	for (const failure of ["access", "read", "write"]) {
+		window.localStorage.removeItem("forge-sidebar-width");
+		const blocked = () => {
+			throw new DOMException("Storage blocked", "SecurityError");
+		};
+		if (failure === "access") vi.spyOn(window, "localStorage", "get").mockImplementation(blocked);
+		if (failure === "read") vi.spyOn(Storage.prototype, "getItem").mockImplementation(blocked);
+		if (failure === "write") vi.spyOn(Storage.prototype, "setItem").mockImplementation(blocked);
+		const rendered = render(
+			<QueryClientProvider client={client}>
+				<ForgeTheme env="test">
+					<WorkspaceReview onNavigate={() => {}} />
+				</ForgeTheme>
+			</QueryClientProvider>,
+		);
+		const divider = screen.getByRole("separator", { name: "Resize changes sidebar" });
+		expect(divider).toHaveAttribute("aria-valuenow", "390");
+		divider.focus();
+		await user.keyboard("{ArrowRight}");
+		expect(divider).toHaveAttribute("aria-valuenow", "410");
+		await user.keyboard("{ArrowLeft}{ArrowLeft}");
+		expect(divider).toHaveAttribute("aria-valuenow", "370");
+		rendered.unmount();
+		vi.restoreAllMocks();
+	}
 });

@@ -34,10 +34,7 @@ function signalDetails(page: Page) {
 
 async function summary(page: Page, label: string, files: number, removed: number, added: number) {
 	await page
-		.getByRole("button", {
-			name: `${label}: ${files} changed files, ${removed} removed lines, ${added} added lines`,
-			exact: true,
-		})
+		.getByLabel(`${label}: ${files} changed files, ${removed} removed lines, ${added} added lines`, { exact: true })
 		.waitFor();
 }
 
@@ -109,6 +106,93 @@ async function expectPortal(page: Page, trigger: Locator, inspectTooltip?: (tool
 	await tooltip.waitFor();
 	await trigger.blur();
 	await tooltip.waitFor({ state: "hidden" });
+}
+
+async function expectNoTooltip(page: Page, target: Locator, focusable = false) {
+	await target.hover();
+	// Cross Mantine's hover delay and transition before observing absence.
+	await page.waitForTimeout(400);
+	assert.equal(await page.getByRole("tooltip").count(), 0, "Names and change counters have no hover tooltip");
+	assert.equal(await target.getAttribute("aria-describedby"), null);
+	if (focusable) {
+		await page.keyboard.press("Tab");
+		await target.focus();
+		await page.waitForTimeout(400);
+		assert.equal(await page.getByRole("tooltip").count(), 0, "Tree names have no focus tooltip");
+		await target.blur();
+	} else {
+		assert.equal(await target.evaluate((element) => element.matches("button, [tabindex]")), false);
+	}
+	await page.mouse.move(1090, 1);
+}
+
+async function matrix(page: Page, nodes: AnalysisWireNode[]) {
+	const table = page.getByRole("table", { name: "Matching changes by type and importance", exact: true });
+	await table.waitFor();
+	const types = ["code", "tests", "docs", "config", "assets"];
+	const importance = ["emphasized", "normal", "deemphasized", "hidden"];
+	const labels: Record<string, string> = {
+		code: "Code",
+		tests: "Tests",
+		docs: "Docs",
+		config: "Config",
+		assets: "Assets",
+		emphasized: "High",
+		normal: "Medium",
+		deemphasized: "Low",
+		hidden: "None",
+	};
+	const columns = importance.filter((key) => nodes.some((node) => node.effectiveEmphasis.value === key));
+	for (const key of importance)
+		assert.equal(
+			await table.getByRole("columnheader", { name: labels[key], exact: true }).count(),
+			columns.includes(key) ? 1 : 0,
+		);
+	for (const type of ["all", ...types]) {
+		const matching = type === "all" ? nodes : nodes.filter((node) => node.classification.value === type);
+		const heading = table.getByRole("rowheader", { name: type === "all" ? "All" : labels[type], exact: true });
+		assert.equal(await heading.count(), matching.length ? 1 : 0);
+		if (!matching.length) continue;
+		const cells = heading.locator("..").getByRole("cell");
+		for (const [index, column] of ["all", ...columns].entries()) {
+			const entries = column === "all" ? matching : matching.filter((node) => node.effectiveEmphasis.value === column);
+			const expected = totals(entries);
+			assert.equal(
+				(await cells.nth(index).innerText()).replace(/\s/g, ""),
+				expected.files ? `${expected.files}/+${expected.added}/−${expected.removed}` : "—",
+			);
+		}
+	}
+	assert.equal(await table.getByRole("button").count(), 0, "Matrix labels are informational");
+	assert.ok(
+		await table.evaluate((element) =>
+			[...element.querySelectorAll("td > span[aria-label$='removed lines']")].every(
+				(cell) => cell.ownerDocument.defaultView.getComputedStyle(cell).whiteSpace === "nowrap",
+			),
+		),
+		"Matrix values remain on one line",
+	);
+}
+
+async function treeGeometry(page: Page) {
+	const icon = (path: string) => row(page, path).locator(":scope > img, :scope > span[aria-hidden=true]").first();
+	const root = await icon(".").boundingBox();
+	const folder = await icon("app/Tests").boundingBox();
+	const file = await icon("app/tracked.txt").boundingBox();
+	const app = await icon("app").boundingBox();
+	assert.ok(root && app && folder && file);
+	assert.equal(root.x, 19, "Root icon starts 19px from the sidebar edge");
+	assert.equal(app.x - root.x, 17, "Each tree depth uses one 17px icon step");
+	assert.equal(folder.x, file.x, "Same-depth file and folder icons align");
+	assert.equal(folder.x - app.x, 17);
+	const folderName = await select(page, "app/Tests").boundingBox();
+	const fileName = await select(page, "app/tracked.txt").boundingBox();
+	assert.ok(folderName && fileName);
+	assert.equal(folderName.x, fileName.x, "Same-depth file and folder names align");
+	assert.equal(folderName.x - (folder.x + folder.width), 3, "Icon/name gap is compact");
+	assert.equal((await row(page, "app").boundingBox())?.height, 25);
+	const disclosure = await page.getByRole("button", { name: "Collapse app", exact: true }).boundingBox();
+	assert.ok(disclosure && disclosure.x + disclosure.width <= app.x, "Disclosure stays in the icon's left gutter");
 }
 
 export async function verifyInstalledUi({ address, workspace, workspaceName, sourceState, run }: Deps) {
@@ -286,6 +370,26 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			"true",
 			"Repository placeholder upgrades without changing selection",
 		);
+
+		const nestedChanges = changes.filter((node) => node.path.startsWith("nested/"));
+		await matrix(page, nestedChanges);
+		await page
+			.getByRole("region", { name: "Matching subtree summary" })
+			.getByText(/No line changes/)
+			.waitFor();
+		await page.screenshot({ path: join(screenshots, "matrix-zero-lines.png") });
+		await page.getByRole("button", { name: "Deselect all types and importance levels", exact: true }).click();
+		await page
+			.getByRole("region", { name: "Matching subtree summary" })
+			.getByText(/No changes match the current filters/)
+			.waitFor();
+		assert.equal(await page.getByRole("table", { name: "Matching changes by type and importance" }).count(), 0);
+		await page
+			.getByRole("region", { name: "Matching subtree summary" })
+			.getByRole("heading", { name: /0 matching changed files.*of 1/ })
+			.waitFor();
+		await page.screenshot({ path: join(screenshots, "matrix-filtered-out.png") });
+		await page.getByRole("button", { name: "Select all types and importance levels", exact: true }).click();
 
 		await select(page, "nested/browser-binary.dat").click();
 		await page.getByText("Entry metadata", { exact: true }).click();
@@ -502,6 +606,43 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.goto(`${address}/?path=${encodeURIComponent(".")}`);
 		await waitSelected(page, ".");
 		await select(page, ".").waitFor();
+
+		await matrix(
+			page,
+			changes.filter((node) => node.effectiveEmphasis.value !== "hidden"),
+		);
+		await page.getByRole("button", { name: "Select all types and importance levels", exact: true }).click();
+		await matrix(page, changes);
+		await page.screenshot({ path: join(screenshots, "matrix-all.png") });
+		await page.setViewportSize({ width: 700, height: 800 });
+		const matrixScroll = page.getByRole("table", { name: "Matching changes by type and importance" }).locator("..");
+		assert.ok(
+			await matrixScroll.evaluate(
+				(element) =>
+					element.scrollWidth > element.clientWidth &&
+					element.ownerDocument.defaultView.getComputedStyle(element).overflowX === "auto",
+			),
+			"Narrow folder matrix scrolls locally",
+		);
+		assert.ok(
+			await page.locator("body").evaluate((element) => element.scrollWidth <= 700),
+			"Matrix does not widen the page",
+		);
+		await page.screenshot({ path: join(screenshots, "matrix-narrow.png") });
+		await matrixScroll.evaluate((element) => {
+			element.scrollLeft = element.scrollWidth;
+		});
+		assert.ok(
+			await matrixScroll.evaluate((element) => element.scrollLeft > 0),
+			"Last importance column remains reachable",
+		);
+		await page.setViewportSize({ width: 1100, height: 800 });
+		await page.getByRole("button", { name: "None", exact: true }).click();
+		await matrix(
+			page,
+			changes.filter((node) => node.effectiveEmphasis.value !== "hidden"),
+		);
+
 		await select(page, ".").click({ modifiers: ["Control"] });
 		await page.getByRole("status").filter({ hasText: "Copied: ." }).waitFor();
 		assert.equal(
@@ -529,11 +670,11 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).click();
 		const summaryColumns = await page
-			.getByRole("button", { name: /^Shown changes:/ })
+			.getByLabel(/^Shown changes:/)
 			.locator(":scope > span")
 			.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().right));
 		const rootColumns = await page
-			.getByRole("button", { name: /^\. visible subtree:/ })
+			.getByLabel(/^\. visible subtree:/)
 			.locator(":scope > span")
 			.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().right));
 		assert.deepEqual(rootColumns, summaryColumns, "Removal/addition columns align with the sidebar summary");
@@ -579,7 +720,128 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 				element.ownerDocument.defaultView.getComputedStyle(element).getPropertyValue("--sidebar-width"),
 			);
 		assert.ok(Math.abs(bodyDivider.x - Number.parseFloat(sharedWidth)) < 3, "Header and body use one sidebar width");
-		await expectPortal(page, page.getByRole("button", { name: /^All workspace changes:/ }));
+
+		const preferredWidth = Number(await separator.getAttribute("aria-valuenow"));
+		assert.equal(await page.evaluate(() => localStorage.getItem("forge-sidebar-width")), String(preferredWidth));
+		await page.reload();
+		await settled(page);
+		assert.equal(
+			Number(await separator.getAttribute("aria-valuenow")),
+			preferredWidth,
+			"Reload restores preferred sidebar width",
+		);
+		await page.setViewportSize({ width: 360, height: 740 });
+		await page.waitForFunction(
+			(element) => Number(element?.getAttribute("aria-valuenow")) < 300,
+			await separator.elementHandle(),
+		);
+		assert.equal(
+			await page.evaluate(() => localStorage.getItem("forge-sidebar-width")),
+			String(preferredWidth),
+			"Viewport clamp preserves saved preference",
+		);
+		await treeGeometry(page);
+		await page.reload();
+		await settled(page);
+		assert.equal(
+			await page.evaluate(() => localStorage.getItem("forge-sidebar-width")),
+			String(preferredWidth),
+			"Narrow reload does not overwrite preference",
+		);
+		await page.setViewportSize({ width: 1100, height: 800 });
+		await page.waitForFunction(({ element, expected }) => Number(element?.getAttribute("aria-valuenow")) === expected, {
+			element: await separator.elementHandle(),
+			expected: preferredWidth,
+		});
+		await page.addInitScript(() => {
+			if (sessionStorage.getItem("forge-test-block-storage") === "yes")
+				Object.defineProperty(globalThis, "localStorage", {
+					configurable: true,
+					get() {
+						throw new DOMException("Blocked fixture", "SecurityError");
+					},
+				});
+		});
+		await page.evaluate(() => sessionStorage.setItem("forge-test-block-storage", "yes"));
+		await page.reload();
+		await settled(page);
+		assert.equal(Number(await separator.getAttribute("aria-valuenow")), 390, "Blocked storage getter uses fallback");
+		await separator.focus();
+		await separator.press("ArrowRight");
+		assert.equal(
+			Number(await separator.getAttribute("aria-valuenow")),
+			410,
+			"Keyboard resize survives blocked storage",
+		);
+		const blockedBounds = await separator.boundingBox();
+		assert.ok(blockedBounds);
+		await page.mouse.move(blockedBounds.x + blockedBounds.width / 2, blockedBounds.y + 100);
+		await page.mouse.down();
+		await page.mouse.move(blockedBounds.x + 40, blockedBounds.y + 100);
+		await page.mouse.up();
+		assert.ok(Number(await separator.getAttribute("aria-valuenow")) > 410, "Pointer resize survives blocked storage");
+		await page.evaluate(() => sessionStorage.removeItem("forge-test-block-storage"));
+		await page.reload();
+		await settled(page);
+		assert.equal(
+			Number(await separator.getAttribute("aria-valuenow")),
+			preferredWidth,
+			"Blocked access did not destroy the stored width",
+		);
+		await page.evaluate(() =>
+			Object.defineProperty(localStorage, "setItem", {
+				configurable: true,
+				value() {
+					throw new DOMException("Quota fixture", "QuotaExceededError");
+				},
+			}),
+		);
+		await separator.focus();
+		await separator.press("ArrowRight");
+		assert.equal(
+			Number(await separator.getAttribute("aria-valuenow")),
+			preferredWidth + 20,
+			"Write failures leave resizing usable",
+		);
+		await page.evaluate(() => Reflect.deleteProperty(localStorage, "setItem"));
+		await separator.press("ArrowLeft");
+		assert.equal(Number(await separator.getAttribute("aria-valuenow")), preferredWidth);
+		await expectPortal(page, page.getByRole("button", { name: `Full path: ${unusual}`, exact: true }));
+
+		await expectNoTooltip(page, page.getByLabel(/^All workspace changes:/));
+		await expectNoTooltip(page, page.getByLabel(/^Shown changes:/));
+		await expectNoTooltip(page, row(page, ".").getByLabel(/^\. visible subtree:/));
+		await expectNoTooltip(page, row(page, "app/tracked.txt").getByLabel(/^app\/tracked.txt visible subtree:/));
+		await expectNoTooltip(page, select(page, "app"), true);
+		await expectNoTooltip(page, select(page, "app/tracked.txt"), true);
+		await treeGeometry(page);
+
+		const countColors = (path: string) =>
+			row(page, path)
+				.getByLabel(`${path} visible subtree:`, { exact: false })
+				.locator(":scope > span")
+				.evaluateAll((elements) =>
+					elements.map((element) => element.ownerDocument.defaultView.getComputedStyle(element).color),
+				);
+		const folderColors = await countColors("app");
+		const fileColors = await countColors("app/tracked.txt");
+		assert.notDeepEqual(folderColors, fileColors, "Folder aggregates use quieter colors than own file counts");
+		assert.deepEqual(
+			await countColors("app/transition"),
+			folderColors,
+			"Changed entries with children retain aggregate treatment",
+		);
+		assert.deepEqual(
+			await page
+				.getByLabel(/^Shown changes:/)
+				.locator(":scope > span")
+				.evaluateAll((elements) =>
+					elements.map((element) => element.ownerDocument.defaultView.getComputedStyle(element).color),
+				),
+			fileColors,
+			"Shown totals retain ordinary count colors",
+		);
+
 		await expectPortal(page, page.getByRole("button", { name: "Keyboard help", exact: true }));
 		await page.screenshot({ path: join(screenshots, "normal.png") });
 		await page.setViewportSize({ width: 360, height: 740 });
@@ -688,7 +950,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		);
 
 		console.log(
-			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, portal tooltips, local assets and resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
+			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, retained help portals, name/counter tooltip absence, matching folder matrix/zero/empty/overflow states, compact tree geometry, local assets and persisted/blocked-storage resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
 		);
 	} finally {
 		try {

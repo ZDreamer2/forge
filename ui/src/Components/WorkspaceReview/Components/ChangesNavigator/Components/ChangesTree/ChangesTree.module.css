@@ -1,4 +1,5 @@
 .scroll {
+	--tree-indent: 17px;
 	flex: 1;
 	min-height: 0;
 	overflow: auto;
@@ -59,13 +60,14 @@
 	background: #edf1ec;
 }
 .row {
+	position: relative;
 	--name-color: #45594b;
 	--quiet-name-color: #849087;
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 3px;
 	height: 25px;
-	padding: 0 10px 0 calc(8px + var(--depth) * 14px);
+	padding: 0 10px 0 calc(16px + var(--depth) * var(--tree-indent));
 	border-left: 3px solid transparent;
 	color: #45594b;
 	min-width: 0;
@@ -122,18 +124,16 @@
 	color: #78877c;
 }
 .disclosure {
+	position: absolute;
+	left: calc(var(--depth) * var(--tree-indent));
+	text-align: right;
 	border: 0;
 	background: none;
-	padding: 1px;
-	flex: 0 0 16px;
+	padding: 1px 2px 1px 0;
 	width: 16px;
 	color: #7f8e83;
 	font-size: 13px;
 	cursor: pointer;
-}
-.disclosureSpacer {
-	width: 16px;
-	flex: 0 0 16px;
 }
 .fileIcon,
 .folderIcon {
@@ -184,23 +184,10 @@
 	max-width: min(620px, calc(100vw - 16px));
 	overflow-wrap: anywhere;
 }
-.nodeFacts {
-	max-width: 500px;
-}
-.nodeFacts strong {
-	display: block;
-	margin-bottom: 4px;
-}
 .scroll button:focus-visible {
 	outline: 2px solid #267553;
 	outline-offset: 1px;
 }
-@media (max-width: 1000px) {
-	.row {
-		padding-left: calc(4px + var(--depth) * 10px);
-	}
-}
-
 @container (max-width: 300px) {
 	.heading {
 		flex-wrap: wrap;

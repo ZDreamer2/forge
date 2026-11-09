@@ -251,3 +251,85 @@
 		padding-right: 12px;
 	}
 }
+
+.matrixScroll {
+	overflow-x: auto;
+	margin-top: 24px;
+}
+.matrix {
+	width: auto;
+	border-collapse: collapse;
+	font-size: 12px;
+	color: #46594c;
+}
+.matrix caption {
+	text-align: left;
+	font-size: 13px;
+	font-weight: 550;
+	padding-bottom: 12px;
+}
+.matrix th,
+.matrix td {
+	text-align: right;
+	padding: 12px 10px;
+	border-bottom: 1px solid #e3e8e4;
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+}
+.matrix tr > * + * {
+	border-left: 1px solid #e3e8e4;
+}
+.matrix th:first-child {
+	text-align: left;
+	padding-left: 0;
+}
+.matrix thead {
+	color: #829087;
+	font-size: 11px;
+}
+.matrix th {
+	white-space: nowrap;
+}
+.matrix tbody tr:first-child > * {
+	border-top: 1px solid #cdd6ce;
+}
+.matrixLabel {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 500;
+	padding: 4px 9px;
+	border: 1px solid #d6e2d6;
+	border-radius: 5px;
+	background: #e6eee5;
+	color: #315e42;
+}
+.matrixLegend {
+	display: block;
+	margin-top: 6px;
+	font-size: 11px;
+	font-weight: 400;
+	color: #829087;
+}
+.matrixValues {
+	display: inline-grid;
+	grid-template-columns: minmax(2ch, auto) auto minmax(4ch, auto) auto minmax(4ch, auto);
+	column-gap: 3px;
+	align-items: baseline;
+	white-space: nowrap;
+	font:
+		11px / 1.6 "JetBrains Mono",
+		Consolas,
+		ui-monospace,
+		monospace;
+	font-variant-numeric: tabular-nums;
+}
+.matrixSeparator,
+.matrixEmpty {
+	color: #aab4ac;
+}
+.added {
+	color: #27865a;
+}
+.removed {
+	color: #b36055;
+}

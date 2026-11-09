@@ -19,7 +19,6 @@
 	border: 0;
 	background: transparent;
 	padding: 2px 0;
-	cursor: help;
 }
 .added {
 	color: #27865a;
@@ -27,51 +26,11 @@
 .removed {
 	color: #b36055;
 }
-.tooltip {
-	color: #45594b;
-	background: #fff;
-	border: 1px solid #e3e8e4;
-	box-shadow: 0 5px 22px #16302016;
-	padding: 13px 16px;
-	font:
-		12px / 1.6 system-ui,
-		sans-serif;
-	max-width: min(620px, calc(100vw - 16px));
-	overflow-wrap: anywhere;
+.aggregate .added {
+	color: #7c9c88;
 }
-.breakdowns {
-	min-width: 240px;
-}
-.breakdowns table {
-	width: 100%;
-	border-collapse: collapse;
-}
-.breakdowns table + table {
-	margin-top: 15px;
-}
-.breakdowns caption {
-	text-align: left;
-	font-size: 11px;
-	font-weight: 650;
-	color: #596d5f;
-	padding-bottom: 5px;
-}
-.breakdowns th,
-.breakdowns td {
-	padding: 3px 9px;
-	text-align: right;
-	font-weight: 400;
-}
-.breakdowns th {
-	text-align: left;
-	padding-left: 0;
-}
-.breakdowns td {
-	font: 10px / 1.6 var(--tree-font, "JetBrains Mono", Consolas, ui-monospace, monospace);
-}
-.summary button:focus-visible {
-	outline: 2px solid #267553;
-	outline-offset: 1px;
+.aggregate .removed {
+	color: #b69992;
 }
 @media (max-width: 1000px) {
 	.counts {

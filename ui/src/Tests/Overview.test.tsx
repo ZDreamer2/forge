@@ -60,7 +60,7 @@ function start() {
 	return render(<App queryClient={suite.createQueryClient()} env="test" />);
 }
 function workspaceSummary(files: number, removed = 0, added = 0) {
-	return screen.findByRole("button", {
+	return screen.findByRole("img", {
 		name: `All workspace changes: ${files} changed files, ${removed} removed lines, ${added} added lines`,
 	});
 }
@@ -80,7 +80,7 @@ it("distinguishes unknown from empty changes, then refreshes literal identity an
 	expect(repositories.getByRole("button", { name: "Select <script>repository</script>" })).toBeInTheDocument();
 	expect(repositories.getByText("Available · changes unknown")).toBeInTheDocument();
 	expect(repositories.getByText("Missing at startup")).toBeInTheDocument();
-	expect(screen.queryByRole("button", { name: /All workspace changes:/ })).not.toBeInTheDocument();
+	expect(screen.queryByRole("img", { name: /All workspace changes:/ })).not.toBeInTheDocument();
 	expect(document.querySelector("script, img[onerror]")).toBeNull();
 
 	await act(async () => pending.release(Response.json(analysis(true))));
@@ -118,7 +118,7 @@ it("recovers malformed analysis and failed identity independently without invent
 		await screen.findByRole("button", { name: "Retry changes" });
 		expect(screen.getByText(/Could not load workspace identity/)).toBeVisible();
 		expect(screen.getByText(/Could not load change summary/)).toBeVisible();
-		expect(screen.queryByRole("button", { name: /All workspace changes:/ })).not.toBeInTheDocument();
+		expect(screen.queryByRole("img", { name: /All workspace changes:/ })).not.toBeInTheDocument();
 		expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
 
 		// Analysis can recover while workspace identity is still unavailable.

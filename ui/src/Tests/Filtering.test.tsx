@@ -161,7 +161,7 @@ function start() {
 	return render(<App queryClient={suite.createQueryClient()} env="test" />);
 }
 function totals(label: string, files: number, removed: number, added: number) {
-	return screen.getByRole("button", {
+	return screen.getByRole("img", {
 		name: `${label}: ${files} changed files, ${removed} removed lines, ${added} added lines`,
 	});
 }
@@ -172,7 +172,7 @@ function row(path: string): HTMLElement {
 	return element;
 }
 
-it("reviews default breakdowns, filters both dimensions and inspects metadata without losing canonical counts", async () => {
+it("reviews matching matrices, filters both dimensions and inspects metadata without losing canonical counts", async () => {
 	start();
 	await screen.findByRole("button", { name: "Select src/high.ts" });
 	await screen.findByRole("heading", { name: identity.workspace.name });
@@ -214,39 +214,42 @@ it("reviews default breakdowns, filters both dimensions and inspects metadata wi
 
 	async function inspectSubtree(path: string, files: number, removed: number, added: number) {
 		const name = `${path} visible subtree: ${files} changed files, ${removed} removed lines, ${added} added lines`;
-		expect(within(row(path)).getByRole("button", { name })).toBeInTheDocument();
+		expect(within(row(path)).getByRole("img", { name })).toBeInTheDocument();
 		await user.click(screen.getByRole("button", { name: `Select ${path}` }));
 		const selection = within(screen.getByRole("region", { name: "Selection details" }));
-		expect(selection.getByRole("button", { name })).toBeInTheDocument();
-		expect(selection.getByText(new RegExp(`${files} visible changed files`))).toBeInTheDocument();
+		expect(
+			selection.getByRole("img", { name: name.replace("visible subtree", "matching subtree") }),
+		).toBeInTheDocument();
+		expect(selection.getByText(new RegExp(`${files} matching changed files`))).toBeInTheDocument();
 	}
 	await inspectSubtree("src/transition", 2, 3, 7);
 	await inspectSubtree(".", 12, 19, 36);
 	await inspectSubtree("tools", 1, 4, 8);
 	await inspectSubtree("tools/nested", 1, 4, 8);
 	await user.click(screen.getByRole("button", { name: "Select tools/nested" }));
-	const visibleTotals = totals("Shown changes", 12, 19, 36);
-	await user.hover(visibleTotals);
-	const tooltip = within(await screen.findByRole("tooltip"));
-	const types = within(tooltip.getByRole("table", { name: "Type" }));
-	const importance = within(tooltip.getByRole("table", { name: "Importance" }));
-	// Code includes the explicit override under a Tests directory; columns are removed, then added.
-	expect(
-		within(types.getByRole("row", { name: "Code −6 +19" }))
+	await user.click(screen.getByRole("button", { name: "Select ." }));
+	const matrix = within(screen.getByRole("table", { name: "Matching changes by type and importance" }));
+	function cellValues(table: ReturnType<typeof within>, label: string) {
+		const matchingRow = table
+			.getAllByRole("row")
+			.find((entry: HTMLElement) => within(entry).queryByRole("rowheader", { name: label }));
+		if (!matchingRow) throw new Error(`Missing matrix row ${label}`);
+		return within(matchingRow)
 			.getAllByRole("cell")
-			.map((cell) => cell.textContent),
-	).toEqual(["−6", "+19"]);
-	expect(types.getByRole("row", { name: "Tests −5 +3" })).toBeInTheDocument();
-	expect(
-		within(importance.getByRole("row", { name: "High −2 +10" }))
-			.getAllByRole("cell")
-			.map((cell) => cell.textContent),
-	).toEqual(["−2", "+10"]);
-	expect(importance.queryByRole("rowheader", { name: "None" })).not.toBeInTheDocument();
-	await user.unhover(visibleTotals);
+			.map((cell) => cell.textContent);
+	}
+	expect(cellValues(matrix, "All")).toEqual(["12 / +36 / −19", "2 / +10 / −2", "8 / +15 / −8", "2 / +11 / −9"]);
+	expect(cellValues(matrix, "Code")).toEqual(["7 / +19 / −6", "1 / +10 / −2", "6 / +9 / −4", "—"]);
+	expect(cellValues(matrix, "Assets")).toEqual(["2 / +8 / −4", "1 / +0 / −0", "—", "1 / +8 / −4"]);
+	expect(matrix.queryByRole("columnheader", { name: "None" })).not.toBeInTheDocument();
+	// Matrix labels describe the current filter result; they are not filter controls.
+	expect(matrix.queryByRole("button")).not.toBeInTheDocument();
+	await user.click(matrix.getByRole("rowheader", { name: "Code" }));
+	totals("Shown changes", 12, 19, 36);
 
 	await user.click(screen.getByRole("button", { name: "Tests" }));
 	totals("Shown changes", 11, 14, 33);
+	expect(within(screen.getByRole("table")).queryByRole("rowheader", { name: "Tests" })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select tests/unit/sample.ts" })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select tests/unit" })).not.toBeInTheDocument();
 	expect(row("tests/reset.ts")).toBeInTheDocument();
@@ -294,8 +297,12 @@ it("reviews default breakdowns, filters both dimensions and inspects metadata wi
 	expect(screen.getByRole("button", { name: "Expand docs" })).toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Expand docs" }));
 
+	await user.click(screen.getByRole("button", { name: "Select ." }));
 	await user.click(screen.getByRole("button", { name: "Deselect all types and importance levels" }));
 	totals("Shown changes", 0, 0, 0);
+	expect(screen.getByRole("heading", { name: "0 matching changed files of 13 in this subtree" })).toBeInTheDocument();
+	expect(screen.getByText("No changes match the current filters.")).toBeInTheDocument();
+	expect(screen.queryByRole("table")).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select tools/nested" })).not.toBeInTheDocument();
 	expect(
@@ -310,6 +317,14 @@ it("reviews default breakdowns, filters both dimensions and inspects metadata wi
 	expect(row("src/moved.ts")).toBeInTheDocument();
 	expect(row("assets/logo.png")).toBeInTheDocument();
 	expect(row("docs/hidden.md")).toBeInTheDocument();
+	const allMatrix = within(screen.getByRole("table"));
+	expect(allMatrix.getByRole("columnheader", { name: "None" })).toBeInTheDocument();
+	expect(cellValues(allMatrix, "Docs")).toEqual(["2 / +12 / −1", "—", "1 / +5 / −1", "—", "1 / +7 / −0"]);
+	await user.click(screen.getByRole("button", { name: "Select assets" }));
+	expect(
+		screen.getByText("No line changes. Binary files and pure renames still count as changed files."),
+	).toBeInTheDocument();
+	expect(cellValues(within(screen.getByRole("table")), "Assets")).toEqual(["1 / +0 / −0", "1 / +0 / −0"]);
 	async function inspectMetadata(path: string) {
 		await user.click(screen.getByRole("button", { name: `Select ${path}` }));
 		const metadata = within(screen.getByRole("region", { name: "Selected entry metadata" }));

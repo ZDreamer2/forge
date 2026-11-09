@@ -11,10 +11,10 @@ export const importanceLabels = { high: "High", medium: "Medium", low: "Low", no
 export type Importance = keyof typeof importanceLabels;
 export type Filters = { types: ReadonlySet<ClassificationValue>; importance: ReadonlySet<Importance> };
 type Lines = { added: number; removed: number };
+export type MatrixCell = Lines & { files: number };
 export type Summary = Lines & {
 	files: number;
-	types: Record<ClassificationValue, Lines>;
-	importance: Record<Importance, Lines>;
+	matrix: Record<ClassificationValue, Record<Importance, MatrixCell>>;
 };
 
 // These are canonical subjects and count scopes, not rows: no display hierarchy,
@@ -51,13 +51,17 @@ function emptySummary(): Summary {
 		files: 0,
 		added: 0,
 		removed: 0,
-		types: { code: lines(), tests: lines(), docs: lines(), config: lines(), assets: lines() },
-		importance: { high: lines(), medium: lines(), low: lines(), none: lines() },
+		matrix: { code: cells(), tests: cells(), docs: cells(), config: cells(), assets: cells() },
 	};
 }
 
-function lines(): Lines {
-	return { added: 0, removed: 0 };
+function cells(): Record<Importance, MatrixCell> {
+	return {
+		high: { files: 0, added: 0, removed: 0 },
+		medium: { files: 0, added: 0, removed: 0 },
+		low: { files: 0, added: 0, removed: 0 },
+		none: { files: 0, added: 0, removed: 0 },
+	};
 }
 
 function addLines(target: Lines, source: Lines) {
@@ -68,17 +72,22 @@ function addLines(target: Lines, source: Lines) {
 function addSummary(target: Summary, source: Summary) {
 	target.files += source.files;
 	addLines(target, source);
-	for (const key of Object.keys(typeLabels) as ClassificationValue[]) addLines(target.types[key], source.types[key]);
-	for (const key of Object.keys(importanceLabels) as Importance[])
-		addLines(target.importance[key], source.importance[key]);
+	for (const type of Object.keys(typeLabels) as ClassificationValue[])
+		for (const importance of Object.keys(importanceLabels) as Importance[]) {
+			const cell = target.matrix[type][importance];
+			const other = source.matrix[type][importance];
+			cell.files += other.files;
+			addLines(cell, other);
+		}
 }
 
 function addEntry(target: Summary, node: AnalysisWireNode) {
 	target.files += 1;
+	const cell = target.matrix[node.classification.value][importanceOf(node)];
+	cell.files += 1;
 	if (!node.statistics || node.statistics.binary) return;
 	addLines(target, node.statistics);
-	addLines(target.types[node.classification.value], node.statistics);
-	addLines(target.importance[importanceOf(node)], node.statistics);
+	addLines(cell, node.statistics);
 }
 
 export function summarizeEntries(nodes: Iterable<AnalysisWireNode>): Summary {

@@ -1,11 +1,14 @@
-import type { AnalysisSide, WorkspaceAnalysis } from "@forge/api-contract";
+import type { AnalysisSide, ClassificationValue, WorkspaceAnalysis } from "@forge/api-contract";
 import { Tooltip } from "@mantine/core";
 import { useEffect, useRef, useState } from "react";
 import {
+	type Importance,
 	importanceLabels,
 	importanceOf,
+	type MatrixCell,
 	type ReviewAnalysis,
 	resolveSelection,
+	type Summary,
 	typeLabels,
 } from "../../Internal/changeAnalysis";
 import { consumePathRequest, type PathRequest, type PathRequestCursor } from "../../Internal/pathRequest";
@@ -130,12 +133,24 @@ export function SelectionViewer({
 								(node?.children.length ?? 0) > 0 ||
 								node.base?.kind === "directory" ||
 								node.current?.kind === "directory") && (
-								<section className={styles.subtree} aria-label="Visible subtree summary">
+								<section className={styles.subtree} aria-label="Matching subtree summary">
 									<h3>
-										{selected.shown.files} visible changed files <span>of {selected.total.files} in this subtree</span>
+										{selected.shown.files} matching changed files <span>of {selected.total.files} in this subtree</span>
 									</h3>
-									<ChangesSummary summary={selected.shown} label={`${path} visible subtree`} />
-									<p>Subtree counts follow the current filters and include nested repositories.</p>
+									<ChangesSummary summary={selected.shown} label={`${path} matching subtree`} />
+									<p>
+										Matching descendants, including nested repositories. Folder expansion does not affect these totals.
+									</p>
+									{selected.shown.files ? (
+										<>
+											{!selected.shown.added && !selected.shown.removed && (
+												<p>No line changes. Binary files and pure renames still count as changed files.</p>
+											)}
+											<FolderMatrix summary={selected.shown} />
+										</>
+									) : selected.total.files > 0 ? (
+										<p>No changes match the current filters.</p>
+									) : null}
 								</section>
 							)}
 							{node?.kind && (
@@ -268,5 +283,83 @@ function SideDetails({
 				</span>
 			)}
 		</>
+	);
+}
+
+function FolderMatrix({ summary }: { summary: Summary }) {
+	const types = Object.keys(typeLabels) as ClassificationValue[];
+	const importance = Object.keys(importanceLabels) as Importance[];
+	function total(type?: ClassificationValue, level?: Importance): MatrixCell {
+		const result = { files: 0, added: 0, removed: 0 };
+		for (const row of type ? [type] : types)
+			for (const column of level ? [level] : importance) {
+				const cell = summary.matrix[row][column];
+				result.files += cell.files;
+				result.added += cell.added;
+				result.removed += cell.removed;
+			}
+		return result;
+	}
+	const rows: { key?: ClassificationValue; label: string }[] = [
+		{ label: "All" },
+		...types.filter((type) => total(type).files).map((key) => ({ key, label: typeLabels[key] })),
+	];
+	const columns: { key?: Importance; label: string }[] = [
+		{ label: "All" },
+		...importance
+			.filter((level) => total(undefined, level).files)
+			.map((key) => ({ key, label: importanceLabels[key] })),
+	];
+	return (
+		<div className={styles.matrixScroll}>
+			<table className={styles.matrix} aria-label="Matching changes by type and importance">
+				<caption>
+					Type × importance<span className={styles.matrixLegend}>Files / added / removed</span>
+				</caption>
+				<thead>
+					<tr>
+						<th scope="col">Type / Importance</th>
+						{columns.map((column) => (
+							<th scope="col" key={column.label}>
+								<span className={styles.matrixLabel}>{column.label}</span>
+							</th>
+						))}
+					</tr>
+				</thead>
+				<tbody>
+					{rows.map((row) => (
+						<tr key={row.label}>
+							<th scope="row">
+								<span className={styles.matrixLabel}>{row.label}</span>
+							</th>
+							{columns.map((column) => {
+								const cell = total(row.key, column.key);
+								return (
+									<td key={column.label}>
+										{cell.files ? (
+											<span
+												className={styles.matrixValues}
+												role="img"
+												aria-label={`${cell.files} files, ${cell.added} added lines, ${cell.removed} removed lines`}
+											>
+												<span>{cell.files}</span>
+												<span className={styles.matrixSeparator}> / </span>
+												<span className={styles.added}>+{cell.added}</span>
+												<span className={styles.matrixSeparator}> / </span>
+												<span className={styles.removed}>−{cell.removed}</span>
+											</span>
+										) : (
+											<span role="img" className={styles.matrixEmpty} aria-label="No matching files">
+												—
+											</span>
+										)}
+									</td>
+								);
+							})}
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
 	);
 }

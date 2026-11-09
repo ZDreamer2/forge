@@ -360,7 +360,7 @@ export async function verifyInstalledDiffs({ page, address, workspace, screensho
 		await selected("app/diff-link.txt");
 		await text("nonexistent-target");
 		await selected("app/transition");
-		await page.getByRole("region", { name: "Visible subtree summary" }).waitFor();
+		await page.getByRole("region", { name: "Matching subtree summary" }).waitFor();
 		await text("original file");
 		for (const [path, reason] of [
 			["app/diff-binary.dat", /^Binary file/],
