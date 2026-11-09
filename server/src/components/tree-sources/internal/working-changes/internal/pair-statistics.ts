@@ -9,27 +9,26 @@ import {
 	type IndexEntry,
 } from "../../../../../lib/git/index.ts";
 import { parseComparison, records } from "./comparison-records.ts";
-import type { ComparedChange, ReconciledChange } from "./types.ts";
+import type { CollectedChange, ComparedChange, DiscoveredChange, ReconciledChange } from "./types.ts";
 
 function statistics(bytes: Buffer): ComparedChange["statistics"] {
 	const fields = records(bytes);
 	if (!fields.length) return { added: 0, removed: 0, binary: false };
 	const match = /^(\d+|-)\t(\d+|-)\t/.exec(fields[0] ?? "");
 	if (!match || (match[1] === "-") !== (match[2] === "-")) throw new Error("Invalid pair numstat");
-	return {
-		added: match[1] === "-" ? 0 : Number(match[1]),
-		removed: match[2] === "-" ? 0 : Number(match[2]),
-		binary: match[1] === "-",
-	};
+	const added = match[1] === "-" ? 0 : Number(match[1]);
+	const removed = match[2] === "-" ? 0 : Number(match[2]);
+	if (!Number.isSafeInteger(added) || !Number.isSafeInteger(removed)) throw new Error("Invalid pair numstat");
+	return { added, removed, binary: match[1] === "-" };
 }
 
 export async function wholeAddition(
-	git: GitProcess,
 	root: string,
 	path: string,
 	signal?: AbortSignal,
 	effectiveMode?: string,
 ): Promise<ReconciledChange> {
+	signal?.throwIfAborted();
 	const stat = await lstat(resolve(root, path));
 	return {
 		path,
@@ -46,25 +45,17 @@ export async function wholeAddition(
 						: stat.mode & 0o100
 							? "100755"
 							: "100644",
-		statistics: statistics(await addedPairStatistics(git, root, path, signal)),
 	};
 }
 
-export async function wholeDeletion(
-	git: GitProcess,
-	root: string,
-	baseline: string,
-	path: string,
-	oldMode: string,
-	signal?: AbortSignal,
-): Promise<ReconciledChange> {
+export async function wholeDeletion(path: string, oldMode: string, signal?: AbortSignal): Promise<ReconciledChange> {
+	signal?.throwIfAborted();
 	return {
 		path,
 		kind: "deleted",
 		comparison: { kind: "scratch-index", entries: [] },
 		oldMode,
 		newMode: "000000",
-		statistics: statistics(await deletedPairStatistics(git, root, baseline, [path], signal)),
 	};
 }
 
@@ -79,12 +70,10 @@ export async function correctPairs(
 	let changes: ReconciledChange[] = [];
 	for (const item of input) {
 		if (item.from !== undefined && untracked.has(item.from)) {
-			changes.push(await wholeDeletion(git, root, baseline, item.from, item.oldMode, signal));
-			changes.push(await wholeAddition(git, root, item.path, signal, item.newMode));
-		} else if (item.correction === "addition")
-			changes.push(await wholeAddition(git, root, item.path, signal, item.newMode));
-		else if (item.correction === "deletion")
-			changes.push(await wholeDeletion(git, root, baseline, item.path, item.oldMode, signal));
+			changes.push(await wholeDeletion(item.from, item.oldMode, signal));
+			changes.push(await wholeAddition(root, item.path, signal, item.newMode));
+		} else if (item.correction === "addition") changes.push(await wholeAddition(root, item.path, signal, item.newMode));
+		else if (item.correction === "deletion") changes.push(await wholeDeletion(item.path, item.oldMode, signal));
 		else {
 			const { correction: _correction, ...facts } = item;
 			changes.push({ ...facts, comparison: { kind: "source-index" } });
@@ -137,4 +126,23 @@ export async function correctPairs(
 		for (const path of paths) untracked.delete(path);
 	}
 	return changes;
+}
+
+/** Missing statistics are acquired only by the operation that needs this final pair. */
+export async function materializeChange(
+	git: GitProcess,
+	root: string,
+	change: DiscoveredChange,
+	signal?: AbortSignal,
+): Promise<CollectedChange> {
+	signal?.throwIfAborted();
+	if (change.statistics) return { ...change, statistics: { ...change.statistics } };
+	const bytes =
+		change.comparison.kind === "whole-addition"
+			? await addedPairStatistics(git, root, change.path, signal)
+			: change.kind === "deleted"
+				? await deletedPairStatistics(git, root, change.baseline.oid, [change.path], signal)
+				: undefined;
+	if (!bytes) throw new Error("Missing final comparison statistics");
+	return { ...change, statistics: statistics(bytes) };
 }

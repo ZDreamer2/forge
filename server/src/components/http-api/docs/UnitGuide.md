@@ -1,30 +1,30 @@
 # http-api Guide
 
 Owns domain HTTP endpoints, selecting sources and mapping domain results into
-browser-safe `api-contract` shapes. It is the component combining source collection
-with analysis; domain rules remain with their respective owners.
+browser-safe `api-contract` shapes. It combines sources with analysis; domain
+rules remain with their respective owners.
 
-`/changes` projects shared base collection into a flat change list and never runs
-handlers. `/changes/analysis` waits for that collection under an app-owned request
-budget, then starts an independent analysis run. It supplies the source's narrow
-current-size capability for nodes of that collected tree. Cancellation cannot
-cancel another request's shared collection. `app` owns admission, controllers,
-shutdown, mounting and Host/Origin protection. Source size operations register with
-that request owner: settling or cancelling a run aborts and drains its source
-probes before disposal completes. Arbitrary authored-handler promises may still
-be abandoned when they do not cooperate.
+Change routes await shared fresh discovery under independent app-owned request
+budgets. After discovery, each route checks its signal before starting source work.
+Statistics materialization, patch acquisition and source-size probes register with
+the request owner for abort and drain before disposal. Shared discovery remains
+independently owned; arbitrary authored-handler promises may be abandoned when
+they do not cooperate. `app` owns admission, controllers, shutdown, mounting and
+Host/Origin protection.
 
-The analysis mapping emits a path-indexed node table with explicit root and child
-adjacency. It translates owner and handler references into response-local
-definitions, preserving safe literal keys. Direct annotations remain on their
-nodes; finalized totals, effective emphasis and inclusive signal counts carry the
-server's structural meaning to clients. The [API contract](../../../../docs/protocol.md)
-owns the wire semantics and safe handler-error envelope. GET and HEAD remain
-read-only toward workspace and Git state; trusted modules are not sandboxed.
+`/changes` materializes a complete tree before projecting a flat change list,
+without handlers. `/changes/analysis` also materializes complete statistics before
+running handlers. Its current-size capability authorizes nodes from that same
+materialized tree.
 
 The file route validates literal canonical paths and optional short/all context,
-then maps source-owned side metadata and ownership into the public patch result.
-Its app-owned budget is independent of analysis. Collection remains shared;
-only patch acquisition is registered for abort and drain. Excluded participation
-maps to forbidden; operational failures remain sanitized internal errors.
-The API contract owns exact wire shapes, context semantics and limits.
+then requests selected statistics and patch acquisition directly from discovery.
+The [source](../../tree-sources/docs/UnitGuide.md) owns membership, side ownership
+and finalized comparison context; HTTP maps those facts without constructing an
+incomplete analysis tree. Excluded participation maps to forbidden; operational
+failures become sanitized internal errors.
+
+Analysis mapping supplies explicit root/child adjacency and response-local owner
+and handler definitions, preserving safe literal keys. The
+[API contract](../../../../docs/protocol.md) owns wire shapes, operation-scoped
+statistics failures, context semantics, limits and read-only effects.

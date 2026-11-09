@@ -18,7 +18,9 @@ export type WorkspaceRouteDeps = {
 	root: string;
 	name: string;
 	repositories: readonly RepositoryResolution[];
-	collectChanges: () => Promise<WorkspaceTree>;
+	discoverChanges: ReturnType<typeof createWorkingChanges>["discover"];
+	materializeChanges: ReturnType<typeof createWorkingChanges>["materialize"];
+	changesRequests: WorkspaceRouteDeps["analysis"];
 	analysis: {
 		run: <T>(
 			work: (signal: AbortSignal, own: <R>(pending: Promise<R>) => Promise<R>) => Promise<T>,
@@ -40,7 +42,9 @@ export function createWorkspaceRoutes({
 	root,
 	name,
 	repositories,
-	collectChanges,
+	discoverChanges,
+	materializeChanges,
+	changesRequests,
 	analysis,
 	analyze,
 	currentByteSize,
@@ -50,11 +54,19 @@ export function createWorkspaceRoutes({
 	const identity = workspaceIdentity(root, name, repositories);
 	const routes = new Hono();
 	routes.get("/workspace", (context) => context.json(identity));
-	routes.get("/changes", async (context) => context.json(workspaceChanges(root, await collectChanges())));
+	routes.get("/changes", async (context) => {
+		const tree = await changesRequests.run(async (signal, own) => {
+			const discovery = await discoverChanges();
+			signal.throwIfAborted();
+			return own(materializeChanges(discovery, signal));
+		}, context.req.raw.signal);
+		return context.json(workspaceChanges(root, tree));
+	});
 	routes.get("/changes/analysis", async (context) => {
 		const result = await analysis.run(async (signal, own) => {
-			const tree = await collectChanges();
+			const discovery = await discoverChanges();
 			signal.throwIfAborted();
+			const tree = await own(materializeChanges(discovery, signal));
 			return analyze(tree, {
 				signal,
 				currentByteSize: (node, readSignal) => {
@@ -72,9 +84,9 @@ export function createWorkspaceRoutes({
 		if (!query) return context.json(apiError("invalid_request"), 400);
 		try {
 			const result = await fileRequests.run(async (signal, own) => {
-				const tree = await collectChanges();
+				const discovery = await discoverChanges();
 				signal.throwIfAborted();
-				return own(fileDiff(tree, query.path, signal, query.context));
+				return own(fileDiff(discovery, query.path, signal, query.context));
 			}, context.req.raw.signal);
 			return context.json(workspaceFileDiff(root, result));
 		} catch (error) {

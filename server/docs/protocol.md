@@ -55,8 +55,8 @@ Changes compare HEAD with working content plus non-ignored untracked files:
   without outside paths. Unborn HEAD uses an empty baseline; scoped unresolved
   conflicts fail collection even if the diff would be empty.
 - Binary, mode/type and zero-line-count changes remain entries. UTF-8 filenames
-  preserve tabs/newlines/spaces; invalid filename encoding, Git/read/filter or
-  normalization failures return `internal_error` without partial results.
+  preserve tabs/newlines/spaces. Invalid filename encoding or failure of required
+  Git/read/filter/normalization work returns `internal_error` without partial results.
 
 This is practical Git comparison, not exhaustive physical/staging equivalence or
 authority for broader dirt capture, checking or staging scopes.
@@ -80,11 +80,14 @@ owners in that order. All response object keys, including `__proto__`, are ordin
 ### Observation, effects and lifecycle
 
 Results are live observations without atomic cross-repository/request snapshots.
-Overlapping GET/HEAD requests share active base collection, cleared on settlement;
-later requests collect afresh. Disconnecting one client does not cancel shared work.
-Collection has finite command/output/total bounds. Analysis and file requests each
-have a 30-second total budget including collection wait, independent cancellation,
-and abort/drain of owned source work on failure, disconnect, timeout or shutdown.
+Overlapping GET/HEAD requests share active workspace-wide discovery, cleared on
+settlement; later requests discover afresh. Disconnecting one client does not
+cancel shared discovery. Discovery has finite command/output/total bounds.
+Change listing, analysis and file requests each have an independent 30-second
+budget including discovery wait. Each request owns its statistics acquisition and
+subsequent source work, with independent cancellation and abort/drain on failure,
+disconnect, timeout or shutdown. A file read does not wait for another request's
+unrelated statistics.
 Shutdown closes HTTP, stops admission, cancels/reaps owned Git/filter descendants
 and removes temporary resources after settlement. Cooperative cancellation cannot
 preempt synchronous trusted JavaScript.
@@ -141,16 +144,19 @@ change has `repo`, `path`, `kind`, `codebases: string[]`, and rename-only `from`
 | `from` | Previous path, required only for renamed. |
 | `codebases` | Unique present-side owner root keys; empty is valid. |
 
-Empty success is `{ "codebases": {}, "changes": [] }`. This light projection runs
-no handlers and omits statistics, hierarchy, totals and review metadata; clients use
-the analyzed tree for structural meaning.
+Empty success is `{ "codebases": {}, "changes": [] }`. Listing acquires complete
+statistics before projection; acquisition failures return `internal_error` even
+though the response omits counts. This light projection runs no handlers and omits
+hierarchy, totals and review metadata; clients use the analyzed tree for structural
+meaning.
 
 #### Analyze workspace changes
 
 `GET /changes/analysis`
 
-Returns `{root: ".", nodes, codebases, handlers}`. Every node, including hidden ones,
-has an entry in the path-indexed `nodes` table. Each node carries:
+Acquires complete statistics before analysis, then returns
+`{root: ".", nodes, codebases, handlers}`. Every node, including hidden ones, has an
+entry in the path-indexed `nodes` table. Each node carries:
 
 | Fields | Shape/meaning |
 | --- | --- |
@@ -215,11 +221,17 @@ available. Shared deadline/cancellation/effects rules apply.
 
 `GET /changes/file?path=<canonical-change-path>[&context=3|all]`
 
-Selects a freshly collected change without handlers. Default `context=3` returns
-three unchanged lines around hunks; `all` returns complete represented context around
-changed payloads for expansion. Both retain the collector's final reconciled sides,
-applicable attributes, trusted filters and diff algorithm. There is no separate
-full-file endpoint or renderer-specific model.
+Selects a change from fresh workspace-wide discovery without handlers. Statistics
+and patch acquisition use only the selected finalized pair and the same resolved
+comparison context. Unrelated statistics-only work is omitted and its failures
+are outside this operation. All discovery, repository, reconciliation, membership
+and ownership failures remain authoritative. Selected statistics/read/patch failures
+return `internal_error` without partial success.
+
+Default `context=3` returns three unchanged lines around hunks; `all` returns complete
+represented context around changed payloads for expansion. Both retain the source's
+final reconciled sides, applicable attributes, trusted filters and diff algorithm.
+There is no separate full-file endpoint or renderer-specific model.
 
 An unchanged/disappeared selection returns `{kind: "not_changed", codebases: {}}`.
 Other results carry `path`, `repo`, `changeKind`, rename-only `from`, `statistics`,
@@ -260,7 +272,7 @@ and independent kind metadata, without guaranteeing executable `git apply` seman
   pinned earlier working bytes; clients own freshness and reject incompatible
   initial/expanded results. A required side disappearing/changing kind or an
   available participant/Git/read/filter failure returns `internal_error`, not missing content.
-  Unknown paths cannot authorize file reads. The shared 30-second budget, independent
+  Unknown paths cannot authorize file reads. The 30-second request budget, independent
   cancellation, draining and read-only rules apply.
 
 ## Future capabilities

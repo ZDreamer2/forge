@@ -91,7 +91,9 @@ test("real adapter preserves Host and Origin restrictions including spoofed forw
 					extensions: [],
 				}).analyze,
 				currentByteSize: async () => 0,
-				collectChanges: async () => createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] }),
+				discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+				changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+				materializeChanges: async () => createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] }),
 			}).fetch(incoming),
 	});
 	port = Number(new URL(listener.address).port);

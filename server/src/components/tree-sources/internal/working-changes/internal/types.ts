@@ -12,7 +12,8 @@ export interface ComparedChange {
 	readonly correction?: "addition" | "deletion";
 }
 
-export type ReconciledChange = Omit<ComparedChange, "correction"> & {
+export type ReconciledChange = Omit<ComparedChange, "correction" | "statistics"> & {
+	readonly statistics?: ComparedChange["statistics"];
 	readonly comparison: FileComparison;
 };
 
@@ -22,6 +23,10 @@ export interface ResolvedBaseline {
 	readonly oid: string;
 }
 
-export type CollectedChange = ReconciledChange & {
+export type DiscoveredChange = ReconciledChange & {
 	readonly baseline: ResolvedBaseline;
+};
+
+export type CollectedChange = DiscoveredChange & {
+	readonly statistics: ComparedChange["statistics"];
 };

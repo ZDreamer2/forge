@@ -1,58 +1,67 @@
 # tree-sources Guide
 
-Builds base workspace trees from sources of workspace state. Each source produces a tree recording its two sides. The working source also owns bounded per-change patch acquisition.
+Builds workspace trees from source observations. The working-changes source owns
+fresh discovery, statistics materialization and bounded selected-file patches.
 
-## Notes
+## Discovery and materialization
 
-`index.ts` exposes the `working-changes` source factory. It builds a canonical
-workspace tree using startup repository participation and fresh path-boundary
-observations for each collection. Effective Git modes and resolved baselines remain in private source descriptors;
-the tree carries side kinds and statistics. Exceptional recreated or clipped pairs
-receive statistics for their final sides. Owned scratch indexes compare existing HEAD objects against actual working
-paths without normalizing baseline bytes again or writing source Git metadata.
+`index.ts` exposes the `working-changes` factory. `discover()` observes startup
+repository participation, fresh path boundaries and finalized change membership.
+Its opaque token keeps comparison descriptors and a canonical ownership tree
+private. Bulk tracked numstat and exceptional comparisons needed for reconciliation
+remain discovery work; whole-addition/deletion statistics are deferred.
 
-Patch acquisition uses those descriptors and the applicable repository attributes,
-filters and algorithm directly. Existing pairs seed an owned scratch index with
-an existing baseline blob; normalized new-file pairs need only an owned constant
-empty blob. Ordinary pairs retain applicable source-index ancestor attributes when
-working attribute files are absent. Reconciled pairs retain their collector-selected
-index policy. Raw, reconciled and collected facts have distinct types; only finalized
-collected descriptors reach patch acquisition, with a mandatory resolved baseline
-and explicit source-index, scratch-index or whole-addition context. Whole additions preserve the collector's no-index command semantics,
-including clean/EOL attributes. No current normalized text buffers or synthetic
-pair trees are materialized. Independent content readers and the other sources
-below remain deferred.
+`materialize()` acquires complete statistics into a new tree. `fileDiff()` acquires
+only the selected final pair's missing statistics and patch. Both use the discovered
+baseline and comparison context without mutating shared descriptors or storing
+selected statistics on them. Discovered facts and collected changes have distinct
+types; only complete trees become analysis inputs and authorize `currentByteSize`.
 
-Sources are nested units under `internal/`, exposed through this component's surface:
+App ownership shares active discovery and clears it on settlement. Each request
+owns its materialization/patch work independently. Bounded repository lanes cancel
+and join peers before propagating failure. Omitting unrelated statistics also
+excludes their failures from a selected-file operation; the
+[protocol](../../../../docs/protocol.md) owns that failure scope and observable limits.
 
-- `working-changes`: HEAD compared with the working copy across participating repositories, including non-ignored untracked files. The protocol owns its observable semantics.
-- `project-files`: participating files of the project tree, listed by directory on demand rather than as a recursive tree.
-- `merge-request`, later: one GitLab merge request.
+## Comparison and patch context
 
-A new source is a new nested unit, not a new architectural component.
+Final descriptors retain effective Git modes, a resolved baseline and explicit
+source-index, scratch-index or whole-addition context. Recreated and boundary-clipped
+pairs acquire statistics for their finalized sides. Owned scratch indexes compare
+existing HEAD objects against working paths without clean-filtering baseline bytes
+again or writing source Git metadata.
 
-Sources emit change entries in `workspace-tree` vocabulary and use its builder, so node insertion and owner resolution exist once. Entries carry per-file line counts, with binary files identified rather than counted; Git comparisons already report them. Directory and root totals are derived by the tree. Local sources use `workspace-repositories` participation rather than discovering repositories themselves.
+Patch acquisition reuses that context with applicable repository attributes, filters
+and algorithm. Existing pairs seed a scratch index with a baseline blob; normalized
+new-file pairs need only a constant empty blob. Ordinary pairs retain source-index
+ancestor attributes when working attribute files are absent; reconciled pairs retain
+their selected scratch-index policy. Whole additions use native no-index clean/EOL
+semantics. No normalized current-text buffers or synthetic pair trees are materialized.
 
-Plain Git operations needing no workspace knowledge, such as comparing two commits or listing a tree at a commit, belong in `lib/git`. Comparison with the working copy stays here because it depends on participation and nested-repository boundaries.
+Rename content identity comes from nonzero raw blob identities. Similarity scores
+and line counts cannot establish whether a move changed content. Boundary clipping
+and recreated-source splitting discard rename-only facts when final entries become
+additions or deletions.
 
-Merge-request direction: GitLab knowledge stays inside that source. Its commits are fetched into a Forge-owned Git store, never into workspace repositories; the server then writes to its own storage, whose storage policy remains a future-source decision. Codebases are resolved with the current checkout's configuration, an approximation when the MR itself changes registration. Coordinated MRs across repositories would insert several comparisons into one tree.
+File reads validate the current reconciled leaf before statistics and before/after
+patch acquisition, using strict traversal and no-follow regular-file metadata.
+An absent collected side stays absent despite an ignored physical recreation.
+Short/all context uses one bounded acquisition path.
 
-Every tree is a live observation built per request, not an atomic cross-repository snapshot.
+## Current-file size
 
-The working-changes source also supplies lazy `currentByteSize(tree, node, signal)`
-for collected current regular files. It uses metadata, verifies tree membership,
-startup repository identity and current path boundaries, and rejects symlink
-ancestors/leaves and newly introduced nested clones. It neither reads file content
-nor caches observations; analysis owns reuse within its run. Missing or changed
-paths fail rather than becoming zero-byte files. Collection's historical-path
-scope deliberately remains more permissive than this actual filesystem traversal.
+`currentByteSize(tree, node, signal)` lazily observes metadata for collected current
+regular files. It verifies complete-tree membership, startup repository identity and
+current path boundaries, rejecting symlink ancestors/leaves and new undeclared
+clones. Analysis owns reuse within its run; the source reads no content and caches
+no observations. Missing or changed paths fail rather than becoming zero-byte files.
+Historical-path discovery scope is deliberately more permissive than this physical
+filesystem traversal.
 
-Rename entries retain a content-change fact from the comparison's nonzero raw
-blob identities. Similarity scores and binary/numeric line counts cannot establish
-whether a move changed content. Boundary clipping and recreated-source splitting
-discard rename-only facts when the final entries become additions or deletions.
+## Source boundaries
 
-File patch reads validate the current reconciled leaf before/after Git acquisition,
-using strict traversal and no-follow regular-file metadata. An absent collected
-side is not replaced by an ignored physical recreation. Short/all context shares
-one acquisition path and finite output bounds; wire details belong to the protocol.
+Sources are nested units under `internal/`, exposed through the component surface.
+They use `workspace-tree` vocabulary and its builder for canonical insertion, side
+ownership and totals, and `workspace-repositories` for participation. Working-copy
+comparison belongs here because it depends on workspace and nested-repository scope;
+plain Git operations without workspace knowledge belong in `lib/git`.

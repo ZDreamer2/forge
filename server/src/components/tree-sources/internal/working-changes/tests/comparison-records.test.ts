@@ -61,3 +61,8 @@ test("collected descriptors require a resolved baseline and explicit comparison 
 	}
 	void rejectedDescriptors;
 });
+
+test("discovery rejects unsafe bulk counts before selected projection", () => {
+	for (const counts of ["9007199254740992\t0", "0\t9007199254740992", `${"9".repeat(400)}\t0`])
+		assert.throws(() => parseComparison(rename(oldId, newId, counts)), /invalid numstat count/);
+});

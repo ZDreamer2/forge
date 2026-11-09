@@ -38,7 +38,7 @@ test("reconciled patches retain whole additions, renames, binary and literal byt
 	const process = createGitProcess(env);
 	const repositories = await resolveRepositories(root, [{ path: "." }], process);
 	const source = createWorkingChanges({ root, repositories, codebases: [], git: process });
-	const tree = await source.collect();
+	const tree = await source.discover();
 	const destination = await source.fileDiff(tree, "destination.txt");
 	assert.equal(destination.kind, "text");
 	if (destination.kind === "text") {
@@ -81,7 +81,7 @@ test("file patches use reconciled staged reversals, recreated deletion and type 
 	const process = createGitProcess(env);
 	const repositories = await resolveRepositories(root, [{ path: "." }], process);
 	const source = createWorkingChanges({ root, repositories, codebases: [], git: process });
-	const tree = await source.collect();
+	const tree = await source.discover();
 	assert.equal((await source.fileDiff(tree, "reversal")).kind, "not_changed");
 	const recreated = await source.fileDiff(tree, "recreated");
 	assert.equal(recreated.kind, "text");
@@ -152,7 +152,7 @@ test("parent-root rename keeps its pathspec-clipped addition comparison", async 
 	const process = createGitProcess(env);
 	const repositories = await resolveRepositories(root, [{ path: "." }], process);
 	const source = createWorkingChanges({ root, repositories, codebases: [], git: process });
-	const tree = await source.collect();
+	const tree = await source.discover();
 	const result = await source.fileDiff(tree, "inside.txt");
 	assert.equal(result.kind, "text");
 	if (result.kind === "text") {
@@ -161,4 +161,72 @@ test("parent-root rename keeps its pathspec-clipped addition comparison", async 
 		assert.match(result.patch, /\+one\n\+two\n\+three\n/);
 		assert.doesNotMatch(result.patch, /outside/);
 	}
+});
+
+test("discovery defers unrelated statistics and isolates selected and complete materialization failures", async (t) => {
+	const root = await mkdtemp(join(tmpdir(), "forge-selected-statistics-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { env });
+	git("init", "-q");
+	await writeFile(join(root, "tracked.txt"), "before\n");
+	await writeFile(join(root, ".gitattributes"), "*.txt text eol=crlf\n");
+	git("add", ".");
+	git("commit", "-qm", "base");
+	await writeFile(join(root, "tracked.txt"), "after\n");
+	await writeFile(join(root, "selected.txt"), "one\r\ntwo\r\n");
+	await writeFile(join(root, "unrelated.txt"), "unrelated\n");
+	const actual = createGitProcess(env);
+	const repositories = await resolveRepositories(root, [{ path: "." }], actual);
+	const commands: string[] = [];
+	let fail = true;
+	let discoveryFailure = false;
+	const source = createWorkingChanges({
+		root,
+		repositories,
+		codebases: [],
+		git: async (cwd, args, options) => {
+			if (discoveryFailure && args[0] === "ls-files") throw new Error("discovery failed");
+			if (args.includes("--no-index") && args.includes("--numstat")) {
+				commands.push(args.at(-1) ?? "");
+				if (fail && args.at(-1) === join(root, "unrelated.txt")) throw new Error("unrelated statistics failed");
+			}
+			return actual(cwd, args, options);
+		},
+	});
+	const observation = await source.discover();
+	assert.deepEqual(commands, []);
+	const ordinary = await source.fileDiff(observation, "tracked.txt");
+	assert.equal(ordinary.kind, "text");
+	assert.deepEqual(commands, []);
+	const selected = await source.fileDiff(observation, "selected.txt", undefined, "all");
+	assert.equal(selected.kind, "text");
+	if (selected.kind === "text") {
+		assert.deepEqual(selected.statistics, { added: 2, removed: 0, binary: false });
+		assert.equal(selected.context, "all");
+		assert.match(selected.patch, /\+one\n\+two\n/);
+		assert.doesNotMatch(selected.patch, /\r/);
+	}
+	assert.deepEqual(commands, [join(root, "selected.txt")]);
+	await assert.rejects(source.fileDiff(observation, "unrelated.txt"), /unrelated statistics failed/);
+	await assert.rejects(source.materialize(observation), /Change collection failed/);
+	await assert.rejects(source.collect(), /Change collection failed/);
+	assert.equal((await source.fileDiff(observation, "tracked.txt")).kind, "text");
+	fail = false;
+	const [tree, secondTree, file] = await Promise.all([
+		source.materialize(observation),
+		source.materialize(observation),
+		source.fileDiff(observation, "selected.txt"),
+	]);
+	assert.deepEqual(tree.totals(), { added: 4, removed: 1 });
+	assert.deepEqual(secondTree.totals(), tree.totals());
+	assert.notEqual(tree, secondTree);
+	assert.notEqual(tree.nodes.get("selected.txt"), secondTree.nodes.get("selected.txt"));
+	if (file.kind !== "not_changed") assert.deepEqual(file.statistics, tree.nodes.get("selected.txt")?.statistics);
+	const beforeFresh = commands.length;
+	await source.fileDiff(observation, "selected.txt");
+	assert.equal(commands.length, beforeFresh + 1, "selected statistics are not cached on discovery");
+	await writeFile(join(root, "tracked.txt"), "before\n");
+	assert.equal((await source.fileDiff(await source.discover(), "tracked.txt")).kind, "not_changed");
+	discoveryFailure = true;
+	await assert.rejects(source.discover(), /Change collection failed/);
 });

@@ -78,9 +78,10 @@ replaced on restart. Missing-at-startup repositories stay excluded; loss of an
 available repository fails collection instead of silently reducing the result.
 
 Refresh observes current Git state within that startup context. Overlapping
-requests share in-flight base collection, while each analysis or file request owns
-its derived state and cancellation. Results are live observations without atomic
-cross-repository snapshots. Collection scope does not authorize broader dirt
+requests share in-flight source discovery, cleared on settlement. The source owns
+finalized membership, sides and comparison context; each request owns statistics
+materialization and derived state. Results are live observations without atomic
+cross-repository snapshots. Discovery scope does not authorize broader dirt
 capture, checking or staging.
 
 Inspection preserves source and Git index/ref/object contents. Authored YAML is

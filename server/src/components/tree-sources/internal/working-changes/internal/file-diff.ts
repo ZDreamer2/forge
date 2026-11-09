@@ -17,7 +17,8 @@ import {
 } from "../../../../workspace-repositories/index.ts";
 import type { LineStatistics, TreeNode, WorkspaceTree } from "../../../../workspace-tree/index.ts";
 import { createCurrentPath } from "./current-path.ts";
-import type { CollectedChange } from "./types.ts";
+import { materializeChange } from "./pair-statistics.ts";
+import type { DiscoveredChange } from "./types.ts";
 
 export type Baseline = { kind: "commit"; oid: string } | { kind: "unborn" };
 export type FilePatchContext = 3 | "all";
@@ -31,7 +32,7 @@ export interface FileSide {
 export class SourceForbiddenError extends Error {}
 export interface Descriptor {
 	repository: Extract<RepositoryResolution, { status: "available" }>;
-	change: CollectedChange;
+	change: DiscoveredChange;
 }
 export interface FileDeps {
 	root: string;
@@ -116,8 +117,9 @@ export function createFileDiff(deps: FileDeps) {
 				throw new SourceForbiddenError("Path does not participate");
 			return { kind: "not_changed" };
 		}
-		const c = descriptor.change;
 		const node = tree.nodes.get(path);
+		await validateCurrent(descriptor, node, signal);
+		const c = await materializeChange(deps.git, descriptor.repository.gitRoot, descriptor.change, signal);
 		const oldPath = node?.base?.path ?? path;
 		const side = (version: "base" | "current", mode: string, sidePath: string): FileSide => {
 			const observed = node?.[version];

@@ -92,11 +92,11 @@ export function parseComparison(bytes: Buffer): ComparedChange[] {
 		}
 		validPath(path);
 		if (!rawPaths.has(path)) throw new Error("Git returned numstat without a raw change");
-		stats.set(path, {
-			added: stat[1] === "-" ? 0 : Number(stat[1]),
-			removed: stat[2] === "-" ? 0 : Number(stat[2]),
-			binary: stat[1] === "-",
-		});
+		const added = stat[1] === "-" ? 0 : Number(stat[1]);
+		const removed = stat[2] === "-" ? 0 : Number(stat[2]);
+		if (!Number.isSafeInteger(added) || !Number.isSafeInteger(removed))
+			throw new Error("Git returned an invalid numstat count");
+		stats.set(path, { added, removed, binary: stat[1] === "-" });
 	}
 	const changes: ComparedChange[] = [];
 	for (const { change, statOnlyCandidate, oldMode, newMode, source } of raw) {

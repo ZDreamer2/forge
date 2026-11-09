@@ -31,8 +31,10 @@
 	outline-offset: -2px;
 }
 .canvas {
+	container-type: inline-size;
 	min-width: 0;
-	overflow: hidden;
+	/* Keep text reachable when numbered columns exceed a physically narrow pane. */
+	overflow: auto;
 	overflow-wrap: normal;
 }
 .facts {
@@ -64,6 +66,12 @@
 }
 .context {
 	margin-bottom: 8px;
+	max-width: 100%;
+	height: auto;
+	min-height: var(--button-height);
+}
+.contextLabel {
+	white-space: normal;
 }
 
 .plainPatch {
@@ -71,6 +79,6 @@
 		12px / 20px "JetBrains Mono",
 		Consolas,
 		monospace;
-	overflow-x: auto;
-	white-space: pre;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }

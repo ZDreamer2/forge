@@ -238,6 +238,7 @@ function ContextControls({
 			return (
 				<Button
 					className={styles.context}
+					classNames={{ label: styles.contextLabel }}
 					variant="subtle"
 					size="compact-xs"
 					disabled={context.disabled}
@@ -256,12 +257,20 @@ const renderOptions: FileDiffOptions<undefined, undefined> = {
 	preferredHighlighter: "shiki-js",
 	disableFileHeader: true,
 	hunkSeparators: "line-info-basic",
-	overflow: "scroll",
+	overflow: "wrap",
 	tokenizeMaxLineLength: 1000,
 	tokenizeMaxLength: 100000,
 	lineDiffType: "none",
-	unsafeCSS:
-		':host { --diffs-font-family: "JetBrains Mono", Consolas, monospace; --diffs-font-size: 12px; --diffs-line-height: 20px; color-scheme: light; }',
+	// Compact spacing must still reserve Pierre's 4px change bar before the first digit.
+	unsafeCSS: `
+		:host { --diffs-font-family: "JetBrains Mono", Consolas, monospace; --diffs-font-size: 12px; --diffs-line-height: 20px; color-scheme: light; }
+		@container (max-width: 160px) {
+			[data-overflow="wrap"] [data-separator-content] { min-width: 0; }
+			[data-overflow="wrap"] [data-column-number],
+			[data-overflow="wrap"] [data-gutter-buffer] { padding-inline: 4px 0; }
+			[data-overflow="wrap"] [data-line] { padding-inline: 0; }
+		}
+	`,
 };
 
 function DiffCanvas({

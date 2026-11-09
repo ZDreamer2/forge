@@ -257,6 +257,7 @@ export default {
 		join(workspace, "app/diff-context.ts"),
 		Array.from({ length: 160 }, (_, i) => `export const line${i + 1} = ${i + 1};\n`).join(""),
 	);
+	writeFileSync(join(workspace, "app/diff-numbers.ts"), "x\n".repeat(100005));
 	writeFileSync(join(workspace, "app/diff-delete.txt"), "deleted text\n");
 	writeFileSync(join(workspace, "app/diff-empty-delete.txt"), "");
 	writeFileSync(join(workspace, "app/diff-crlf.txt"), "\uFEFFold\r\nlast\r\n");

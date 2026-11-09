@@ -39,15 +39,22 @@ const summary: AnalysisWireNode = {
 
 it("contains an asynchronous highlighter rejection and recovers through explicit reload", async () => {
 	let reads = 0;
+	const longLine = `    ${"word ".repeat(300)}${"token".repeat(300)} END-OF-LONG-LINE`;
 	suite.createHttpScenario(
 		http.get("http://localhost/api/changes/file", ({ request }) => {
 			const query = new URL(request.url).searchParams;
 			if (query.get("path") !== summary.path || query.get("context") !== "3")
 				throw new Error(`Unexpected file request: ${request.url}`);
 			reads++;
-			return Response.json(
-				fileObservation(summary, { root: ".", nodes: { "file.ts": summary }, codebases: {}, handlers: {} }),
-			);
+			const observation = fileObservation(summary, {
+				root: ".",
+				nodes: { "file.ts": summary },
+				codebases: {},
+				handlers: {},
+			});
+			if (reads === 1 && observation.kind === "text")
+				observation.patch = observation.patch.replace("+new file.ts 0", `+new file.ts ${longLine}`);
+			return Response.json(observation);
 		}),
 	);
 	const pending = suite.defer<void>({
@@ -76,11 +83,15 @@ it("contains an asynchronous highlighter rejection and recovers through explicit
 		expect(report).toHaveBeenCalledWith("Unexpected Forge failure", expect.any(Error));
 		expect(screen.getByRole("region", { name: "Selection metadata" })).toHaveTextContent("Selected file.ts");
 		await user.click(file.getByRole("button", { name: "Show plain patch" }));
-		expect(file.getByRole("region", { name: "Plain text patch" })).toHaveTextContent("+new file.ts");
+		expect(file.getByRole("region", { name: "Plain text patch" }).querySelector("pre")?.textContent).toContain(
+			`+new file.ts ${longLine}\n`,
+		);
 		await user.click(file.getByRole("button", { name: "Hide plain patch" }));
 		expect(file.queryByRole("region", { name: "Plain text patch" })).not.toBeInTheDocument();
 		await user.click(file.getByRole("button", { name: "Show plain patch" }));
-		expect(file.getByRole("region", { name: "Plain text patch" })).toHaveTextContent("+new file.ts");
+		expect(file.getByRole("region", { name: "Plain text patch" }).querySelector("pre")?.textContent).toContain(
+			`+new file.ts ${longLine}\n`,
+		);
 		expect(report).toHaveBeenCalledTimes(1);
 		await user.click(file.getByRole("button", { name: "Reload file" }));
 		await waitFor(() => expect(screen.getByLabelText("Rendered diff text")).toHaveTextContent("new file.ts"));

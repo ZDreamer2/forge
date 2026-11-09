@@ -31,7 +31,9 @@ test("HTTP page and API operations have consistent routing failures", async (t) 
 			extensions: [],
 		}).analyze,
 		currentByteSize: async () => 0,
-		collectChanges: async () => {
+		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		materializeChanges: async () => {
 			collections++;
 			return createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] });
 		},
@@ -111,7 +113,9 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 			extensions: [],
 		}).analyze,
 		currentByteSize: async () => 0,
-		collectChanges: async () => {
+		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		materializeChanges: async () => {
 			collections++;
 			throw new Error("secret subprocess and environment values");
 		},

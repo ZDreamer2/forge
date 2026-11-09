@@ -111,7 +111,9 @@ test("a failed size candidate aborts and drains the other probe before releasing
 		repositories: [],
 		port: 43210,
 		analysis: owner,
-		collectChanges: async () => tree,
+		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		materializeChanges: async () => tree,
 		analyze: analyzer.analyze,
 		currentByteSize: async (_tree, node, signal) => {
 			reads.push(node.path);
@@ -178,7 +180,9 @@ test("shutdown keeps a cancelled analysis registered until its source probe is r
 		repositories: [],
 		port: 43210,
 		analysis: owner,
-		collectChanges: async () => tree,
+		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		materializeChanges: async () => tree,
 		analyze: analyzer.analyze,
 		currentByteSize: async (_tree, _node, signal) => {
 			signal.addEventListener("abort", () => aborted.resolve(), { once: true });

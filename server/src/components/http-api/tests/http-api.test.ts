@@ -24,7 +24,9 @@ test("identity snapshots repository declarations without collecting or exposing 
 			extensions: [],
 		}).analyze,
 		currentByteSize: async () => 0,
-		collectChanges: async () => {
+		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		materializeChanges: async () => {
 			throw new Error("Identity must not collect");
 		},
 	});
@@ -68,7 +70,9 @@ test("flat projection uses present-side concrete roots, safe keys and response-l
 			extensions: [],
 		}).analyze,
 		currentByteSize: async () => 0,
-		collectChanges: async () => {
+		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		materializeChanges: async () => {
 			collections++;
 			return tree;
 		},
@@ -145,7 +149,9 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 		root,
 		name: "selected",
 		repositories: [],
-		collectChanges: async () => tree,
+		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		materializeChanges: async () => tree,
 		analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		analyze: analyzer.analyze,
 		currentByteSize: async () => {
@@ -198,7 +204,9 @@ test("file queries decode once, validate context and preserve literal names", as
 			extensions: [],
 		}).analyze,
 		currentByteSize: async () => 0,
-		collectChanges: async () => createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] }),
+		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
+		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
+		materializeChanges: async () => createWorkspaceTree({ root: "/selected", repositories: [], codebases: [] }),
 		fileDiff: async (_tree, path, signal, context) => {
 			assert.ok(signal instanceof AbortSignal);
 			seen.push([path, context]);

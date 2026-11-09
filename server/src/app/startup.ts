@@ -16,6 +16,7 @@ import { loadConfig } from "./config.ts";
 import { createFileRequests } from "./file-requests.ts";
 import { createHttpApp } from "./http.ts";
 import { createListener } from "./listener.ts";
+import { createRequestRuns } from "./request-runs.ts";
 
 type Options = {
 	workspace: string;
@@ -52,10 +53,13 @@ export async function start(options: Options) {
 	const analyzer = createTreeAnalyzer({ config: workspaceConfig, extensions });
 	const analysis = createAnalysis();
 	const fileRequests = createFileRequests();
-	const collection = createCollection({ collect: (signal) => changes.collect(signal) });
+	const changesRequests = createRequestRuns({ operation: "Workspace changes" });
+	const collection = createCollection({ collect: (signal) => changes.discover(signal) });
 	const app = createHttpApp({
 		...snapshot,
-		collectChanges: collection.collect,
+		discoverChanges: collection.collect,
+		materializeChanges: changes.materialize,
+		changesRequests,
 		analysis,
 		fileRequests,
 		fileDiff: changes.fileDiff,
@@ -84,9 +88,13 @@ export async function start(options: Options) {
 		if (disposal === undefined) {
 			process.off("SIGINT", terminate);
 			process.off("SIGTERM", terminate);
-			disposal = Promise.all([analysis.close(), fileRequests.close(), collection.close(), listener.close()]).then(
-				() => {},
-			);
+			disposal = Promise.all([
+				analysis.close(),
+				fileRequests.close(),
+				changesRequests.close(),
+				collection.close(),
+				listener.close(),
+			]).then(() => {});
 		}
 		return disposal;
 	}

@@ -11,7 +11,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Page, Route } from "playwright";
+import type { Locator, Page, Route } from "playwright";
 
 type Deps = {
 	page: Page;
@@ -69,11 +69,217 @@ export async function verifyInstalledDiffs({ page, address, workspace, screensho
 		if (response) assert.equal(await response.finished(), null);
 		await page.waitForURL((url) => url.searchParams.get("path") === path);
 		await page.getByRole("region", { name: "File diff", exact: true }).waitFor();
+		return response;
 	}
 	const diff = () => page.getByRole("region", { name: "File diff", exact: true });
 	const code = () => diff().locator("diffs-container [data-line]");
 	async function text(value: string) {
 		await code().filter({ hasText: value }).first().waitFor();
+	}
+	// Start at the actual DOM click, after Playwright's locator/scroll/actionability work.
+	// ResourceTiming and the next painted layout use the same browser clock.
+	async function measuredSelection(path: string, marker: string, condition: string) {
+		await page.locator("body").evaluate(
+			(element, { path, marker }) => {
+				const document = element.ownerDocument;
+				const view = document.defaultView;
+				const sample = { clicked: 0, readable: 0 };
+				Reflect.set(globalThis, "forgeSelectionSample", sample);
+				document.addEventListener(
+					"click",
+					function clicked(event: { target: { closest?(selector: string): typeof element } | null }) {
+						const target =
+							event.target && "closest" in event.target && typeof event.target.closest === "function"
+								? event.target.closest("button")
+								: null;
+						if (target?.getAttribute("aria-label") !== `Select ${path}`) return;
+						document.removeEventListener("click", clicked, true);
+						sample.clicked = performance.now();
+						function frame() {
+							const host = document.querySelector("diffs-container");
+							const line = Array.from<typeof element>(host?.shadowRoot?.querySelectorAll("[data-line]") ?? []).find(
+								(element) => element.textContent?.includes(marker),
+							);
+							if (!line || line.getBoundingClientRect().height === 0) return void view.requestAnimationFrame(frame);
+							view.requestAnimationFrame(() => {
+								sample.readable = performance.now();
+							});
+						}
+						view.requestAnimationFrame(frame);
+					},
+					true,
+				);
+			},
+			{ path, marker },
+		);
+		const response = await selected(path);
+		assert.ok(response);
+		const body = (await response.json()) as { patch: string };
+		await page.waitForFunction(() => Reflect.get(globalThis, "forgeSelectionSample").readable > 0);
+		const timing = await page.evaluate((path) => {
+			const sample = Reflect.get(globalThis, "forgeSelectionSample") as { clicked: number; readable: number };
+			const resource = performance
+				.getEntriesByType("resource")
+				.filter((entry) => {
+					const url = new URL(entry.name);
+					return (
+						url.pathname === "/api/changes/file" &&
+						url.searchParams.get("path") === path &&
+						entry.startTime >= sample.clicked
+					);
+				})
+				.at(-1) as { startTime: number; responseStart: number; responseEnd: number } | undefined;
+			if (!resource) throw new Error("Selected file has no browser ResourceTiming");
+			const round = (value: number) => Math.round(value * 10) / 10;
+			return {
+				selectionToRequestMs: round(resource.startTime - sample.clicked),
+				requestToHeadersMs: round(resource.responseStart - resource.startTime),
+				requestToBodyMs: round(resource.responseEnd - resource.startTime),
+				bodyToReadableFrameMs: round(sample.readable - resource.responseEnd),
+				selectionToReadableFrameMs: round(sample.readable - sample.clicked),
+			};
+		}, path);
+		console.log(
+			`Installed sidebar selection: ${JSON.stringify({ path, condition, patchBytes: Buffer.byteLength(body.patch), ...timing })}`,
+		);
+	}
+	async function wrapping(target: Locator, markers: string[], gutters: boolean) {
+		const geometry = await target.evaluate(
+			(element, { markers, gutters }) => {
+				const root = element.shadowRoot ?? element;
+				const document = element.ownerDocument;
+				const view = document.defaultView;
+				const hostBounds = element.getBoundingClientRect();
+				function character(container: Parameters<typeof document.createTreeWalker>[0], offset: number) {
+					const walker = document.createTreeWalker(container, 4 /* SHOW_TEXT */);
+					for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+						const length = node.textContent?.length ?? 0;
+						if (offset < length) {
+							const range = document.createRange();
+							range.setStart(node, offset);
+							range.setEnd(node, offset + 1);
+							return range.getBoundingClientRect();
+						}
+						offset -= length;
+					}
+					throw new Error("Missing text endpoint");
+				}
+				return markers.map((marker) => {
+					const line = gutters
+						? Array.from<typeof element>(root.querySelectorAll("[data-line]")).find((line) =>
+								line.textContent?.includes(marker),
+							)
+						: element;
+					if (!line) throw new Error(`Missing wrapped line ${marker}`);
+					const contents = line.textContent ?? "";
+					const endOffset = contents.indexOf(marker) + marker.length - 1;
+					const startOffset = gutters ? contents.search(/\S/) : contents.lastIndexOf("\n", endOffset) + 1;
+					const first = character(line, startOffset);
+					const last = character(line, endOffset);
+					const column = gutters ? line.closest("[data-code]") : element;
+					if (!column) throw new Error("Missing code column");
+					const bounds = (gutters ? column.querySelector("[data-content]") : column).getBoundingClientRect();
+					const index = line.getAttribute("data-line-index");
+					const gutter = gutters
+						? column.querySelector(`[data-gutter] [data-line-index="${index}"] [data-line-number-content]`)
+						: null;
+					const gutterTop = gutter?.getBoundingClientRect().top;
+					const gutterRow = gutter?.closest("[data-column-number]");
+					const changedGutter = gutterRow?.getAttribute("data-line-type")?.startsWith("change-");
+					const bar = changedGutter ? view.getComputedStyle(gutterRow, "::before") : undefined;
+					const hasBar = bar && bar.content !== "none" && bar.content !== "normal";
+					const changeBarRight = hasBar
+						? gutterRow.getBoundingClientRect().left +
+							Number.parseFloat(view.getComputedStyle(gutterRow).borderLeftWidth) +
+							Number.parseFloat(bar.left) +
+							Number.parseFloat(bar.width)
+						: undefined;
+					const gutterFirstGlyphLeft = gutter ? character(gutter, 0).left : undefined;
+					const pane = document.querySelector('[data-testid="selection-scroll"]');
+					if (!pane) throw new Error("Missing selected-file scroll pane");
+					pane.scrollTop += last.bottom - pane.getBoundingClientRect().bottom + 20;
+					const visibleEnd = character(line, endOffset);
+					const visiblePane = pane.getBoundingClientRect();
+					return {
+						endpointVisible: visibleEnd.top >= visiblePane.top && visibleEnd.bottom <= visiblePane.bottom,
+						hostLeft: hostBounds.left,
+						hostRight: hostBounds.right,
+						lineCharacters: endOffset - startOffset + 1,
+
+						marker,
+						firstX: first.x,
+						lastX: last.x,
+						lastRight: last.right,
+						firstTop: first.top,
+						lastBottom: last.bottom,
+						columnLeft: bounds.left,
+						columnRight: bounds.right,
+						lineHeight: Number.parseFloat(view.getComputedStyle(line).lineHeight),
+						gutterTop,
+						gutterNumber: gutter?.textContent?.trim(),
+						changeBarRight,
+						gutterFirstGlyphLeft,
+					};
+				});
+			},
+			{ markers, gutters },
+		);
+		for (const line of geometry) {
+			assert.ok(line.endpointVisible, `${line.marker} endpoint is visible after vertical pane scrolling`);
+			assert.ok(
+				line.firstX >= line.hostLeft - 1 &&
+					line.lastRight <= line.hostRight + 1 &&
+					line.columnRight <= line.hostRight + 1,
+				`${line.marker} remains inside the visible renderer host: ${JSON.stringify(line)}`,
+			);
+			assert.ok(
+				line.lastBottom - line.firstTop > line.lineHeight * 1.5,
+				`${line.marker} occupies multiple visual lines`,
+			);
+			assert.ok(
+				line.firstX >= line.columnLeft - 1 &&
+					line.lastX >= line.columnLeft - 1 &&
+					line.lastRight <= line.columnRight + 1,
+				`${line.marker} endpoints fit its own code pane: ${JSON.stringify(line)}`,
+			);
+			if (gutters) {
+				if (line.changeBarRight !== undefined)
+					assert.ok(
+						line.gutterFirstGlyphLeft !== undefined && line.gutterFirstGlyphLeft >= line.changeBarRight,
+						`The first gutter digit remains clear of the change bar: ${JSON.stringify(line)}`,
+					);
+				assert.ok(line.gutterTop !== undefined, "Wrapped line retains its numbered gutter");
+				assert.ok(
+					Math.abs(line.gutterTop - line.firstTop) < line.lineHeight / 2,
+					`Gutter anchors to first visual line: ${JSON.stringify(line)}`,
+				);
+			}
+		}
+		assert.ok(
+			await target
+				.page()
+				.getByTestId("selection-scroll")
+				.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+			"Selected content fits the pane without clipping or horizontal overflow",
+		);
+		assert.ok(
+			await target
+				.page()
+				.locator("body")
+				.evaluate((element) => element.scrollWidth <= element.ownerDocument.defaultView.innerWidth),
+			"Wrapped content fits the page",
+		);
+		if (gutters)
+			assert.ok(
+				await target
+					.locator("[data-code] > [data-content]")
+					.evaluateAll((elements) => elements.every((element) => element.scrollWidth <= element.clientWidth + 1)),
+				"Every split/unified code column wraps within its own bounds",
+			);
+		console.log(
+			`Installed wrapping geometry: ${JSON.stringify({ viewport: target.page().viewportSize(), gutters, sidebar: await target.page().getByRole("separator", { name: "Resize changes sidebar" }).getAttribute("aria-valuenow"), columnWidths: geometry.map((line) => Math.round(line.columnRight - line.columnLeft)), lineCharacters: geometry.map((line) => line.lineCharacters), endpointVisible: true, firstLineGutters: gutters })}`,
+		);
+		return geometry;
 	}
 	async function screenshot(name: string) {
 		await page.mouse.move(1, 1);
@@ -165,11 +371,40 @@ export async function verifyInstalledDiffs({ page, address, workspace, screensho
 		write("app/diff-too-large.txt", "x".repeat(8 * 1024 * 1024 + 1));
 		write("app/diff-large.ts", Array.from({ length: 1500 }, (_, i) => `export const added${i} = ${i};\n`).join(""));
 		const unusual = `app/deep/${"long-directory-".repeat(7)}/quoted " café # % ? diff.ts`;
-		write(unusual, `export const longLine = "${"word ".repeat(3000)}";\n`);
+		write(
+			unusual,
+			`    export const longLine = "${"word ".repeat(3000)}END_WORDS";\n    export const token = "${"T".repeat(1500)}END_TOKEN";\n`,
+		);
 		const before = sourceState(workspace);
 		await page.addInitScript(() => {
 			Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
 		});
+		console.log(
+			`Installed selection environment: ${JSON.stringify({ node: process.version, chromium: page.context().browser()?.version(), viewport: page.viewportSize(), fixtureChanges: run("git", ["--no-optional-locks", "status", "--porcelain", "--untracked-files=all"], workspace).trim().split("\n").length, largeLines: 1500, longWords: 3000, longTokenCharacters: 1500, language: "typescript", build: "fresh packed production" })}`,
+		);
+		for (const [path, marker] of [
+			["app/diff-add.ts", "export const added = true;"],
+			["app/diff-large.ts", "added0 = 0;"],
+		]) {
+			assert.ok(path && marker);
+			await page.goto(address);
+			await measuredSelection(path, marker, "cold page, first sidebar file");
+			for (let sample = 1; sample <= 2; sample++) {
+				await selected(path === "app/diff-add.ts" ? "app/diff-large.ts" : "app/diff-add.ts");
+				await text(path === "app/diff-add.ts" ? "added0 = 0;" : "export const added = true;");
+				await measuredSelection(path, marker, `repeated ${sample}`);
+			}
+		}
+		// Keep measurement workloads comparable: this tracked file becomes changed
+		// only after all six sidebar timing samples have completed.
+		const numbersPath = "app/diff-numbers.ts";
+		preserve(numbersPath);
+		const numbersOriginal = originals.get(numbersPath);
+		assert.ok(numbersOriginal);
+		const numberedLines = numbersOriginal.bytes.toString("utf8").split("\n");
+		numberedLines[99_999] = `${"word ".repeat(60)}END_NUMBER_WORDS`;
+		numberedLines[100_001] = `${"T".repeat(260)}END_NUMBER_TOKEN`;
+		write(numbersPath, numberedLines.join("\n"), true);
 		await page.goto(`${address}/?path=${encodeURIComponent(contextPath)}`);
 		assert.equal(
 			await page.evaluate(() => Reflect.get(navigator, "onLine")),
@@ -187,7 +422,7 @@ export async function verifyInstalledDiffs({ page, address, workspace, screensho
 		await page.getByRole("button", { name: "Split", exact: true }).click();
 		await diff().locator("diffs-container [data-deletions]").waitFor();
 		const split = await diff()
-			.locator("diffs-container [data-code]")
+			.locator("diffs-container [data-code] > [data-content]")
 			.evaluateAll((elements) =>
 				elements.map((element) => ({
 					x: element.getBoundingClientRect().x,
@@ -379,16 +614,11 @@ export async function verifyInstalledDiffs({ page, address, workspace, screensho
 		await text("new");
 		await selected("app/diff-eof.txt");
 		await text("new");
-		const largeStarted = performance.now();
 		await selected("app/diff-large.ts");
 		await text("added1499");
-		const largeLoadedMs = Math.round(performance.now() - largeStarted);
-		const modeStarted = performance.now();
 		await page.getByRole("button", { name: "Unified", exact: true }).click();
 		await diff().locator("diffs-container [data-unified]").waitFor();
 		await text("added1499");
-		const largeModeMs = Math.round(performance.now() - modeStarted);
-		console.log(`Installed Pierre 1500-line diff: selection/render ${largeLoadedMs}ms; mode change ${largeModeMs}ms.`);
 		const pane = page.getByTestId("selection-scroll");
 		await pane.evaluate((element) => {
 			element.scrollTop = element.scrollHeight;
@@ -397,18 +627,180 @@ export async function verifyInstalledDiffs({ page, address, workspace, screensho
 		assert.equal(await page.locator("html").evaluate((element) => element.scrollTop), 0);
 		await screenshot("diff-large.png");
 		await selected(unusual);
-		await text("longLine");
-		await page.setViewportSize({ width: 360, height: 740 });
-		assert.ok(await page.locator("body").evaluate((element) => element.scrollWidth <= 360));
-		await screenshot("diff-long-narrow.png");
+		await text("END_TOKEN");
+		const markers = ["END_WORDS", "END_TOKEN"];
+		for (const width of [1100, 360]) {
+			await page.setViewportSize({ width, height: 800 });
+			for (const mode of ["Unified", "Split"]) {
+				await page.getByRole("button", { name: mode, exact: true }).click();
+				await text("END_TOKEN");
+				await wrapping(diff().locator("diffs-container"), markers, true);
+			}
+		}
+		await pane.evaluate((element) => {
+			element.scrollTop = 0;
+		});
+		await screenshot("diff-long-path-narrow.png");
+		await wrapping(diff().locator("diffs-container"), markers, true);
+		await pane.evaluate((element) => {
+			element.scrollTop = element.scrollHeight;
+		});
+		await screenshot("diff-long-token-end-narrow.png");
 		await page.setViewportSize({ width: 1100, height: 800 });
-		await page.getByRole("button", { name: "Unified", exact: true }).click();
-		await screenshot("diff-long.png");
+		// A tracked modification retains both split columns; added files alone
+		// may occupy a single full-width column in Pierre.
+		const contextBeforeWrapping = readFileSync(join(workspace, contextPath));
+		writeFileSync(
+			join(workspace, contextPath),
+			context
+				.replace("line30 = 30", `line30 = "${"word ".repeat(60)}END_WORDS"`)
+				.replace("line100 = 100", `line100 = "${"T".repeat(260)}END_TOKEN"`),
+		);
+		await selected(contextPath);
+		await text("END_TOKEN");
+		for (const mode of ["Unified", "Split"]) {
+			await page.getByRole("button", { name: mode, exact: true }).click();
+			await text("END_TOKEN");
+			if (mode === "Split")
+				assert.equal(
+					await diff().locator("diffs-container [data-code]").count(),
+					2,
+					"Wrapping exercises both split columns",
+				);
+			await wrapping(diff().locator("diffs-container"), markers, true);
+			await pane.evaluate((element) => {
+				element.scrollTop = 0;
+			});
+			await screenshot(`diff-long-${mode.toLowerCase()}.png`);
+		}
+		const separator = page.getByRole("separator", { name: "Resize changes sidebar" });
+		const savedWidth = Number(await separator.getAttribute("aria-valuenow"));
+		await separator.focus();
+		await separator.press("ArrowRight");
+		const resizedWidth = Number(await separator.getAttribute("aria-valuenow"));
+		assert.ok(resizedWidth > savedWidth);
+		assert.equal(await page.evaluate(() => localStorage.getItem("forge-sidebar-width")), String(resizedWidth));
+		for (const mode of ["Unified", "Split"]) {
+			await page.getByRole("button", { name: mode, exact: true }).click();
+			await text("END_TOKEN");
+			if (mode === "Split")
+				assert.equal(
+					await diff().locator("diffs-container [data-code]").count(),
+					2,
+					"Wrapping exercises both split columns",
+				);
+			await wrapping(diff().locator("diffs-container"), markers, true);
+		}
+		await page.reload();
+		await text("END_TOKEN");
+		assert.equal(
+			Number(await separator.getAttribute("aria-valuenow")),
+			resizedWidth,
+			"Wrapped view restores resized sidebar",
+		);
+		await page.setViewportSize({ width: 360, height: 740 });
+		for (const mode of ["Unified", "Split"]) {
+			await page.getByRole("button", { name: mode, exact: true }).click();
+			await text("END_TOKEN");
+			if (mode === "Split")
+				assert.equal(
+					await diff().locator("diffs-container [data-code]").count(),
+					2,
+					"Wrapping exercises both split columns",
+				);
+			await wrapping(diff().locator("diffs-container"), markers, true);
+			await pane.evaluate((element) => {
+				element.scrollTop = 0;
+			});
+			await screenshot(`diff-long-narrow-${mode.toLowerCase()}.png`);
+		}
+		await selected(numbersPath);
+		await text("END_NUMBER_TOKEN");
+		for (const mode of ["Unified", "Split"]) {
+			await page.getByRole("button", { name: mode, exact: true }).click();
+			await text("END_NUMBER_TOKEN");
+			if (mode === "Split") assert.equal(await diff().locator("diffs-container [data-code]").count(), 2);
+			const numbered = await wrapping(
+				diff().locator("diffs-container"),
+				["END_NUMBER_WORDS", "END_NUMBER_TOKEN"],
+				true,
+			);
+			assert.deepEqual(
+				numbered.map((line) => line.gutterNumber),
+				["100000", "100002"],
+				"Six-digit numbers remain attached to their actual wrapped rows",
+			);
+			await screenshot(`diff-six-digit-narrow-${mode.toLowerCase()}-end.png`);
+			await pane.evaluate((element) => {
+				element.scrollTop = 0;
+			});
+			await screenshot(`diff-six-digit-narrow-${mode.toLowerCase()}.png`);
+		}
+		await page.setViewportSize({ width: 1100, height: 800 });
+		await separator.focus();
+		await separator.press("ArrowLeft");
+		assert.equal(Number(await separator.getAttribute("aria-valuenow")), savedWidth);
+
+		writeFileSync(join(workspace, contextPath), contextBeforeWrapping);
+		writeFileSync(join(workspace, numbersPath), numbersOriginal.bytes);
+
+		// A separate real page isolates this explicitly expected parser report from
+		// the ordinary consumer's strict unexpected-console-error assertion.
+		const browser = page.context().browser();
+		assert.ok(browser);
+		const fallbackPage = await browser.newPage({ viewport: page.viewportSize() });
+		const fallbackErrors: string[] = [];
+		const fallbackReports: string[] = [];
+		fallbackPage.on("pageerror", (error) => fallbackErrors.push(error.message));
+		fallbackPage.on("request", onRequest);
+		fallbackPage.on("console", (message) => {
+			if (message.type() === "error") fallbackReports.push(message.text());
+		});
+		const malformed = `not a valid patch\n    ${"word ".repeat(3000)}END_WORDS\n    ${"T".repeat(1500)}END_TOKEN\n`;
+		try {
+			await fallbackPage.route("**/api/changes/file?**", async (request) => {
+				const response = await request.fetch();
+				const body = await response.json();
+				await request.fulfill({ json: { ...body, patch: malformed } });
+			});
+			await fallbackPage.goto(`${address}/?path=${encodeURIComponent(unusual)}`);
+			await fallbackPage.getByRole("button", { name: "Show plain patch", exact: true }).click();
+			const plain = fallbackPage.getByRole("region", { name: "Plain text patch", exact: true }).locator("pre");
+			assert.equal(await plain.textContent(), malformed, "Literal fallback preserves indentation and newlines");
+			for (const width of [1100, 360]) {
+				await fallbackPage.setViewportSize({ width, height: 800 });
+				await wrapping(plain, markers, false);
+				assert.ok(
+					await fallbackPage
+						.getByTestId("selection-scroll")
+						.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+				);
+				await fallbackPage.screenshot({ path: join(screenshots, `diff-fallback-${width}-end.png`) });
+				await fallbackPage.getByTestId("selection-scroll").evaluate((element) => {
+					element.scrollTop = 0;
+				});
+				await fallbackPage.screenshot({ path: join(screenshots, `diff-fallback-${width}.png`) });
+			}
+			await fallbackPage.unroute("**/api/changes/file?**");
+			await fallbackPage.getByRole("button", { name: "Reload file", exact: true }).click();
+			await fallbackPage.locator("diffs-container [data-line]").filter({ hasText: "END_TOKEN" }).waitFor();
+			assert.equal(
+				await fallbackPage.getByRole("alert").count(),
+				0,
+				"Reload recovers real parser failure after injected fault clears",
+			);
+			assert.deepEqual(fallbackErrors, []);
+			assert.equal(fallbackReports.length, 1, "Injected parser failure reports once");
+			assert.match(fallbackReports[0] ?? "", /Unexpected Forge failure/);
+		} finally {
+			await fallbackPage.close();
+		}
+
 		assert.deepEqual(sourceState(workspace), before, "UI diff reads preserve source, index, refs and object contents");
 		assert.deepEqual(errors, []);
 		assert.deepEqual(external, []);
 		console.log(
-			`Installed Chromium Pierre: unified/split highlighting, complete-context expansion/retry, Refresh, metadata/empty/mode/rename/type transitions, unsupported responses, CRLF/EOF, substantial diff and narrow long paths passed. Screenshots: ${screenshots}`,
+			`Installed Chromium Pierre: unified/split highlighting, complete-context expansion/retry, Refresh, metadata/empty/mode/rename/type transitions, unsupported responses, CRLF/EOF, measured sidebar selections, substantial diff, wrapped words/tokens in unified/split ordinary/narrow/resized panes, first-line/six-digit gutters, injected long plain-patch fallback/Reload and narrow long paths passed. Screenshots: ${screenshots}`,
 		);
 	} finally {
 		if (delayed) await delayed.abort().catch(() => {});
