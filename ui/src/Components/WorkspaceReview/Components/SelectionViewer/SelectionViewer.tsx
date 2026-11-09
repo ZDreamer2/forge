@@ -136,12 +136,6 @@ export function SelectionViewer({
 									</h3>
 									<ChangesSummary summary={selected.shown} label={`${path} visible subtree`} />
 									<p>Subtree counts follow the current filters and include nested repositories.</p>
-									{selected.repositoryShown && selected.repositoryTotal && (
-										<p>
-											Repository-owned changes: {selected.repositoryShown.files} of {selected.repositoryTotal.files}.
-											Nested repositories are counted separately.
-										</p>
-									)}
 								</section>
 							)}
 							{node?.kind && (

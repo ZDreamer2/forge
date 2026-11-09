@@ -163,16 +163,18 @@ it("exposes the complete attributed canonical list through either severity and i
 	expect(messages().getAllByText("Repeated concern")).toHaveLength(2);
 });
 
-it("discovers nested and filtered sources from zero-visible repositories and reveals only missing categories", async () => {
+it("discovers pruned repository sources through a surviving ancestor and reveals only missing categories", async () => {
 	serve();
 	const user = await observe();
-	await navigator().findByRole("button", { name: "Inspect warnings for nested" });
+	expect(navigator().queryByRole("button", { name: "Select nested" })).not.toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Docs", pressed: true }));
 	await user.click(screen.getByRole("button", { name: "Collapse other" }));
 	await user.click(navigator().getByRole("button", { name: "Inspect warnings for ." }));
 	expect(messages().getAllByText("Repeated concern")).toHaveLength(3);
 	expect(messages().getByText("Nested repository concern")).toBeInTheDocument();
-	await user.click(navigator().getByRole("button", { name: "Inspect warnings for nested" }));
+	await user.click(messages().getByRole("button", { name: "Inspect source nested" }));
+	expect(selectedPath()).toBe("nested");
+	expect(messages().getByText("Nested repository concern")).toBeInTheDocument();
 	expect(messages().getByText("Repeated concern")).toBeInTheDocument();
 	expect(messages().getByText(/filtered/i)).toBeInTheDocument();
 	await user.click(messages().getByRole("button", { name: "Inspect source nested/hidden.md" }));
@@ -281,12 +283,13 @@ it("removes vanished messages, resets a surviving subject and clears a disappear
 	const network = serve();
 	const user = await observe("nested");
 	await viewer().findByRole("button", { name: "Show signal details" });
-	await user.click(navigator().getByRole("button", { name: "Inspect warnings for nested" }));
+	expect(navigator().queryByRole("button", { name: "Select nested" })).not.toBeInTheDocument();
+	await user.click(viewer().getByRole("button", { name: "Show signal details" }));
 	const empty: WorkspaceAnalysis = { root: ".", nodes: { ".": node(".") }, handlers: {}, codebases: {} };
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(empty)));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
 	await screen.findByRole("button", { name: /All workspace changes: 0 changed files/ });
-	expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
+	expect(within(screen.getByRole("navigation", { name: "Changed files" })).getByText("No changes")).toBeInTheDocument();
 	expect(selectedPath()).toBe("nested");
 	expect(screen.queryByRole("region", { name: "Signal details" })).not.toBeInTheDocument();
 	expect(viewer().queryByRole("button", { name: "Show signal details" })).not.toBeInTheDocument();

@@ -21,6 +21,7 @@ type Codebases = WorkspaceAnalysis["codebases"];
 
 export function ChangesTree({
 	projection,
+	workspaceName,
 	signals,
 	onInspect,
 	expanded,
@@ -32,6 +33,7 @@ export function ChangesTree({
 	codebases,
 }: {
 	projection: TreeProjection;
+	workspaceName: string;
 	signals?: SignalAnalysis | undefined;
 	onInspect?: ((path: string) => void) | undefined;
 	expanded: ReadonlySet<string>;
@@ -50,9 +52,8 @@ export function ChangesTree({
 		const actualRepository =
 			!!entry.repository || node?.base?.repositoryRoot !== undefined || node?.current?.repositoryRoot !== undefined;
 		const isExpanded = expanded.has(path);
-		const name = path === "." ? "." : path.slice(path.lastIndexOf("/") + 1);
-		const count = entry.repositoryShown ?? entry.shown;
-		const total = entry.repositoryTotal ?? entry.total;
+		const name = path === "." ? workspaceName : path.slice(path.lastIndexOf("/") + 1);
+		const count = entry.shown;
 		const boundaries = (["base", "current"] as const).flatMap((side) => {
 			const facts = node?.[side];
 			if (!facts) return [];
@@ -64,7 +65,7 @@ export function ChangesTree({
 			});
 		});
 		return (
-			<div key={path} className={actualRepository ? styles.repositoryGroup : undefined}>
+			<div key={path}>
 				<div
 					className={styles.row}
 					data-path={path}
@@ -115,11 +116,6 @@ export function ChangesTree({
 						</button>
 					</Tooltip>
 					{signals && onInspect && <SignalSummary signals={signals} path={path} onInspect={onInspect} />}
-					{entry.repository && (
-						<span className={styles.repositoryCount}>
-							{count.files} of {total.files}
-						</span>
-					)}
 					{boundaries.map(({ side, kind, root, owner }) => (
 						<Tooltip
 							key={`${side}-${kind}`}
@@ -132,20 +128,8 @@ export function ChangesTree({
 							</button>
 						</Tooltip>
 					))}
-					<ChangesSummary
-						summary={count}
-						label={`${path} ${entry.repository ? "repository changes" : "visible subtree"}`}
-					/>
+					<ChangesSummary summary={count} label={`${path} visible subtree`} />
 				</div>
-				{entry.repository && !count.files && (
-					<div className={styles.emptyRepository}>
-						{entry.repository.status === "missing"
-							? "Missing at startup"
-							: total.files
-								? "No changes match the filters"
-								: "No changes"}
-					</div>
-				)}
 				{isExpanded &&
 					entry.children.map((child) => {
 						const next = projection.nodes.get(child);
@@ -175,7 +159,13 @@ export function ChangesTree({
 				</div>
 				<ChangesSummary summary={projection.visible} label="Visible workspace changes" />
 			</div>
-			<nav aria-label="Changed files">{projection.root && renderRow(projection.root, 0)}</nav>
+			<nav aria-label="Changed files">
+				{projection.root?.visible ? (
+					renderRow(projection.root, 0)
+				) : (
+					<p className={styles.emptyTree}>{projection.all.files ? "No changes match the filters" : "No changes"}</p>
+				)}
+			</nav>
 		</div>
 	);
 }

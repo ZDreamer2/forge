@@ -178,7 +178,8 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await summary(page, "All workspace changes", 0, 0, 0);
 		assert.deepEqual(sourceState(workspace), before);
 		assert.equal(await page.locator("html").getAttribute("data-mantine-color-scheme"), "light");
-		await select(page, "not-cloned").click();
+		assert.equal(await select(page, "not-cloned").count(), 0, "Missing repositories have no analyzed tree row");
+		await page.goto(`${address}/?path=not-cloned`);
 		await waitSelected(page, "not-cloned");
 		await page
 			.getByRole("region", { name: "Selection details" })
@@ -218,7 +219,15 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		const visible = totals(changes.filter((node) => node.effectiveEmphasis.value !== "hidden"));
 		await summary(page, "All workspace changes", all.files, all.removed, all.added);
 		await summary(page, "Visible workspace changes", visible.files, visible.removed, visible.added);
+		assert.equal(await select(page, ".").innerText(), workspaceName);
 		assert.equal(analysis.nodes["app/tests/check.test.ts"]?.classification.value, "tests");
+		await page.getByRole("button", { name: "Tests", exact: true }).click();
+		assert.equal(await select(page, "app/tests/check.test.ts").count(), 0);
+		assert.equal(await select(page, "app/tests").count(), 0, "Last matching Tests descendant prunes its ancestor");
+		await select(page, "app/tracked.txt").waitFor();
+		await summary(page, "All workspace changes", all.files, all.removed, all.added);
+		await page.getByRole("button", { name: "Tests", exact: true }).click();
+		await select(page, "app/tests/check.test.ts").waitFor();
 		assert.equal(analysis.nodes["app/tests/check.test.ts"]?.effectiveEmphasis.value, "deemphasized");
 		assert.equal(analysis.nodes["app/tests/critical.txt"]?.effectiveEmphasis.value, "normal");
 		assert.equal(analysis.nodes["app/tracked.txt"]?.effectiveEmphasis.value, "emphasized");
@@ -248,7 +257,14 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 
 		await page.getByRole("button", { name: "Deselect all types and importance levels", exact: true }).click();
 		await summary(page, "Visible workspace changes", 0, 0, 0);
-		await select(page, "not-cloned").waitFor();
+		assert.equal(await select(page, ".").count(), 0, "No matching changes prunes the whole tree");
+		assert.equal(await select(page, "not-cloned").count(), 0);
+		assert.equal(await select(page, "nested").count(), 0);
+		await page
+			.getByRole("navigation", { name: "Changed files" })
+			.getByText("No changes match the filters", { exact: true })
+			.waitFor();
+		await page.getByRole("button", { name: "Select all types and importance levels", exact: true }).click();
 		await select(page, "nested").waitFor();
 		assert.equal(
 			await inspect(page, "nested", "warnings").evaluate(
@@ -279,6 +295,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.getByRole("button", { name: "Inspect source nested/browser-binary.dat", exact: true })
 			.click();
 		await page.waitForURL((url) => url.searchParams.get("path") === "nested/browser-binary.dat");
+		await page.getByRole("button", { name: "Deselect all types and importance levels", exact: true }).click();
 		await summary(page, "Visible workspace changes", 0, 0, 0);
 		await signalDetails(page)
 			.getByText(/filtered out/i)
@@ -476,7 +493,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.locator(":scope > span")
 			.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().right));
 		const rootColumns = await page
-			.getByRole("button", { name: /^\. repository changes:/ })
+			.getByRole("button", { name: /^\. visible subtree:/ })
 			.locator(":scope > span")
 			.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().right));
 		assert.deepEqual(rootColumns, summaryColumns, "Removal/addition columns align with the sidebar summary");

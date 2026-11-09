@@ -26,8 +26,6 @@ export type ReviewSubject = {
 	ownVisible: boolean;
 	total: Summary;
 	shown: Summary;
-	repositoryTotal?: Summary;
-	repositoryShown?: Summary;
 };
 export type ReviewAnalysis = {
 	subjects: ReadonlyMap<string, ReviewSubject>;
@@ -101,8 +99,6 @@ export function analyzeChanges(
 	for (const repository of identity?.repositories ?? []) {
 		const entry = subjects.get(repository.path) ?? subject(repository.path);
 		entry.repository = repository;
-		entry.repositoryTotal = emptySummary();
-		entry.repositoryShown = emptySummary();
 		subjects.set(repository.path, entry);
 	}
 	if (!subjects.has(".") && identity) subjects.set(".", subject("."));
@@ -118,9 +114,6 @@ export function analyzeChanges(
 			addEntry(visible, node);
 			addEntry(entry.shown, node);
 		}
-		const repository = node.repo === undefined ? undefined : subjects.get(node.repo);
-		if (repository?.repositoryTotal) addEntry(repository.repositoryTotal, node);
-		if (repository?.repositoryShown && entry.ownVisible) addEntry(repository.repositoryShown, node);
 	}
 	// Only own entries contribute. Inclusive server totals would double-count
 	// transitions that have both their own change and changed descendants.

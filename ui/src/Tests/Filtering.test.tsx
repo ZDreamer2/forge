@@ -90,10 +90,11 @@ function fixture(): WorkspaceAnalysis {
 		}),
 		changed("src/transition/child.md", 5, 1, { kind: "added", classification: { value: "docs" } }),
 		node("tests", {
-			children: ["tests/sample.ts", "tests/reset.ts"],
+			children: ["tests/unit", "tests/reset.ts"],
 			effectiveEmphasis: { value: "deemphasized", reason: "Tests", handler: "guide#annotateNode", origin: "tests" },
 		}),
-		changed("tests/sample.ts", 3, 5, {
+		node("tests/unit", { children: ["tests/unit/sample.ts"] }),
+		changed("tests/unit/sample.ts", 3, 5, {
 			classification: { value: "tests", reason: "Test source", handler: "guide#classifyNode" },
 			effectiveEmphasis: { value: "deemphasized", reason: "Tests", handler: "guide#annotateNode", origin: "tests" },
 		}),
@@ -174,17 +175,15 @@ function row(path: string): HTMLElement {
 it("reviews default breakdowns, filters both dimensions and inspects metadata without losing canonical counts", async () => {
 	start();
 	await screen.findByRole("button", { name: "Select src/high.ts" });
+	await screen.findByRole("heading", { name: identity.workspace.name });
 	totals("All workspace changes", 13, 19, 43);
 	totals("Visible workspace changes", 12, 19, 36);
-	expect(row(".")).toHaveTextContent("11 of 12");
-	expect(row("tools/nested")).toHaveTextContent("1 of 1");
+	expect(within(row(".")).getByRole("button", { name: "Select ." })).toHaveTextContent("Canonical workspace");
 	expect(screen.queryByRole("button", { name: "Select external/empty" })).not.toBeInTheDocument();
-	expect(row("missing")).toBeInTheDocument();
-	expect(screen.getByText("Missing at startup")).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select missing" })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select external" })).not.toBeInTheDocument();
 	totals("src/transition visible subtree", 2, 3, 7);
-	expect(row("old")).toBeInTheDocument();
-	expect(screen.getByRole("button", { name: "base codebase boundary: old-owner" })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select old" })).not.toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "current codebase boundary: application" })).toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "current repository boundary: tools/nested" })).toBeInTheDocument();
 	expect(row("__proto__")).toBeInTheDocument();
@@ -192,6 +191,19 @@ it("reviews default breakdowns, filters both dimensions and inspects metadata wi
 	expect(screen.queryByRole("button", { name: "Select docs/hidden.md" })).not.toBeInTheDocument();
 
 	const user = userEvent.setup();
+	async function inspectSubtree(path: string, files: number, removed: number, added: number) {
+		const name = `${path} visible subtree: ${files} changed files, ${removed} removed lines, ${added} added lines`;
+		expect(within(row(path)).getByRole("button", { name })).toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: `Select ${path}` }));
+		const selection = within(screen.getByRole("region", { name: "Selection details" }));
+		expect(selection.getByRole("button", { name })).toBeInTheDocument();
+		expect(selection.getByText(new RegExp(`${files} visible changed files`))).toBeInTheDocument();
+	}
+	await inspectSubtree("src/transition", 2, 3, 7);
+	await inspectSubtree(".", 12, 19, 36);
+	await inspectSubtree("tools", 1, 4, 8);
+	await inspectSubtree("tools/nested", 1, 4, 8);
+	await user.click(screen.getByRole("button", { name: "Select tools/nested" }));
 	const visibleTotals = totals("Visible workspace changes", 12, 19, 36);
 	await user.hover(visibleTotals);
 	const tooltip = within(await screen.findByRole("tooltip"));
@@ -212,14 +224,38 @@ it("reviews default breakdowns, filters both dimensions and inspects metadata wi
 	expect(importance.queryByRole("rowheader", { name: "None" })).not.toBeInTheDocument();
 	await user.unhover(visibleTotals);
 
+	await user.click(screen.getByRole("button", { name: "Tests" }));
+	totals("Visible workspace changes", 11, 14, 33);
+	expect(screen.queryByRole("button", { name: "Select tests/unit/sample.ts" })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select tests/unit" })).not.toBeInTheDocument();
+	expect(row("tests/reset.ts")).toBeInTheDocument();
+	expect(row("tests")).toBeInTheDocument();
+	expect(row("src/normal.ts")).toBeInTheDocument();
+	totals("All workspace changes", 13, 19, 43);
+	await user.click(screen.getByRole("button", { name: "Tests" }));
+	expect(row("tests/unit/sample.ts")).toBeInTheDocument();
+
+	await user.click(screen.getByRole("button", { name: "Docs" }));
+	await inspectSubtree("src/transition", 1, 2, 2);
+	expect(screen.queryByRole("button", { name: "Select src/transition/child.md" })).not.toBeInTheDocument();
+	await user.click(screen.getByRole("button", { name: "Select src/transition" }));
+	await user.click(screen.getByRole("button", { name: "Docs" }));
+
 	await user.click(screen.getByRole("button", { name: "Low" }));
 	totals("Visible workspace changes", 10, 10, 25);
-	expect(row("tools/nested")).toHaveTextContent("0 of 1");
-	expect(screen.queryByRole("button", { name: "Select tests/sample.ts" })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select tools/nested" })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select tools" })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select tests/unit/sample.ts" })).not.toBeInTheDocument();
 	expect(row("tests/reset.ts")).toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Code" }));
 	totals("Visible workspace changes", 3, 4, 6);
-	totals("src/transition visible subtree", 1, 1, 5);
+	await inspectSubtree("src/transition", 1, 1, 5);
+	expect(screen.getByRole("region", { name: "Selection details" })).toHaveTextContent(
+		"The selected change is outside the current filters",
+	);
+	await user.click(screen.getByRole("button", { name: "Select src/transition" }));
+	expect(screen.queryByRole("button", { name: "Select tests" })).not.toBeInTheDocument();
+	expect(row("config/setup.json")).toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "None" }));
 	totals("Visible workspace changes", 4, 4, 13);
 	expect(row("docs/hidden.md")).toBeInTheDocument();
@@ -227,8 +263,11 @@ it("reviews default breakdowns, filters both dimensions and inspects metadata wi
 
 	await user.click(screen.getByRole("button", { name: "Deselect all types and importance levels" }));
 	totals("Visible workspace changes", 0, 0, 0);
-	expect(row(".")).toHaveTextContent("0 of 12");
-	expect(row("tools/nested")).toHaveTextContent("0 of 1");
+	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select tools/nested" })).not.toBeInTheDocument();
+	expect(
+		within(screen.getByRole("navigation", { name: "Changed files" })).getByText("No changes match the filters"),
+	).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select src/zero.ts" })).not.toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Select all types and importance levels" }));
 	totals("Visible workspace changes", 13, 19, 43);

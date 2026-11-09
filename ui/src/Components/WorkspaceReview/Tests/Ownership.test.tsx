@@ -58,7 +58,7 @@ const identity: WorkspaceIdentity = {
 	],
 };
 
-it("inspects canonical transitions, filtered entries and repository scopes without mounting a navigator", () => {
+it("inspects canonical transitions, filtered entries and inclusive subtrees without mounting a navigator", () => {
 	const facts = analysis([
 		node(".", { children: ["transition", "nested", "__proto__"] }),
 		node("transition", {
@@ -99,7 +99,6 @@ it("inspects canonical transitions, filtered entries and repository scopes witho
 	expect(
 		details.getByRole("button", { name: ". visible subtree: 3 changed files, 1 removed lines, 2 added lines" }),
 	).toBeInTheDocument();
-	expect(details.getByText(/Repository-owned changes: 2 of 3/)).toBeInTheDocument();
 
 	rendered.rerender(view("transition"));
 	expect(details.getByText(/1 visible changed files/)).toHaveTextContent("of 2 in this subtree");
@@ -123,7 +122,8 @@ it("inspects canonical transitions, filtered entries and repository scopes witho
 	expect(details.getByText("This repository was unavailable when the server started.")).toBeInTheDocument();
 });
 
-it("omits a known-empty root but retains ancestors of a repository with only filtered changes", () => {
+it("prunes empty and filtered repositories while retaining canonical ancestors of matching repositories", async () => {
+	const user = userEvent.setup();
 	const repositories: WorkspaceIdentity = {
 		...identity,
 		repositories: identity.repositories.filter((repository) => repository.status === "available"),
@@ -147,6 +147,7 @@ it("omits a known-empty root but retains ancestors of a repository with only fil
 	const rendered = render(view(analysis([node(".")])));
 	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select nested" })).not.toBeInTheDocument();
+	expect(within(screen.getByRole("navigation", { name: "Changed files" })).getByText("No changes")).toBeInTheDocument();
 	rendered.rerender(
 		view(
 			analysis([
@@ -156,15 +157,43 @@ it("omits a known-empty root but retains ancestors of a repository with only fil
 			]),
 		),
 	);
-	expect(screen.getByRole("button", { name: "Select ." })).toBeInTheDocument();
-	expect(screen.getByRole("button", { name: "Select nested" })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select nested" })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select nested/hidden.ts" })).not.toBeInTheDocument();
-	expect(screen.getByRole("navigation", { name: "Changed files" })).toHaveTextContent("0 of 1");
+	expect(
+		within(screen.getByRole("navigation", { name: "Changed files" })).getByText("No changes match the filters"),
+	).toBeInTheDocument();
+	rendered.rerender(
+		view(
+			analysis([
+				node(".", { children: ["tools"] }),
+				node("tools", { children: ["tools/repository"] }),
+				node("tools/repository", {
+					children: ["tools/repository/file.ts"],
+					current: {
+						path: "tools/repository",
+						kind: "directory",
+						repository: "tools/repository",
+						repositoryRoot: "tools/repository",
+					},
+				}),
+				node("tools/repository/file.ts", { kind: "added", repo: "tools/repository" }),
+			]),
+		),
+	);
+	expect(screen.getByRole("button", { name: "Select ." })).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Select tools" })).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Select tools/repository" })).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Select tools/repository/file.ts" })).toBeInTheDocument();
+	await user.click(screen.getByRole("button", { name: "Collapse tools" }));
+	expect(screen.queryByRole("button", { name: "Select tools/repository" })).not.toBeInTheDocument();
+	await user.click(screen.getByRole("button", { name: "Expand tools" }));
+	expect(screen.getByRole("button", { name: "Select tools/repository/file.ts" })).toBeInTheDocument();
 });
 
-it("owns initial/new expansion and reveals an address once, not again on placeholder reparenting", async () => {
+it("retains manual collapse through new descendants and filter hide/restore without reopening a selected branch", async () => {
 	const user = userEvent.setup();
-	const filters = initialFilters();
+	let filters = initialFilters();
 	const repositories: WorkspaceIdentity = {
 		...identity,
 		repositories: [{ path: "a/new/empty", status: "available", gitRoot: "/fixture/a/new/empty" }],
@@ -198,10 +227,14 @@ it("owns initial/new expansion and reveals an address once, not again on placeho
 			</QueryClientProvider>
 		);
 	}
-	const rendered = render(view(first, "a/new/empty"));
+	const rendered = render(view(first, "a/keep.ts"));
 	expect(screen.getByRole("button", { name: "Select a/keep.ts" })).toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Collapse a" }));
-	rendered.rerender(view(refreshed, "a/new/empty"));
+	filters = { ...filters, types: new Set() };
+	rendered.rerender(view(first, "a/keep.ts"));
+	expect(screen.queryByRole("button", { name: "Select a" })).not.toBeInTheDocument();
+	filters = initialFilters();
+	rendered.rerender(view(refreshed, "a/keep.ts"));
 	expect(screen.getByRole("button", { name: "Expand a" })).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select a/new/file.ts" })).not.toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Expand a" }));
@@ -209,7 +242,7 @@ it("owns initial/new expansion and reveals an address once, not again on placeho
 	expect(screen.getByRole("button", { name: "Select a/new/file.ts" })).toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Collapse a" }));
 	rendered.rerender(view(refreshed, "."));
-	rendered.rerender(view(refreshed, "a/new/empty"));
+	rendered.rerender(view(refreshed, "a/new/file.ts"));
 	expect(screen.getByRole("button", { name: "Collapse a" })).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select a/new/empty" })).not.toBeInTheDocument();
 });

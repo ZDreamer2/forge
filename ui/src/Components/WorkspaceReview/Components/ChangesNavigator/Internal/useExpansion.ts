@@ -29,8 +29,8 @@ export function useExpansion(
 			revealedSelection.current = { path: selectedPath, resolved: false };
 		}
 		if (selectedPath === undefined || revealedSelection.current.resolved || !projection.nodes.has(selectedPath)) return;
-		// An address is revealed only on navigation or first resolution. Reparenting
-		// its repository placeholder on Refresh must not reopen a collapsed ancestor.
+		// An address is revealed only on navigation or first resolution. A topology
+		// Refresh must not reopen a manually collapsed ancestor.
 		revealedSelection.current.resolved = true;
 		const ancestors = new Set<string>();
 		let path = selectedPath;

@@ -85,9 +85,10 @@ it("distinguishes unknown from empty changes, then refreshes literal identity an
 
 	await act(async () => pending.release(Response.json(analysis(true))));
 	await workspaceSummary(0);
-	expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
+	expect(within(screen.getByRole("navigation", { name: "Changed files" })).getByText("No changes")).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select <script>repository</script>" })).not.toBeInTheDocument();
-	expect(screen.getByRole("button", { name: "Select missing-checkout" })).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select missing-checkout" })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
 	await waitFor(() => expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled());
 
 	network.use(analysisHandler());

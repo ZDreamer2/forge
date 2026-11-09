@@ -20,23 +20,10 @@ export type TreeProjection = {
 	visible: ReviewAnalysis["visible"];
 };
 
-function containingPath(path: string): string {
-	const slash = path.lastIndexOf("/");
-	return slash < 0 ? "." : path.slice(0, slash);
-}
-
 export function projectTree(review: ReviewAnalysis): TreeProjection {
 	const nodes = new Map<string, ProjectedNode>();
 	for (const entry of review.subjects.values())
 		nodes.set(entry.path, { ...entry, children: [...(entry.node?.children ?? [])], visible: false });
-	for (const entry of nodes.values()) {
-		if (entry.node || entry.path === ".") continue;
-		let parentPath = containingPath(entry.path);
-		// Only canonical ancestors host placeholders; registration nesting is not hierarchy.
-		while (parentPath !== "." && !nodes.get(parentPath)?.node) parentPath = containingPath(parentPath);
-		const parent = nodes.get(parentPath);
-		if (parent && !parent.children.includes(entry.path)) parent.children.push(entry.path);
-	}
 	const branches = new Set<string>();
 	function display(entry: ProjectedNode) {
 		const kinds = new Set<NonNullable<AnalysisWireNode["kind"]>>();
@@ -57,14 +44,8 @@ export function projectTree(review: ReviewAnalysis): TreeProjection {
 		if (kinds.size === 1) entry.kind = [...kinds][0];
 		const importance = (["high", "medium", "low", "none"] as Importance[]).find((value) => priorities.includes(value));
 		if (importance) entry.importance = importance;
-		const hasVisibleChild = entry.children.some((path) => nodes.get(path)?.visible);
-		entry.visible =
-			(entry.path === "." && !entry.repository) ||
-			(entry.repository !== undefined &&
-				(entry.repository.status === "missing" || (entry.repositoryTotal?.files ?? 0) > 0)) ||
-			entry.shown.files > 0 ||
-			(!entry.repository && !entry.node?.kind && entry.total.files === 0) ||
-			hasVisibleChild;
+		entry.visible = entry.shown.files > 0;
+		// Canonical branches survive filtering so manual expansion choices do too.
 		if (entry.children.length) branches.add(entry.path);
 		return kinds;
 	}

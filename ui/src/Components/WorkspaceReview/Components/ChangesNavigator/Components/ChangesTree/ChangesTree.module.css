@@ -58,9 +58,6 @@
 .actions button:hover {
 	background: #edf1ec;
 }
-.repositoryGroup {
-	margin-bottom: 9px;
-}
 .row {
 	--name-color: #45594b;
 	--quiet-name-color: #849087;
@@ -158,17 +155,10 @@
 .folderIcon[data-repository="true"] {
 	background: #7962be;
 }
-.repositoryCount {
-	font:
-		11px / 1.6 system-ui,
-		sans-serif;
-	color: #8a968d;
-	white-space: nowrap;
-}
-.emptyRepository {
+.emptyTree {
 	color: #96a097;
 	font-size: 11px;
-	padding: 5px 18px 9px 39px;
+	padding: 5px 18px;
 }
 .boundary {
 	border: 1px solid #d8dfd8;

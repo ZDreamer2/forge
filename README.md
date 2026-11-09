@@ -4,10 +4,9 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 
 # @zdreamer/forge
 
-Read-only workspace server and React changes navigator using the shared
-`forge-workspace.yaml` registry. The viewer combines a compact changes tree,
-Type/Importance filters, signal inspection, selected-entry metadata and
-syntax-highlighted unified/split file diffs with on-demand context expansion.
+Read-only workspace server and React changes viewer using the shared
+`forge-workspace.yaml` registry. Review changes with Type/Importance filters,
+signal inspection and syntax-highlighted unified/split diffs.
 Executable: `forge`. Licensed under [MIT](LICENSE).
 
 Read the [codebase overview](docs/overview.md) for repository orientation and routes
@@ -34,18 +33,11 @@ tools/         tooling/release and installed-consumer checks
 dist/          server TypeScript output and Vite-built ui/ assets
 ```
 
-[Architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md)
-owns application boundaries; the
-[HTTP API contract](https://github.com/ZDreamer2/forge/blob/main/server/docs/protocol.md)
-owns wire behavior. Concrete server and UI guides live under their respective
-`docs/forge/` directories.
-
-The UI's `Components/WorkspaceReview/` composes a ChangesNavigator and an independent
-SelectionViewer. Owned WorkspaceData and ChangeSetData separate workspace-context
-reads from comparison analysis while sharing the existing Query mechanism. The
-navigator owns tree projection/expansion; selection uses canonical comparison facts,
-not filtered tree rows. Shared summaries belong to the review feature. See
-[UI architecture](ui/docs/architecture.md) for the responsibility map.
+See [application architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md) for boundaries,
+[UI architecture](ui/docs/architecture.md) for frontend ownership and state,
+and the [HTTP API contract](https://github.com/ZDreamer2/forge/blob/main/server/docs/protocol.md) for wire behavior.
+Concrete server and UI build guides live under their respective `docs/forge/`
+directories.
 
 ## Develop
 
@@ -107,9 +99,8 @@ through 65535, with no default or occupied-port fallback. Only the port is read
 from `.env`, without interpolation; unreadable or invalid-encoding files fail startup.
 
 Once ready, the foreground process prints its version, executable/workspace paths
-and loopback address. Open that address for the overview. Refresh rereads identity
-and analysis independently, retaining usable data and marking failed refreshes
-stale. Restart reloads configuration and repository participation. Stop with
+and loopback address. Open that address for the viewer. Refresh observes changes;
+restart reloads configuration, extensions and repository participation. Stop with
 SIGINT or SIGTERM.
 
 GET/HEAD `/` and exact `/assets/` resources are served from the installed package,
@@ -135,61 +126,17 @@ curl "$FORGE_ADDRESS/api/changes"
 curl "$FORGE_ADDRESS/api/changes/analysis"
 ```
 
-The API also exposes [bounded file patches](server/docs/protocol.md#read-file-diff).
-The navigator is read-only. Select a file, folder or registered repository by its
-name; select it again to clear. Direct links use `/?path=src/example.ts`, with
-`/?path=.` for the workspace root. Back/Forward restores selection. Ctrl+Click
-selects and copies the workspace-relative path. Disclosure controls expansion
-independently; drag the divider or focus it and use Left/Right to resize.
+The viewer provides a workspace-relative changes tree, inclusive folder summaries,
+canonical selection and file diffs. Direct links use `/?path=src/example.ts`, with
+`/?path=.` for the workspace root; filtered or empty subjects remain directly
+selectable. File patches and complete context are live observations.
 
-Type and Importance combine with AND, with OR within each dimension. All types
-and High/Medium/Low start enabled; None starts disabled. Classification and
-effective importance come from server analysis. Header totals cover every changed
-entry; visible/total file counts preserve the complete denominator, while sidebar
-and subtree line totals follow the filters. Repository-owned counts exclude nested
-repositories; subtree summaries include them. Binary and zero-line entries still
-count as changes. Count tooltips show independent Type and Importance breakdowns.
-
-Filtering preserves selected metadata, including rename sources, both-side ownership
-and file/directory transitions. Repositories with changes stay visible even when every
-change is filtered out; available repositories with no changes are omitted. Missing-at-startup
-repositories remain visible because their change state is unknown, and direct links to omitted
-repository roots remain valid. Explicit Refresh preserves filters, expansion and useful selection;
-a disappeared selection is explained after successful identity and analysis reads.
-Failed reads preserve usable content and mark retained data stale, with independent
-retry controls.
-
-Select a changed entry to read its syntax-highlighted Git diff, including entries
-that also contain changed descendants. Unified starts selected; the header's
-Unified/Split preference survives selection and Refresh during the review. Entry
-metadata discloses analysis facts; File observation discloses the displayed patch's
-sides, modes, ownership and baseline. Empty sides, pure renames, mode changes,
-binary, unsupported encoding and size refusals have explicit explanations.
-
-Load omitted context acquires complete represented context on demand, then Pierre's
-hunk controls expand leading, middle or trailing unchanged lines. The short diff
-stays usable if context fails or exceeds a limit. Complete context is a fresh live
-read: if represented lines or side identity changed, Reload file obtains a new short
-observation before expansion can proceed. Refresh updates analysis and the selected
-short diff, discarding prior complete context. Retry file affects only that file;
-parser/rendering failure offers Reload file and Show plain patch without closing
-metadata or navigation.
-No read promises a coherent cross-request snapshot. All renderer resources and
-licenses ship within the installed same-origin assets.
-
-Hover or focus a warning triangle or notice circle for the complete source/message
-list, including filtered sources and nested repositories. Each severity is strong
-for direct signals and subdued for descendant-only concerns. Click an indicator
-to select its subject and open bounded signal details below the path header;
-details retain handler IDs and optional base/current coordinates. Ordinary selection
-and Back/Forward begin with a collapsed summary. Filters and Refresh preserve the
-disclosure choice for a surviving subject.
-
-Message paths select their canonical source and open its details while preserving
-filters. A filtered changed source offers Reveal file: it enables only missing
-Type/Importance categories, expands the source's ancestors and selects it with
-details open. Other enabled categories and unrelated expansion survive. Repeating
-inspection or reveal on the selected source reopens details without adding history.
+See [UI architecture](ui/docs/architecture.md#selected-file-observations) for
+selection, refresh and recovery behavior, the
+[API file contract](server/docs/protocol.md#read-file-diff) for patches and limits,
+and the [viewer design specification](ui/prototype/UiSpec.md) for interaction and
+presentation design. The prototype demonstrates intended behavior with fictional
+data; it does not establish production implementation or performance.
 
 ## Workspace configuration and migration
 
@@ -294,13 +241,8 @@ Remove YAML `analysis_handlers`, including empty lists, and replace legacy
 `@zdreamer/forge/analysis` imports and whole-tree functions with fixed extension
 units. Unknown hooks and unsupported `api` revisions fail loading.
 
-Modules load once at startup from validated workspace and rooted participant
-ancestry; restart to reload them. Forge invokes each applicable hook once per
-canonical node, merging workspace and both source-owner chains. Annotation hooks
-can navigate and annotate the whole tree, so account for repeated invocation.
-Extensions are trusted, unsandboxed code; await all work and cooperate with cancellation.
-
-An applicable load error or hook failure rejects analysis atomically while light
-APIs remain usable. An unrelated broken participant does not block analysis.
-The [analysis guide](https://github.com/ZDreamer2/forge/blob/main/server/src/components/tree-analysis/docs/UnitGuide.md)
-explains attribution, source capabilities and execution limits.
+Modules load at startup; restart to reload them. Extensions are trusted,
+unsandboxed code: await all work and cooperate with cancellation. An applicable
+load or hook failure rejects analysis while light APIs remain usable.
+See the [analysis guide](https://github.com/ZDreamer2/forge/blob/main/server/src/components/tree-analysis/docs/UnitGuide.md)
+for hook scheduling, attribution, source capabilities and execution limits.

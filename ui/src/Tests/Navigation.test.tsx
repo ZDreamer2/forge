@@ -89,7 +89,7 @@ it.each([".", "src", "src/a.ts", "repos/empty", "missing", special, "123", "true
 		serve();
 		observe(path);
 		await screen.findByRole("region", { name: "Selection details" });
-		if (path === "repos/empty")
+		if (path === "repos/empty" || path === "missing")
 			expect(screen.queryByRole("button", { name: `Select ${path}` })).not.toBeInTheDocument();
 		else expect(screen.getByRole("button", { name: `Select ${path}`, pressed: true })).toBeInTheDocument();
 		expect(selectedPath()).toBe(path);
@@ -148,14 +148,14 @@ it.each([
 
 it("keeps current interactions through pending refresh, failure, and successful branch reconciliation", async () => {
 	const network = serve();
-	const user = observe("src/a.ts");
-	await screen.findByRole("button", { name: "Select src/a.ts", pressed: true });
+	const user = observe("missing");
+	await screen.findByRole("button", { name: "Select src/a.ts" });
+	await screen.findByRole("heading", { name: "missing" });
 	await user.click(screen.getByRole("button", { name: "Collapse src" }));
 	const pending = network.deferResponse();
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => pending.handle(request)));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
 	await waitFor(() => expect(pending.request).toBeDefined());
-	await user.click(screen.getByRole("button", { name: "Select missing" }));
 	await user.click(screen.getByRole("button", { name: "Code" }));
 	await act(async () => pending.release(new Response("failed", { status: 503 })));
 	expect(await screen.findByRole("alert")).toHaveTextContent("Change summary is stale");
@@ -211,19 +211,22 @@ it("keeps filtered selection metadata and repairs disappearing paths only after 
 	await waitFor(() => expect(selectedPath()).toBeNull());
 });
 
-it("preserves a repository address and expansion as Refresh reparents it, adds changes and removes its last change", async () => {
+it("preserves a repository address while Refresh adds and removes its first and last matching change", async () => {
 	const network = serve(fixture([]));
 	const user = observe("repos/empty");
 	await screen.findByRole("region", { name: "Selection details" });
 	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
-	await user.click(screen.getByRole("button", { name: "Collapse ." }));
+	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["repos/new.ts"]))));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
 	await screen.findByRole("button", { name: "All workspace changes: 1 changed files, 0 removed lines, 1 added lines" });
-	expect(screen.getByRole("button", { name: "Expand ." })).toBeInTheDocument();
 	expect(details().getByRole("heading", { name: "repos/empty" })).toBeInTheDocument();
 	expect(selectedPath()).toBe("repos/empty");
+	await user.click(screen.getByRole("button", { name: "Collapse ." }));
+	await user.click(screen.getByRole("button", { name: "Refresh" }));
+	await waitFor(() => expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled());
+	expect(screen.getByRole("button", { name: "Expand ." })).toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Expand ." }));
 	expect(screen.getByRole("button", { name: "Select repos/new.ts" })).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
@@ -237,8 +240,8 @@ it("preserves a repository address and expansion as Refresh reparents it, adds c
 	await screen.findByRole("button", { name: "Select repos/empty/child.ts" });
 	expect(screen.getByRole("button", { name: "Select repos/empty", pressed: true })).toBeInTheDocument();
 	expect(
-		screen.getByRole("button", {
-			name: "repos/empty repository changes: 1 changed files, 0 removed lines, 1 added lines",
+		within(screen.getByRole("navigation", { name: "Changed files" })).getByRole("button", {
+			name: "repos/empty visible subtree: 1 changed files, 0 removed lines, 1 added lines",
 		}),
 	).toBeInTheDocument();
 	expect(selectedPath()).toBe("repos/empty");

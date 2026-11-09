@@ -35,10 +35,12 @@ this feature; external consumers enter through the feature's public interfaces.
 
 Shared pure review analysis derives canonical selection subjects and count scopes
 from server facts. It contains no rendered hierarchy or expansion. The navigator
-alone projects display topology. It keeps repositories with real changes even when
-filters hide every entry, retains unavailable repository placeholders whose state is
-unknown, and omits available repositories confirmed to have no changes. Filtering,
-omission or collapsing cannot remove the viewer's access to a selected subject.
+alone projects the ordinary workspace-relative hierarchy, pruning every branch
+without matching changes, including repository roots. Canonical subjects retain
+empty, unavailable and filtered repositories for direct selection. Before analysis
+is available, identity-only repository access keeps unknown changes distinct from
+an analyzed empty tree. Filtering, omission or collapsing cannot remove the viewer's
+access to a selected subject.
 Tree counts and selection summaries share the own-entry counting implementation,
 not competing derivations. Derived analysis/projections are reused across unrelated
 layout and clipboard updates.
@@ -51,7 +53,7 @@ reads; an own changed entry still has a diff when it also has children. Signal s
 including nested repositories and filtered entries. Inclusive server counts own
 indicator presence; direct annotations determine strength independently per severity.
 A shared traversal index retains each attributed message once and derives subject
-lists on demand. Display placeholder parenting never creates signal membership.
+lists on demand. Identity-only placeholders never create signal membership.
 
 WorkspaceReview coordinates inspection, source navigation and explicit reveal through
 the panes' public props. Inspection selects without toggling and opens viewer details.

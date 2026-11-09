@@ -47,6 +47,7 @@ export function ChangesNavigator({
 				{analysis ? (
 					<ChangesTree
 						projection={projection}
+						workspaceName={identity?.workspace.name ?? "."}
 						signals={signals}
 						onInspect={onInspect}
 						expanded={expansion.expanded}
