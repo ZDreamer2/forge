@@ -205,6 +205,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		write("nested/browser-binary.dat", Buffer.from([0, 4, 5, 6]));
 		write("app/hidden.txt", "hidden by workspace guide\n");
 		write("app/tests/check.test.ts", "test content\n");
+		write("app/Tests/low/only.test.ts", "low subtree content\n");
 		write("app/tests/critical.txt", "restored normal\n");
 		write("app/settings.json", "{}\n");
 		write("app/readme.md", "browser docs\n");
@@ -218,7 +219,45 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		const all = totals(changes);
 		const visible = totals(changes.filter((node) => node.effectiveEmphasis.value !== "hidden"));
 		await summary(page, "All workspace changes", all.files, all.removed, all.added);
-		await summary(page, "Visible workspace changes", visible.files, visible.removed, visible.added);
+		const initiallyShown = totals(
+			changes.filter((node) => node.effectiveEmphasis.value !== "hidden" && !node.path.startsWith("app/Tests/")),
+		);
+		await summary(page, "Shown changes", initiallyShown.files, initiallyShown.removed, initiallyShown.added);
+		await page.getByRole("button", { name: "Expand app/Tests", exact: true }).waitFor();
+		assert.equal(await select(page, "app/Tests/low/only.test.ts").count(), 0, "Low matching branches start collapsed");
+		await summary(page, ". visible subtree", visible.files, visible.removed, visible.added);
+		await page.getByRole("heading", { name: `Changes ${visible.files} of ${all.files}`, exact: true }).waitFor();
+		await expectPortal(page, page.getByRole("button", { name: "Shown", exact: true }), async (tooltip) => {
+			await tooltip
+				.getByText(
+					"Matching files outside collapsed folders. Collapsed descendants are excluded; scrolling does not affect this total.",
+					{ exact: true },
+				)
+				.waitFor();
+		});
+		await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+		await summary(page, "Shown changes", 0, 0, 0);
+		await summary(page, ". visible subtree", visible.files, visible.removed, visible.added);
+		await summary(page, "All workspace changes", all.files, all.removed, all.added);
+		await page.getByRole("button", { name: "Expand .", exact: true }).click();
+		await page.getByRole("button", { name: "Expand app", exact: true }).waitFor();
+		await page.getByRole("button", { name: "Expand all", exact: true }).click();
+		await select(page, "app/Tests/low/only.test.ts").waitFor();
+		await summary(page, "Shown changes", visible.files, visible.removed, visible.added);
+		const withoutTransitionChildren = totals(
+			changes.filter((node) => node.effectiveEmphasis.value !== "hidden" && !node.path.startsWith("app/transition/")),
+		);
+		assert.ok(analysis.nodes["app/transition"]?.kind, "Transition has an own change and children");
+		await page.getByRole("button", { name: "Collapse app/transition", exact: true }).click();
+		await summary(
+			page,
+			"Shown changes",
+			withoutTransitionChildren.files,
+			withoutTransitionChildren.removed,
+			withoutTransitionChildren.added,
+		);
+		await page.getByRole("button", { name: "Expand app/transition", exact: true }).click();
+		await summary(page, "Shown changes", visible.files, visible.removed, visible.added);
 		assert.equal(await select(page, ".").innerText(), workspaceName);
 		assert.equal(analysis.nodes["app/tests/check.test.ts"]?.classification.value, "tests");
 		await page.getByRole("button", { name: "Tests", exact: true }).click();
@@ -256,7 +295,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.waitFor();
 
 		await page.getByRole("button", { name: "Deselect all types and importance levels", exact: true }).click();
-		await summary(page, "Visible workspace changes", 0, 0, 0);
+		await summary(page, "Shown changes", 0, 0, 0);
 		assert.equal(await select(page, ".").count(), 0, "No matching changes prunes the whole tree");
 		assert.equal(await select(page, "not-cloned").count(), 0);
 		assert.equal(await select(page, "nested").count(), 0);
@@ -296,7 +335,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.click();
 		await page.waitForURL((url) => url.searchParams.get("path") === "nested/browser-binary.dat");
 		await page.getByRole("button", { name: "Deselect all types and importance levels", exact: true }).click();
-		await summary(page, "Visible workspace changes", 0, 0, 0);
+		await summary(page, "Shown changes", 0, 0, 0);
 		await signalDetails(page)
 			.getByText(/filtered out/i)
 			.waitFor();
@@ -316,7 +355,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.getByRole("button", { name: "Deselect all types and importance levels", exact: true }).click();
 		await page.getByRole("button", { name: "Code", exact: true }).click();
 		await page.getByRole("button", { name: "High", exact: true }).click();
-		await summary(page, "Visible workspace changes", 1, 1, 2);
+		await summary(page, "Shown changes", 1, 1, 2);
 		await select(page, "app/tracked.txt").click();
 		await waitSelected(page, "app/tracked.txt");
 		await page.getByRole("button", { name: "High", exact: true }).click();
@@ -329,7 +368,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await select(page, "app/hidden.txt").click();
 		await waitSelected(page, "app/hidden.txt");
 		await page.getByRole("button", { name: "Select all types and importance levels", exact: true }).click();
-		await summary(page, "Visible workspace changes", all.files, all.removed, all.added);
+		await summary(page, "Shown changes", all.files, all.removed, all.added);
 		await page.getByRole("button", { name: "Collapse app/bulk", exact: true }).click();
 		await inspect(page, ".", "warnings").click();
 		await signalDetails(page).getByText("Nested descendant warning", { exact: true }).waitFor();
@@ -481,6 +520,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.goto(`${address}/?path=${encodeURIComponent(unusual)}`);
 		await waitSelected(page, unusual);
 		await page.getByRole("button", { name: "Select all types and importance levels", exact: true }).click();
+		await page.getByRole("button", { name: "Expand all", exact: true }).click();
 
 		await page.getByRole("button", { name: "Collapse app/bulk", exact: true }).click();
 		assert.equal(new URL(page.url()).searchParams.get("path"), unusual, "Disclosure preserves selection");
@@ -489,7 +529,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Expand app/bulk", exact: true }).click();
 		const summaryColumns = await page
-			.getByRole("button", { name: /^Visible workspace changes:/ })
+			.getByRole("button", { name: /^Shown changes:/ })
 			.locator(":scope > span")
 			.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().right));
 		const rootColumns = await page
@@ -503,6 +543,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			element.scrollTop = element.scrollHeight;
 		});
 		assert.ok(await sidebar.evaluate((element) => element.scrollTop > 0), "Substantial tree scrolls in its pane");
+		await summary(page, "Shown changes", all.files, all.removed, all.added);
 		assert.equal(await page.locator("html").evaluate((element) => element.scrollTop), 0);
 		const detailTop = await detail.evaluate((element) => element.scrollTop);
 		await sidebar.evaluate((element) => {
@@ -647,7 +688,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		);
 
 		console.log(
-			`Installed Chromium navigator: real guide policies, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, portal tooltips, local assets and resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
+			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, portal tooltips, local assets and resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
 		);
 	} finally {
 		try {

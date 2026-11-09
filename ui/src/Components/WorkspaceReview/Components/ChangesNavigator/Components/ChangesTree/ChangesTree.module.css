@@ -212,3 +212,18 @@
 		margin-left: auto;
 	}
 }
+
+.shown {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	flex-shrink: 0;
+}
+.shownHelp {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: help;
+}

@@ -1,7 +1,7 @@
 import type { AnalysisSide, AnalysisWireNode, WorkspaceAnalysis } from "@forge/api-contract";
 import { Tooltip } from "@mantine/core";
 import type { CSSProperties } from "react";
-import { importanceLabels, importanceOf, typeLabels } from "../../../../Internal/changeAnalysis";
+import { importanceLabels, importanceOf, type Summary, typeLabels } from "../../../../Internal/changeAnalysis";
 import type { SignalAnalysis } from "../../../../Internal/signalAnalysis";
 import { ChangesSummary } from "../../../ChangesSummary/ChangesSummary";
 import { SignalSummary } from "../../../SignalSummary/SignalSummary";
@@ -21,6 +21,7 @@ type Codebases = WorkspaceAnalysis["codebases"];
 
 export function ChangesTree({
 	projection,
+	expansionVisibleSummary,
 	workspaceName,
 	signals,
 	onInspect,
@@ -33,6 +34,7 @@ export function ChangesTree({
 	codebases,
 }: {
 	projection: TreeProjection;
+	expansionVisibleSummary: Summary;
 	workspaceName: string;
 	signals?: SignalAnalysis | undefined;
 	onInspect?: ((path: string) => void) | undefined;
@@ -157,7 +159,19 @@ export function ChangesTree({
 						</span>
 					</h2>
 				</div>
-				<ChangesSummary summary={projection.visible} label="Visible workspace changes" />
+				<div className={styles.shown}>
+					<Tooltip
+						multiline
+						events={{ hover: true, focus: true, touch: true }}
+						classNames={{ tooltip: styles.tooltip }}
+						label="Matching files outside collapsed folders. Collapsed descendants are excluded; scrolling does not affect this total."
+					>
+						<button type="button" className={styles.shownHelp}>
+							Shown
+						</button>
+					</Tooltip>
+					<ChangesSummary summary={expansionVisibleSummary} label="Shown changes" />
+				</div>
 			</div>
 			<nav aria-label="Changed files">
 				{projection.root?.visible ? (

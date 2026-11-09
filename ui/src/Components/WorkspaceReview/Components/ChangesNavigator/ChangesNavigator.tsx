@@ -6,7 +6,7 @@ import type { SignalAnalysis } from "../../Internal/signalAnalysis";
 import styles from "./ChangesNavigator.module.css";
 import { ChangeFilters } from "./Components/ChangeFilters/ChangeFilters";
 import { ChangesTree } from "./Components/ChangesTree/ChangesTree";
-import { projectTree } from "./Internal/treeProjection";
+import { expansionVisibleSummary, projectTree } from "./Internal/treeProjection";
 import { useExpansion } from "./Internal/useExpansion";
 
 type Props = {
@@ -47,6 +47,7 @@ export function ChangesNavigator({
 				{analysis ? (
 					<ChangesTree
 						projection={projection}
+						expansionVisibleSummary={expansionVisibleSummary(projection, expansion.expanded)}
 						workspaceName={identity?.workspace.name ?? "."}
 						signals={signals}
 						onInspect={onInspect}

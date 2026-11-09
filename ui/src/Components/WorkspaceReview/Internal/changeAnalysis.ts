@@ -81,6 +81,12 @@ function addEntry(target: Summary, node: AnalysisWireNode) {
 	addLines(target.importance[importanceOf(node)], node.statistics);
 }
 
+export function summarizeEntries(nodes: Iterable<AnalysisWireNode>): Summary {
+	const summary = emptySummary();
+	for (const node of nodes) addEntry(summary, node);
+	return summary;
+}
+
 function subject(path: string, node?: AnalysisWireNode): ReviewSubject {
 	return { path, ...(node ? { node } : {}), ownVisible: false, total: emptySummary(), shown: emptySummary() };
 }

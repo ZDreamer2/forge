@@ -13,16 +13,18 @@ export function useExpansion(
 	const revealedSelection = useRef({ path: selectedPath, resolved: false });
 
 	useEffect(() => {
-		const previous = knownBranches.current;
-		knownBranches.current = projection.branches;
-		setExpanded(
-			(current) =>
-				new Set([
-					...[...current].filter((path) => projection.branches.has(path)),
-					...[...projection.branches].filter((path) => !previous.has(path)),
-				]),
-		);
-	}, [projection.branches]);
+		// Filtering retains choices, but only a first matching encounter applies a default.
+		const known = knownBranches.current;
+		for (const path of known) if (!projection.branches.has(path)) known.delete(path);
+		const defaults = new Set<string>();
+		for (const path of projection.branches) {
+			const branch = projection.nodes.get(path);
+			if (!branch?.visible || known.has(path)) continue;
+			known.add(path);
+			if (branch.importance === "high" || branch.importance === "medium") defaults.add(path);
+		}
+		setExpanded((current) => new Set([...[...current].filter((path) => projection.branches.has(path)), ...defaults]));
+	}, [projection.branches, projection.nodes]);
 
 	useEffect(() => {
 		if (revealedSelection.current.path !== selectedPath) {
@@ -73,7 +75,12 @@ export function useExpansion(
 				return next;
 			});
 		},
-		expandAll: () => setExpanded(new Set(projection.branches)),
-		collapseAll: () => setExpanded(new Set()),
+		expandAll: () =>
+			setExpanded(
+				(current) =>
+					new Set([...current, ...[...projection.branches].filter((path) => projection.nodes.get(path)?.visible)]),
+			),
+		collapseAll: () =>
+			setExpanded((current) => new Set([...current].filter((path) => !projection.nodes.get(path)?.visible))),
 	};
 }

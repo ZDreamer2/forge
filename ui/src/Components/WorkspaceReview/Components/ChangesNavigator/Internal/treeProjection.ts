@@ -4,6 +4,7 @@ import {
 	importanceOf,
 	type ReviewAnalysis,
 	type ReviewSubject,
+	summarizeEntries,
 } from "../../../Internal/changeAnalysis";
 
 export type ProjectedNode = ReviewSubject & {
@@ -52,4 +53,17 @@ export function projectTree(review: ReviewAnalysis): TreeProjection {
 	const root = nodes.get(".");
 	if (root) display(root);
 	return { ...(root ? { root } : {}), nodes, branches, all: review.all, visible: review.visible };
+}
+
+export function expansionVisibleSummary(projection: TreeProjection, expanded: ReadonlySet<string>) {
+	function* entries(entry: ProjectedNode): Generator<AnalysisWireNode> {
+		if (!entry.visible) return;
+		if (entry.ownVisible && entry.node) yield entry.node;
+		if (!expanded.has(entry.path)) return;
+		for (const path of entry.children) {
+			const child = projection.nodes.get(path);
+			if (child) yield* entries(child);
+		}
+	}
+	return summarizeEntries(projection.root ? entries(projection.root) : []);
 }

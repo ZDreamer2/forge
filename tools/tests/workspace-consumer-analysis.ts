@@ -101,6 +101,9 @@ export default {
 	const text = Array.from({ length: 500 }, (_, i) => `Markdown line ${i}: ${"x".repeat(45)}\n`).join("");
 	for (const name of ["pure.md", "edited.md", "into.md", "plans/out.md"]) write(name, text);
 	write("deleted.md", "Unique deleted document\n");
+	write("deleted.css", "deleted stylesheet baseline\n");
+	write("before.css", "rename out of low suffix\n");
+	write("before.txt", "rename into low suffix\n");
 	write("tests/critical/file.md", "baseline\n");
 	write("tests/other.md", "baseline\n");
 	const modulePath = "docs/forge/workspace/forge-extension/forge-extension.ts";
@@ -188,6 +191,25 @@ export default {
 	write("tests/critical/file.md", text);
 	write("tests/other.md", text);
 	unlinkSync(join(workspace, "deleted.md"));
+	unlinkSync(join(workspace, "deleted.css"));
+	write("deleted.css/child.php", "suffix transition child\n");
+	for (const [from, to] of [
+		["before.css", "after.txt"],
+		["before.txt", "after.css"],
+	] as const) {
+		renameSync(join(workspace, from), join(workspace, to));
+		run("git", ["add", from, to], workspace);
+	}
+	for (const path of [
+		"style.css",
+		"template.phtml",
+		"view.blade.php",
+		"upper.CSS",
+		"near.css.ts",
+		"view.blade.php.txt",
+		"theme.css/ordinary.php",
+	])
+		write(path, "suffix policy fixture\n");
 	write("settings.JSON", "{}\n");
 	write("logo.WOFF2", "fixture font\n");
 	write("boundary.md", "x".repeat(20_480));
@@ -388,6 +410,16 @@ await assert.rejects(import('@zdreamer/forge/dist/server/src/components/tree-ana
 			assert.ok(
 				requiredNode(result, ".").signals.some((signal) => signal.message === "generated local TypeScript import"),
 			);
+		if (generatedBaseGuide) {
+			for (const path of ["style.css", "template.phtml", "view.blade.php", "deleted.css", "after.css"]) {
+				const node = requiredNode(result, path);
+				assert.equal(node.effectiveEmphasis.value, "deemphasized", path);
+				assert.equal(node.effectiveEmphasis.handler, "codebase:forge-base#annotateNode", path);
+			}
+			for (const path of ["upper.CSS", "near.css.ts", "view.blade.php.txt", "after.txt", "theme.css/ordinary.php"])
+				assert.equal(requiredNode(result, path).effectiveEmphasis.value, "normal", path);
+			assert.equal(requiredNode(result, "deleted.css/child.php").effectiveEmphasis.value, "deemphasized");
+		}
 		const nodes = result.nodes;
 		assert.ok(Object.hasOwn(nodes, "__proto__"));
 		assert.equal(requiredNode(result, "edited-new.md").renameContentChanged, true);
@@ -475,6 +507,8 @@ await assert.rejects(import('@zdreamer/forge/dist/server/src/components/tree-ana
 		assert.deepEqual(conventionFree.handlers, {});
 		for (const node of Object.values(conventionFree.nodes)) assert.deepEqual(node.classification, { value: "code" });
 		assert.equal(requiredNode(conventionFree, "tests/other.md").effectiveEmphasis.value, "normal");
+		for (const path of ["style.css", "template.phtml", "view.blade.php", "deleted.css", "after.css"])
+			assert.equal(requiredNode(conventionFree, path).effectiveEmphasis.value, "normal", path);
 		assert.deepEqual(requiredNode(conventionFree, "large.MARKDOWN").signals, []);
 		write(modulePath, "export default 123;\n");
 		await server.stop("SIGTERM");

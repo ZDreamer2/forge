@@ -40,7 +40,10 @@ function node(path: string, extra: Partial<AnalysisWireNode> = {}): AnalysisWire
 		...extra,
 	};
 }
-function fixture(paths = ["src/a.ts", "src/b.ts", special, "123", "true", '"quoted"', "__proto__"]): WorkspaceAnalysis {
+function fixture(
+	paths = ["src/a.ts", "src/b.ts", special, "123", "true", '"quoted"', "__proto__"],
+	lowPaths: string[] = [],
+): WorkspaceAnalysis {
 	const nodes: Record<string, AnalysisWireNode> = Object.create(null);
 	nodes["."] = node(".");
 	for (const path of paths) {
@@ -58,6 +61,7 @@ function fixture(paths = ["src/a.ts", "src/b.ts", special, "123", "true", '"quot
 			kind: "modified",
 			repo: path.startsWith("repos/empty/") ? "repos/empty" : ".",
 			statistics: { added: 1, removed: 0, binary: false },
+			effectiveEmphasis: { value: lowPaths.includes(path) ? "deemphasized" : "normal" },
 		});
 	}
 	nodes["."].rawTotals = { added: paths.length, removed: 0 };
@@ -148,9 +152,9 @@ it.each([
 
 it("keeps current interactions through pending refresh, failure, and successful branch reconciliation", async () => {
 	const network = serve();
-	const user = observe("missing");
+	const user = observe("src/a.ts");
 	await screen.findByRole("button", { name: "Select src/a.ts" });
-	await screen.findByRole("heading", { name: "missing" });
+	await screen.findByRole("heading", { name: "src/a.ts" });
 	await user.click(screen.getByRole("button", { name: "Collapse src" }));
 	const pending = network.deferResponse();
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => pending.handle(request)));
@@ -159,7 +163,7 @@ it("keeps current interactions through pending refresh, failure, and successful 
 	await user.click(screen.getByRole("button", { name: "Code" }));
 	await act(async () => pending.release(new Response("failed", { status: 503 })));
 	expect(await screen.findByRole("alert")).toHaveTextContent("Change summary is stale");
-	expect(selectedPath()).toBe("missing");
+	expect(selectedPath()).toBe("src/a.ts");
 	expect(screen.getByRole("button", { name: "Code" })).toHaveAttribute("aria-pressed", "false");
 	expect(screen.queryByRole("button", { name: "Select src" })).not.toBeInTheDocument();
 	const retry = network.deferResponse();
@@ -167,11 +171,30 @@ it("keeps current interactions through pending refresh, failure, and successful 
 	await user.click(screen.getByRole("button", { name: "Retry changes" }));
 	await waitFor(() => expect(retry.request).toBeDefined());
 	await user.click(screen.getByRole("button", { name: "Code" }));
-	await act(async () => retry.release(Response.json(fixture(["src/b.ts", "new/child.ts"]))));
+	await act(async () =>
+		retry.release(Response.json(fixture(["src/a.ts", "src/b.ts", "new/child.ts", "low/child.ts"], ["low/child.ts"]))),
+	);
 	expect(await screen.findByRole("button", { name: "Select new/child.ts" })).toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "Expand src" })).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select src/a.ts" })).not.toBeInTheDocument();
-	expect(selectedPath()).toBe("missing");
+	expect(screen.getByRole("button", { name: "Expand low" })).toBeInTheDocument();
+	await user.click(screen.getByRole("button", { name: "Select new" }));
+	await act(async () => window.history.back());
+	await screen.findByRole("button", { name: "Select src/a.ts", pressed: true });
+	expect(screen.getByRole("button", { name: "Expand low" })).toBeInTheDocument();
+	expect(selectedPath()).toBe("src/a.ts");
+	await user.click(screen.getByRole("button", { name: "Expand low" }));
+	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(fixture(["src/a.ts"]))));
+	await user.click(screen.getByRole("button", { name: "Refresh" }));
+	await screen.findByRole("button", { name: /All workspace changes: 1 changed files/ });
+	network.use(
+		http.get("http://localhost/api/changes/analysis", () =>
+			Response.json(fixture(["src/a.ts", "low/child.ts"], ["low/child.ts"])),
+		),
+	);
+	await user.click(screen.getByRole("button", { name: "Refresh" }));
+	await screen.findByRole("button", { name: /All workspace changes: 2 changed files/ });
+	expect(screen.getByRole("button", { name: "Expand low" })).toBeInTheDocument();
 });
 
 it("keeps filtered selection metadata and repairs disappearing paths only after successful required reads", async () => {

@@ -191,6 +191,7 @@ it("discovers pruned repository sources through a surviving ancestor and reveals
 	expect(navigator().getByRole("button", { name: "Select nested/hidden.md", pressed: true })).toBeInTheDocument();
 	expect(navigator().getByRole("button", { name: "Expand other" })).toBeInTheDocument();
 	expect(messages().getByText("Repeated concern")).toBeInTheDocument();
+	await user.click(navigator().getByRole("button", { name: "Collapse nested" }));
 	await user.click(screen.getByRole("button", { name: "Docs", pressed: true }));
 	await user.click(navigator().getByRole("button", { name: "Collapse ." }));
 	await user.click(viewer().getByRole("button", { name: "Hide signal details" }));
