@@ -63,6 +63,7 @@
 	position: relative;
 	--name-color: #45594b;
 	--quiet-name-color: #849087;
+	--change-count-weight: 700;
 	display: flex;
 	align-items: center;
 	gap: 3px;
@@ -201,6 +202,7 @@
 }
 
 .shown {
+	--change-count-weight: 700;
 	display: flex;
 	align-items: center;
 	gap: 5px;

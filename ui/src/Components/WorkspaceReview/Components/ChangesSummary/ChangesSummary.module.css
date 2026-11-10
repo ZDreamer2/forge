@@ -14,6 +14,7 @@
 	column-gap: 7px;
 	text-align: right;
 	font: 10px / 1.6 var(--tree-font, "JetBrains Mono", Consolas, ui-monospace, monospace);
+	font-weight: var(--change-count-weight, 400);
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 	border: 0;
@@ -26,11 +27,9 @@
 .removed {
 	color: #b36055;
 }
-.aggregate .added {
-	color: #7c9c88;
-}
-.aggregate .removed {
-	color: #b69992;
+.aggregate .counts {
+	font-weight: 400;
+	opacity: 0.45;
 }
 @media (max-width: 1000px) {
 	.counts {
