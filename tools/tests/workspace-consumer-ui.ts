@@ -386,7 +386,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		assert.equal(await page.getByRole("table", { name: "Matching changes by type and importance" }).count(), 0);
 		await page
 			.getByRole("region", { name: "Matching subtree summary" })
-			.getByRole("heading", { name: /0 matching changed files.*of 1/ })
+			.getByRole("heading", { name: /Type × importance.*0 of 1 files/ })
 			.waitFor();
 		await page.screenshot({ path: join(screenshots, "matrix-filtered-out.png") });
 		await page.getByRole("button", { name: "Select all types and importance levels", exact: true }).click();
@@ -543,14 +543,50 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.getByRole("region", { name: "Selected entry metadata" })
 			.getByText(/fixture-other/)
 			.waitFor();
-		await page
-			.getByRole("button", { name: /base codebase boundary:.*app/ })
-			.first()
-			.waitFor();
-		await page
-			.getByRole("button", { name: /current codebase boundary:.*other/ })
-			.first()
-			.waitFor();
+		assert.equal(
+			await row(page, "app").getByRole("button", { name: "Codebase boundary: fixture-app", exact: true }).count(),
+			1,
+		);
+		assert.equal(
+			await row(page, "other").getByRole("button", { name: "Codebase boundary: fixture-other", exact: true }).count(),
+			1,
+		);
+		assert.equal(await page.getByRole("button", { name: /repository boundary:/ }).count(), 0);
+		await select(page, "app").click();
+		await waitSelected(page, "app");
+		const guidance = page.getByRole("table", { name: "Forge guidance", exact: true });
+		assert.deepEqual(await guidance.getByRole("rowheader").allTextContents(), [
+			"forge-base",
+			workspaceName,
+			"fixture-app",
+		]);
+		assert.deepEqual(await guidance.getByRole("columnheader").allTextContents(), ["Guide / scope", "Source", "Root"]);
+		await guidance.getByText("Workspace parent", { exact: true }).waitFor();
+		await guidance.getByText("Project folder", { exact: true }).waitFor();
+		await expectPortal(page, guidance.getByText("fixture-app", { exact: true }), async (tooltip) => {
+			assert.ok((await tooltip.innerText()).includes("docs/<guidance>/app"), "Guide paths remain literal tooltip text");
+		});
+		const codebaseBadge = row(page, "app").getByRole("button", { name: "Codebase boundary: fixture-app", exact: true });
+		await expectPortal(page, codebaseBadge, async (tooltip) => {
+			assert.ok((await tooltip.innerText()).includes("fixture-app codebase"));
+			assert.equal(await tooltip.locator("code").innerText(), "docs/<guidance>/app");
+		});
+		const nameBounds = await select(page, "app").boundingBox();
+		const badgeBounds = await codebaseBadge.boundingBox();
+		assert.ok(
+			nameBounds && badgeBounds && badgeBounds.x - nameBounds.x - nameBounds.width <= 5,
+			"Codebase badge immediately follows folder name",
+		);
+		await guidance.getByRole("button", { name: "app", exact: true }).click();
+		await waitSelected(page, "app");
+		await page.screenshot({ path: join(screenshots, "folder-context.png") });
+		await page.getByRole("button", { name: "Copy app", exact: true }).click();
+		assert.equal(
+			await page
+				.locator("body")
+				.evaluate((element) => element.ownerDocument.defaultView.navigator.clipboard.readText()),
+			"app",
+		);
 		const transition = row(page, "app/transition");
 		assert.equal(await transition.count(), 1, "Changed directory transition has one canonical row");
 		assert.ok(analysis.nodes["app/transition"]?.kind);
@@ -563,18 +599,76 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			.getByRole("alert")
 			.filter({ hasText: "Could not load file" })
 			.waitFor();
+		const headerBeforeCopy = await page.getByRole("heading", { name: unusual, exact: true }).boundingBox();
 		await select(page, unusual).click({ modifiers: ["Control"] });
 		await waitSelected(page, unusual);
-		await page
-			.getByRole("status")
-			.filter({ hasText: `Copied: ${unusual}` })
-			.waitFor();
+		assert.equal(
+			await page
+				.getByRole("status")
+				.filter({ hasText: /^Copied:/ })
+				.count(),
+			0,
+		);
+		assert.deepEqual(
+			await page.getByRole("heading", { name: unusual, exact: true }).boundingBox(),
+			headerBeforeCopy,
+			"Successful copying does not shift the interface",
+		);
 		assert.equal(
 			await page
 				.locator("body")
 				.evaluate((element) => element.ownerDocument.defaultView.navigator.clipboard.readText()),
 			unusual,
 		);
+		const firstSegment = page.getByRole("button", { name: "Copy app", exact: true });
+		const secondSegment = page.getByRole("button", { name: "Copy app/deep", exact: true });
+		await secondSegment.click();
+		assert.equal(
+			await page
+				.locator("body")
+				.evaluate((element) => element.ownerDocument.defaultView.navigator.clipboard.readText()),
+			"app/deep",
+		);
+		await page
+			.locator("body")
+			.evaluate((element) =>
+				element.ownerDocument.defaultView.navigator.clipboard.writeText("selection must not copy"),
+			);
+		await firstSegment.scrollIntoViewIfNeeded();
+		const firstBounds = await firstSegment.boundingBox();
+		const secondBounds = await secondSegment.boundingBox();
+		assert.ok(firstBounds && secondBounds);
+		await page.mouse.move(firstBounds.x + 1, firstBounds.y + firstBounds.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(secondBounds.x + secondBounds.width - 1, secondBounds.y + secondBounds.height / 2, {
+			steps: 15,
+		});
+		await page.mouse.up();
+		assert.ok(
+			(await page.locator("body").evaluate((element) => element.ownerDocument.defaultView.getSelection()?.toString()))
+				?.length,
+			"Header path is mouse selectable",
+		);
+		assert.equal(
+			await page
+				.locator("body")
+				.evaluate((element) => element.ownerDocument.defaultView.navigator.clipboard.readText()),
+			"selection must not copy",
+			"Selecting path text does not trigger copying",
+		);
+		await page
+			.locator("body")
+			.evaluate((element) => element.ownerDocument.defaultView.getSelection()?.removeAllRanges());
+		const finalSegment = page.getByRole("button", { name: `Copy ${unusual}`, exact: true });
+		await finalSegment.focus();
+		await finalSegment.press("Enter");
+		assert.equal(
+			await page
+				.locator("body")
+				.evaluate((element) => element.ownerDocument.defaultView.navigator.clipboard.readText()),
+			unusual,
+		);
+		await waitSelected(page, unusual);
 		await page.locator("body").evaluate((element) =>
 			Object.defineProperty(element.ownerDocument.defaultView.navigator.clipboard, "writeText", {
 				configurable: true,
@@ -644,7 +738,13 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		);
 
 		await select(page, ".").click({ modifiers: ["Control"] });
-		await page.getByRole("status").filter({ hasText: "Copied: ." }).waitFor();
+		assert.equal(
+			await page
+				.getByRole("status")
+				.filter({ hasText: /^Copied:/ })
+				.count(),
+			0,
+		);
 		assert.equal(
 			await page
 				.locator("body")
@@ -806,7 +906,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.evaluate(() => Reflect.deleteProperty(localStorage, "setItem"));
 		await separator.press("ArrowLeft");
 		assert.equal(Number(await separator.getAttribute("aria-valuenow")), preferredWidth);
-		await expectPortal(page, page.getByRole("button", { name: `Full path: ${unusual}`, exact: true }));
+		await expectPortal(page, page.getByRole("button", { name: `Copy ${unusual}`, exact: true }));
 
 		await expectNoTooltip(page, page.getByLabel(/^All workspace changes:/));
 		await expectNoTooltip(page, page.getByLabel(/^Shown changes:/));
@@ -825,7 +925,21 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 				);
 		const folderColors = await countColors("app");
 		const fileColors = await countColors("app/tracked.txt");
-		assert.notDeepEqual(folderColors, fileColors, "Folder aggregates use quieter colors than own file counts");
+		assert.deepEqual(folderColors, fileColors, "Folder and file counts share the prototype's base colors");
+		const countStyle = (target: Locator) =>
+			target.evaluate((element) => {
+				const style = element.ownerDocument.defaultView.getComputedStyle(element);
+				return { weight: style.fontWeight, opacity: style.opacity };
+			});
+		assert.deepEqual(await countStyle(row(page, "app").getByLabel(/^app visible subtree:/)), {
+			weight: "400",
+			opacity: "0.85",
+		});
+		assert.deepEqual(await countStyle(row(page, "app/tracked.txt").getByLabel(/^app\/tracked.txt visible subtree:/)), {
+			weight: "700",
+			opacity: "1",
+		});
+		assert.deepEqual(await countStyle(page.getByLabel(/^Shown changes:/)), { weight: "700", opacity: "1" });
 		assert.deepEqual(
 			await countColors("app/transition"),
 			folderColors,
@@ -950,7 +1064,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		);
 
 		console.log(
-			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, retained help portals, name/counter tooltip absence, matching folder matrix/zero/empty/overflow states, compact tree geometry, local assets and persisted/blocked-storage resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
+			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, retained help portals, name/counter tooltip absence, matching folder matrix/zero/empty/overflow states, authoritative guide context/order/tooltips and root navigation, deduplicated adjacent codebase badges, copyable native-selectable path prefixes, bold file/Shown and 85%-opacity folder counters, compact tree geometry, local assets and persisted/blocked-storage resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
 		);
 	} finally {
 		try {

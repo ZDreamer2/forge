@@ -59,12 +59,10 @@ export function ChangesTree({
 		const boundaries = (["base", "current"] as const).flatMap((side) => {
 			const facts = node?.[side];
 			if (!facts) return [];
-			return (["repository", "codebase"] as const).flatMap((kind) => {
-				const root = facts[kind === "repository" ? "repositoryRoot" : "codebaseRoot"];
-				if (root === undefined) return [];
-				const owner = kind === "codebase" ? (codebases?.[root]?.id ?? root) : root;
-				return [{ side, kind, root, owner }];
-			});
+			const root = facts.codebaseRoot;
+			if (root === undefined) return [];
+			const owner = Object.hasOwn(codebases ?? {}, root) ? codebases?.[root] : undefined;
+			return [{ side, root, name: owner?.id ?? root, guide: owner?.guidance }];
 		});
 		return (
 			<div key={path}>
@@ -98,29 +96,45 @@ export function ChangesTree({
 					) : (
 						<img className={styles.fileIcon} src={fileIcon(node)} alt="" />
 					)}
-					<button
-						type="button"
-						className={styles.name}
-						aria-label={`Select ${path}`}
-						aria-pressed={selectedPath === path}
-						onClick={(event) => onSelect(path, event.ctrlKey)}
-					>
-						{name}
-						{node?.kind && folder && <span className={styles.ownChange}> · {node.kind}</span>}
-					</button>
-					{signals && onInspect && <SignalSummary signals={signals} path={path} onInspect={onInspect} />}
-					{boundaries.map(({ side, kind, root, owner }) => (
-						<Tooltip
-							key={`${side}-${kind}`}
-							events={{ hover: true, focus: true, touch: true }}
-							classNames={{ tooltip: styles.tooltip }}
-							label={`${side === "base" ? "Base" : "Current"} ${kind} root: ${owner} (${root})`}
+					<div className={styles.nameGroup}>
+						<button
+							type="button"
+							className={styles.name}
+							aria-label={`Select ${path}`}
+							aria-pressed={selectedPath === path}
+							onClick={(event) => onSelect(path, event.ctrlKey)}
 						>
-							<button type="button" className={styles.boundary} aria-label={`${side} ${kind} boundary: ${owner}`}>
-								{kind === "repository" ? "r" : "c"}
-							</button>
-						</Tooltip>
-					))}
+							{name}
+							{node?.kind && folder && <span className={styles.ownChange}> · {node.kind}</span>}
+						</button>
+						{boundaries.length > 0 && (
+							<Tooltip
+								events={{ hover: true, focus: true, touch: true }}
+								classNames={{ tooltip: styles.tooltip }}
+								label={boundaries
+									.filter((entry, index) => boundaries.findIndex((other) => other.root === entry.root) === index)
+									.map((entry) => (
+										<div key={entry.root}>
+											{boundaries.length > 1 && boundaries[0]?.root !== boundaries[1]?.root && (
+												<span>{entry.side === "base" ? "Base" : "Current"}: </span>
+											)}
+											<strong>{entry.name}</strong> codebase
+											<br />
+											Guide: <code>{entry.guide ?? "Unavailable"}</code>
+										</div>
+									))}
+							>
+								<button
+									type="button"
+									className={styles.boundary}
+									aria-label={`Codebase boundary: ${[...new Set(boundaries.map((entry) => entry.name))].join(", ")}`}
+								>
+									c
+								</button>
+							</Tooltip>
+						)}
+					</div>
+					{signals && onInspect && <SignalSummary signals={signals} path={path} onInspect={onInspect} />}
 					<ChangesSummary summary={count} label={`${path} visible subtree`} aggregate={folder} />
 				</div>
 				{isExpanded &&

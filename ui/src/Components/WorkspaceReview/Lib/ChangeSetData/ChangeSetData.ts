@@ -1,5 +1,6 @@
-import type { WorkspaceAnalysis, WorkspaceFileDiff } from "@forge/api-contract";
+import type { WorkspaceFileDiff } from "@forge/api-contract";
 import { type QueryClient, queryOptions, useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { WorkspaceAnalysis } from "../../Internal/guidance";
 import { read, readPolicy } from "../../Internal/readPolicy";
 
 const analysisRead = queryOptions({

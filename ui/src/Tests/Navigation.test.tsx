@@ -65,7 +65,7 @@ function fixture(
 		});
 	}
 	nodes["."].rawTotals = { added: paths.length, removed: 0 };
-	return { root: ".", nodes, handlers: {}, codebases: {} };
+	return { root: ".", nodes, handlers: {}, codebases: {}, guidance: { workspace: [], codebases: {} } };
 }
 function observe(path?: string) {
 	window.history.replaceState({}, "", path === undefined ? "/" : `/?${new URLSearchParams({ path })}`);
@@ -101,7 +101,7 @@ it.each([".", "src", "src/a.ts", "repos/empty", "missing", special, "123", "true
 	},
 );
 
-it("separates disclosure, toggling, Ctrl+Click clipboard acknowledgement and history", async () => {
+it("separates disclosure, toggling, silent Ctrl+Click copying and history", async () => {
 	serve();
 	const user = observe();
 	const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
@@ -114,7 +114,7 @@ it("separates disclosure, toggling, Ctrl+Click clipboard acknowledgement and his
 	await user.keyboard("{Control>}");
 	await user.click(screen.getByRole("button", { name: "Select src/a.ts" }));
 	await user.keyboard("{/Control}");
-	expect(await screen.findByText("Copied: src/a.ts")).toBeInTheDocument();
+	expect(screen.queryByText(/^Copied:/)).not.toBeInTheDocument();
 	expect(copy).toHaveBeenCalledWith("src/a.ts");
 	expect(selectedPath()).toBe("src/a.ts");
 	copy.mockRejectedValueOnce(new Error("denied"));
@@ -282,4 +282,53 @@ it("preserves a repository address while Refresh adds and removes its first and 
 	expect(screen.queryByRole("button", { name: "Select repos/empty" })).not.toBeInTheDocument();
 	expect(details().getByRole("heading", { name: "repos/empty" })).toBeVisible();
 	expect(selectedPath()).toBe("repos/empty");
+});
+
+it("selects an unchanged registered guide root through Context without clearing it or adding a tree row", async () => {
+	const facts = fixture();
+	const workspace = {
+		id: "workspace",
+		name: "Navigation workspace",
+		root: ".",
+		guidance: "docs/forge/workspace",
+		source: "workspace" as const,
+	};
+	const guide = {
+		id: "codebase:unchanged",
+		name: "unchanged",
+		root: "untouched",
+		guidance: "guides/untouched",
+		source: "workspace-parent" as const,
+	};
+	facts.guidance = {
+		workspace: [guide, workspace],
+		codebases: { untouched: [workspace, { ...guide, source: "project-folder" }] },
+	};
+	serve(facts);
+	const user = observe(".");
+	const table = await screen.findByRole("table", { name: "Forge guidance" });
+	await user.click(within(table).getByRole("button", { name: "untouched" }));
+	await waitFor(() => expect(selectedPath()).toBe("untouched"));
+	expect(details().getByRole("heading", { name: "untouched" })).toBeInTheDocument();
+	expect(details().getByText("No changed entries in this subtree.")).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Select untouched" })).not.toBeInTheDocument();
+	await user.click(screen.getByRole("button", { name: "untouched" }));
+	expect(selectedPath()).toBe("untouched");
+	expect(details().getByText("0 of 0 files")).toBeInTheDocument();
+});
+
+it("copies header prefixes silently without navigating and reports clipboard failure", async () => {
+	serve();
+	const user = observe("src/a.ts");
+	const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+	await screen.findByRole("button", { name: "Copy src" });
+	await user.click(screen.getByRole("button", { name: "Copy src" }));
+	expect(screen.queryByText(/^Copied:/)).not.toBeInTheDocument();
+	expect(copy).toHaveBeenLastCalledWith("src");
+	expect(selectedPath()).toBe("src/a.ts");
+	copy.mockRejectedValueOnce(new Error("denied"));
+	await user.click(screen.getByRole("button", { name: "Copy src/a.ts" }));
+	expect(await screen.findByText(/Could not copy path/)).toBeInTheDocument();
+	expect(selectedPath()).toBe("src/a.ts");
+	copy.mockRestore();
 });

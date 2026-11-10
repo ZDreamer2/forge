@@ -57,7 +57,19 @@ export type AnalysisWireNode = {
 	rawTotals: { added: number; removed: number };
 	attentionTotals: { added: number; removed: number };
 };
+export type GuidanceEntry = {
+	id: string;
+	name: string;
+	root?: string;
+	guidance: string;
+	source: "workspace-parent" | "workspace" | "project-parent" | "project-folder";
+};
+export type WorkspaceGuidance = {
+	workspace: GuidanceEntry[];
+	codebases: Record<string, GuidanceEntry[]>;
+};
 export type WorkspaceAnalysis = {
+	guidance: WorkspaceGuidance;
 	root: ".";
 	nodes: Record<string, AnalysisWireNode>;
 	codebases: WorkspaceChanges["codebases"];

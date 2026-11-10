@@ -144,6 +144,7 @@ function fixture(): WorkspaceAnalysis {
 	return {
 		root: ".",
 		nodes: Object.fromEntries(entries.map((entry) => [entry.path, entry])),
+		guidance: { workspace: [], codebases: { src: [], old: [], "tools/nested": [] } },
 		codebases: {
 			src: { id: "application", root: "src", guidance: "guides/app" },
 			old: { id: "old-owner", root: "old", guidance: "guides/old" },
@@ -206,8 +207,11 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 	expect(screen.queryByRole("button", { name: "Select external" })).not.toBeInTheDocument();
 	totals("src/transition visible subtree", 2, 3, 7);
 	expect(screen.queryByRole("button", { name: "Select old" })).not.toBeInTheDocument();
-	expect(screen.getByRole("button", { name: "current codebase boundary: application" })).toBeInTheDocument();
-	expect(screen.getByRole("button", { name: "current repository boundary: tools/nested" })).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Codebase boundary: application" })).toBeInTheDocument();
+	expect(
+		within(row("tools/nested")).getByRole("button", { name: "Codebase boundary: nested-tool" }),
+	).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: /repository boundary:/ })).not.toBeInTheDocument();
 	expect(row("__proto__")).toBeInTheDocument();
 	expect(row("tests/reset.ts")).toHaveAttribute("data-importance", "medium");
 	expect(screen.queryByRole("button", { name: "Select docs/hidden.md" })).not.toBeInTheDocument();
@@ -218,9 +222,8 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 		await user.click(screen.getByRole("button", { name: `Select ${path}` }));
 		const selection = within(screen.getByRole("region", { name: "Selection details" }));
 		expect(
-			selection.getByRole("img", { name: name.replace("visible subtree", "matching subtree") }),
-		).toBeInTheDocument();
-		expect(selection.getByText(new RegExp(`${files} matching changed files`))).toBeInTheDocument();
+			selection.getAllByRole("img", { name: `${files} files, ${added} added lines, ${removed} removed lines` }).length,
+		).toBeGreaterThan(0);
 	}
 	await inspectSubtree("src/transition", 2, 3, 7);
 	await inspectSubtree(".", 12, 19, 36);
@@ -249,7 +252,11 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 
 	await user.click(screen.getByRole("button", { name: "Tests" }));
 	totals("Shown changes", 11, 14, 33);
-	expect(within(screen.getByRole("table")).queryByRole("rowheader", { name: "Tests" })).not.toBeInTheDocument();
+	expect(
+		within(screen.getByRole("table", { name: "Matching changes by type and importance" })).queryByRole("rowheader", {
+			name: "Tests",
+		}),
+	).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select tests/unit/sample.ts" })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select tests/unit" })).not.toBeInTheDocument();
 	expect(row("tests/reset.ts")).toBeInTheDocument();
@@ -300,9 +307,9 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 	await user.click(screen.getByRole("button", { name: "Select ." }));
 	await user.click(screen.getByRole("button", { name: "Deselect all types and importance levels" }));
 	totals("Shown changes", 0, 0, 0);
-	expect(screen.getByRole("heading", { name: "0 matching changed files of 13 in this subtree" })).toBeInTheDocument();
+	expect(screen.getByText("0 of 13 files")).toBeInTheDocument();
 	expect(screen.getByText("No changes match the current filters.")).toBeInTheDocument();
-	expect(screen.queryByRole("table")).not.toBeInTheDocument();
+	expect(screen.queryByRole("table", { name: "Matching changes by type and importance" })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select ." })).not.toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: "Select tools/nested" })).not.toBeInTheDocument();
 	expect(
@@ -317,14 +324,16 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 	expect(row("src/moved.ts")).toBeInTheDocument();
 	expect(row("assets/logo.png")).toBeInTheDocument();
 	expect(row("docs/hidden.md")).toBeInTheDocument();
-	const allMatrix = within(screen.getByRole("table"));
+	const allMatrix = within(screen.getByRole("table", { name: "Matching changes by type and importance" }));
 	expect(allMatrix.getByRole("columnheader", { name: "None" })).toBeInTheDocument();
 	expect(cellValues(allMatrix, "Docs")).toEqual(["2 / +12 / −1", "—", "1 / +5 / −1", "—", "1 / +7 / −0"]);
 	await user.click(screen.getByRole("button", { name: "Select assets" }));
 	expect(
 		screen.getByText("No line changes. Binary files and pure renames still count as changed files."),
 	).toBeInTheDocument();
-	expect(cellValues(within(screen.getByRole("table")), "Assets")).toEqual(["1 / +0 / −0", "1 / +0 / −0"]);
+	expect(
+		cellValues(within(screen.getByRole("table", { name: "Matching changes by type and importance" })), "Assets"),
+	).toEqual(["1 / +0 / −0", "1 / +0 / −0"]);
 	async function inspectMetadata(path: string) {
 		await user.click(screen.getByRole("button", { name: `Select ${path}` }));
 		const metadata = within(screen.getByRole("region", { name: "Selected entry metadata" }));

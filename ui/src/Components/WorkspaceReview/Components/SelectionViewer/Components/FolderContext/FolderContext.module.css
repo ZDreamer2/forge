@@ -1,0 +1,89 @@
+.context {
+	margin-bottom: 24px;
+}
+.context h3 {
+	font-size: 12px;
+	font-weight: 550;
+	margin: 0 0 10px;
+}
+.context h4 {
+	font-size: 11px;
+	font-weight: 550;
+	margin: 16px 0 8px;
+}
+.repository {
+	font-size: 11px;
+	margin: 0 0 16px;
+}
+.scroll {
+	overflow-x: auto;
+}
+.guidance {
+	border-collapse: collapse;
+	font-size: 11px;
+	max-width: 100%;
+}
+.guidance caption {
+	text-align: left;
+	font-size: 12px;
+	font-weight: 550;
+	padding-bottom: 8px;
+}
+.guidance th,
+.guidance td {
+	text-align: left;
+	padding: 6px 18px 6px 0;
+	border-bottom: 1px solid #e3e8e4;
+	font-weight: 400;
+}
+.guidance thead th {
+	color: #829087;
+}
+.guidance th:nth-child(2),
+.guidance td:nth-child(2) {
+	white-space: nowrap;
+}
+.guidance tr[data-workspace="true"] > * {
+	background: #f1f5f2;
+}
+.name {
+	cursor: help;
+}
+.help {
+	border: 0;
+	background: transparent;
+	padding: 0 2px;
+	color: #829087;
+	font:
+		12px / 1.6 system-ui,
+		sans-serif;
+	cursor: help;
+}
+.root {
+	border: 0;
+	padding: 0;
+	background: transparent;
+	font: inherit;
+	color: #3e70b7;
+	text-align: left;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.root:hover {
+	text-decoration: underline;
+}
+.root:focus-visible,
+.help:focus-visible,
+.name:focus-visible {
+	outline: 2px solid #267553;
+	outline-offset: 2px;
+}
+.tooltip {
+	color: #45594b;
+	background: #fff;
+	border: 1px solid #e3e8e4;
+	box-shadow: 0 5px 22px #16302016;
+	padding: 10px 14px;
+	max-width: min(620px, calc(100vw - 16px));
+	overflow-wrap: anywhere;
+}

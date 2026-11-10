@@ -29,7 +29,7 @@
 }
 .aggregate .counts {
 	font-weight: 400;
-	opacity: 0.45;
+	opacity: 0.85;
 }
 @media (max-width: 1000px) {
 	.counts {

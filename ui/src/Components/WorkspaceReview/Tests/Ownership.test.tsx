@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { AnalysisWireNode, WorkspaceAnalysis, WorkspaceIdentity } from "@forge/api-contract";
+import type { AnalysisWireNode, WorkspaceIdentity } from "@forge/api-contract";
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -11,6 +11,7 @@ import { ForgeTheme } from "../../ForgeTheme/ForgeTheme";
 import { ChangesNavigator } from "../Components/ChangesNavigator/ChangesNavigator";
 import { SelectionViewer } from "../Components/SelectionViewer/SelectionViewer";
 import { analyzeChanges, initialFilters } from "../Internal/changeAnalysis";
+import type { WorkspaceAnalysis } from "../Internal/guidance";
 import { analyzeSignals } from "../Internal/signalAnalysis";
 import { WorkspaceReview } from "../WorkspaceReview";
 
@@ -54,6 +55,7 @@ function analysis(entries: AnalysisWireNode[]): WorkspaceAnalysis {
 		root: ".",
 		nodes: Object.fromEntries(entries.map((entry) => [entry.path, entry])),
 		codebases: {},
+		guidance: { workspace: [], codebases: {} },
 		handlers: {},
 	};
 }
@@ -65,6 +67,55 @@ const identity: WorkspaceIdentity = {
 		{ path: "missing", status: "missing" },
 	],
 };
+
+it("deduplicates codebase boundaries beside names, removes repository badges and retains differing side guide details", async () => {
+	const side = {
+		path: "target",
+		kind: "directory" as const,
+		repository: ".",
+		repositoryRoot: ".",
+		codebase: "target",
+		codebaseRoot: "target",
+	};
+	const facts = analysis([
+		node(".", { children: ["target"] }),
+		node("target", { base: side, current: side, children: ["target/a.ts"] }),
+		node("target/a.ts", { kind: "modified" }),
+	]);
+	facts.codebases = {
+		target: { id: "actual-id", root: "target", guidance: "guides/target" },
+		old: { id: "previous-id", root: "old", guidance: "guides/old" },
+	};
+	const filters = initialFilters();
+	const view = () => (
+		<ForgeTheme env="test">
+			<ChangesNavigator
+				review={analyzeChanges(facts, undefined, filters)}
+				analysis={facts}
+				identity={identity}
+				filters={filters}
+				onFiltersChange={() => {}}
+				selectedPath={undefined}
+				onSelect={() => {}}
+			/>
+		</ForgeTheme>
+	);
+	const rendered = render(view());
+	expect(screen.getAllByRole("button", { name: "Codebase boundary: actual-id" })).toHaveLength(1);
+	expect(screen.queryByRole("button", { name: /repository boundary/ })).not.toBeInTheDocument();
+	const user = userEvent.setup();
+	await user.hover(screen.getByRole("button", { name: "Codebase boundary: actual-id" }));
+	expect(await screen.findByRole("tooltip")).toHaveTextContent("actual-id codebaseGuide: guides/target");
+	expect(screen.getByRole("tooltip")).not.toHaveTextContent("Current");
+	await user.unhover(screen.getByRole("button", { name: "Codebase boundary: actual-id" }));
+	const target = facts.nodes.target;
+	if (!target) throw new Error("Missing fixture target");
+	target.base = { ...side, path: "old", codebase: "old", codebaseRoot: "old" };
+	rendered.rerender(view());
+	await user.hover(screen.getByRole("button", { name: "Codebase boundary: previous-id, actual-id" }));
+	expect(await screen.findByRole("tooltip")).toHaveTextContent("Base: previous-id codebaseGuide: guides/old");
+	expect(screen.getByRole("tooltip")).toHaveTextContent("Current: actual-id codebaseGuide: guides/target");
+});
 
 it("inspects canonical transitions, filtered entries and inclusive subtrees without mounting a navigator", () => {
 	const facts = analysis([
@@ -103,14 +154,12 @@ it("inspects canonical transitions, filtered entries and inclusive subtrees with
 	);
 	const rendered = render(view("."));
 	const details = within(screen.getByRole("region", { name: "Selection details" }));
-	expect(details.getByText(/3 matching changed files/)).toHaveTextContent("of 4 in this subtree");
-	expect(
-		details.getByLabelText(". matching subtree: 3 changed files, 1 removed lines, 2 added lines"),
-	).toBeInTheDocument();
+	expect(details.getByText("3 of 4 files")).toBeInTheDocument();
+	expect(details.getAllByRole("img", { name: "3 files, 2 added lines, 1 removed lines" }).length).toBeGreaterThan(0);
 
 	expect(details.getByRole("table", { name: "Matching changes by type and importance" })).toBeInTheDocument();
 	rendered.rerender(view("transition"));
-	expect(details.getByText(/1 matching changed files/)).toHaveTextContent("of 2 in this subtree");
+	expect(details.getByText("1 of 2 files")).toBeInTheDocument();
 	expect(details.getByRole("region", { name: "Selected entry metadata" })).toHaveTextContent("Deleted entry");
 	expect(details.getByText(/Own change: 1 removed lines, 2 added lines/)).toBeInTheDocument();
 	rendered.rerender(view("transition/hidden.md"));

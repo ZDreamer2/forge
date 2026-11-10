@@ -18,6 +18,7 @@ test("HTTP page and API operations have consistent routing failures", async (t) 
 	await writeFile(join(uiDirectory, "assets/index-abcd.js"), "export {};\n");
 	let collections = 0;
 	const app = createHttpApp({
+		guidance: { workspace: [], codebases: {} },
 		uiDirectory,
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),
@@ -100,6 +101,7 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 	let collections = 0;
 	const reported: Error[] = [];
 	const app = createHttpApp({
+		guidance: { workspace: [], codebases: {} },
 		uiDirectory,
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),

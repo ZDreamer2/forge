@@ -1,0 +1,39 @@
+.path {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font:
+		13px / 1.8 "JetBrains Mono",
+		Consolas,
+		ui-monospace,
+		monospace;
+	color: #78877c;
+	white-space: nowrap;
+	overflow-x: auto;
+	scrollbar-width: thin;
+	user-select: text;
+}
+.path strong {
+	font-weight: 600;
+	color: #34483b;
+}
+.segment {
+	cursor: copy;
+	user-select: text;
+}
+.segment:hover {
+	text-decoration: underline;
+}
+.segment:focus-visible {
+	outline: 1px solid #267553;
+	outline-offset: 2px;
+}
+.tooltip {
+	color: #45594b;
+	background: #fff;
+	border: 1px solid #e3e8e4;
+	box-shadow: 0 5px 22px #16302016;
+	padding: 10px 14px;
+	max-width: min(620px, calc(100vw - 16px));
+	overflow-wrap: anywhere;
+}

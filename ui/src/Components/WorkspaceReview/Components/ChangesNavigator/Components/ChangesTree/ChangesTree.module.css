@@ -92,6 +92,13 @@
 	--name-color: #3e70b7;
 	--quiet-name-color: #8199ba;
 }
+.nameGroup {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+}
 .name {
 	font:
 		13px / 1.6 "JetBrains Mono",
@@ -107,7 +114,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	flex: 1;
+	flex: 0 1 auto;
 	color: var(--name-color);
 	cursor: pointer;
 }

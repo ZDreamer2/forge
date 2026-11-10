@@ -1,13 +1,9 @@
 import { basename } from "node:path";
 import { loadGuideExtensions } from "../components/guide-extensions/index.ts";
+import { resolveWorkspaceGuidance } from "../components/http-api/index.ts";
 import { AnalysisHandlerError, createTreeAnalyzer } from "../components/tree-analysis/index.ts";
 import { createWorkingChanges } from "../components/tree-sources/index.ts";
-import {
-	loadWorkspaceConfig,
-	resolveGuideChain,
-	resolveWorkspaceChain,
-	rootedCodebases,
-} from "../components/workspace-config/index.ts";
+import { loadWorkspaceConfig, rootedCodebases } from "../components/workspace-config/index.ts";
 import { resolveRepositories } from "../components/workspace-repositories/index.ts";
 import { createGitProcess } from "../lib/git/index.ts";
 import { createAnalysis } from "./analysis.ts";
@@ -28,12 +24,11 @@ export async function start(options: Options) {
 	const config = await loadConfig(options);
 	const workspaceConfig = await loadWorkspaceConfig(config.configPath);
 	const codebases = rootedCodebases(workspaceConfig);
-	resolveWorkspaceChain(workspaceConfig);
-	for (const codebase of codebases) resolveGuideChain(workspaceConfig, codebase);
+	const name = workspaceConfig.displayName ?? (basename(config.root) || config.root);
+	const guidance = resolveWorkspaceGuidance(config.root, name, workspaceConfig);
 	const git = createGitProcess(options.env);
 	const repositories = await resolveRepositories(config.root, workspaceConfig.repositories, git);
-	const name = workspaceConfig.displayName ?? (basename(config.root) || config.root);
-	const snapshot = Object.freeze({ root: config.root, name, workspaceConfig, repositories });
+	const snapshot = Object.freeze({ root: config.root, name, workspaceConfig, repositories, guidance });
 	const changes = createWorkingChanges({
 		root: config.root,
 		repositories,

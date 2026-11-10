@@ -12,8 +12,10 @@ export type {
 	FileBaseline,
 	FileSide,
 	FileUnsupportedReason,
+	GuidanceEntry,
 	WorkspaceAnalysis,
 	WorkspaceChanges,
 	WorkspaceFileDiff,
+	WorkspaceGuidance,
 	WorkspaceIdentity,
 } from "./internal/types.ts";

@@ -12,6 +12,7 @@ type Deps = import("../components/http-api/index.ts").WorkspaceRouteDeps & {
 };
 
 export function createHttpApp({
+	guidance,
 	root,
 	name,
 	repositories,
@@ -41,6 +42,7 @@ export function createHttpApp({
 	app.route(
 		"/api",
 		createWorkspaceRoutes({
+			guidance,
 			root,
 			name,
 			repositories,

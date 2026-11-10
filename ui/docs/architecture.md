@@ -22,7 +22,7 @@ URL is the only record of selected path.
 | Owned WorkspaceData | Workspace identity and repository-context reads, independent failure/retry and freshness |
 | Owned ChangeSetData | Comparison analysis and selected short/complete patch reads, cancellation, freshness and coordinated Refresh |
 | ChangesNavigator | Controlled filters, hierarchy presentation, private tree projection and expansion/reveal lifecycle |
-| SelectionViewer | Canonical selected-entry metadata, folder/repository summaries and Type-by-Importance matrix, signal details/disclosure and no-selection orientation, independently of navigator rows |
+| SelectionViewer | Canonical selected-entry metadata, folder Context and Type-by-Importance matrix, path-prefix controls, signal details/disclosure and no-selection orientation, independently of navigator rows |
 | ChangesSummary | Shared informational file and line counters used by header, navigator and viewer |
 | SignalSummary | Shared warning/notice indicators and complete informational tooltip lists |
 
@@ -37,9 +37,11 @@ Shared pure review analysis derives canonical selection subjects and count scope
 from server facts. It contains no rendered hierarchy or expansion. The navigator
 alone projects the ordinary workspace-relative hierarchy, pruning every branch
 without matching changes, including repository roots. Canonical subjects retain
-empty, unavailable and filtered repositories for direct selection. Before analysis
-is available, identity-only repository access keeps unknown changes distinct from
-an analyzed empty tree. Filtering, omission or collapsing cannot remove the viewer's
+empty, unavailable and filtered repositories for direct selection. Workspace-contained
+guide roots also remain selectable from Context when absent from analysis nodes;
+these identity-only subjects add no navigator rows, counts or side ownership.
+Before analysis is available, repository placeholders keep unknown changes distinct
+from an analyzed empty tree. Filtering, omission or collapsing cannot remove the viewer's
 access to a selected subject.
 Tree counts and selection summaries share the own-entry counting implementation,
 not competing derivations. Derived analysis/projections are reused across unrelated
@@ -71,6 +73,19 @@ Messages always come from the accepted analysis observation: pending reads retai
 them, and failed reads mark retained analysis stale through the existing data owner.
 Navigator address resolution and explicit reveal have separate lifetimes, so a
 topology-only Refresh does not reopen manually collapsed ancestors.
+
+SelectionViewer's FolderContext presents server-resolved guidance in supplied order,
+using workspace or present-side owner composition from the
+[API contract](../../server/docs/protocol.md#analyze-workspace-changes). Repository
+context stays separate; differing side ownership remains explicit. Identity-only
+guide roots can show their registered composition without inferring side ownership.
+
+The owned PathHeader handles prefix activation and native text selection;
+WorkspaceReview performs clipboard writes and reports failures; successful copies
+are silent and add no layout content.
+Folder-root navigation selects without toggling or invoking signal inspection.
+The [viewer specification](../prototype/UiSpec.md) owns presentation and interaction
+requirements for Context, the matrix and path controls.
 
 ## Selected-file observations
 

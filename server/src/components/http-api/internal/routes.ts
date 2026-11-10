@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { WorkspaceGuidance } from "../../api-contract/index.ts";
 import type { AnalysisNode, AnalysisResult } from "../../tree-analysis/index.ts";
 import { type createWorkingChanges, SourceForbiddenError } from "../../tree-sources/index.ts";
 import type { RepositoryResolution } from "../../workspace-repositories/index.ts";
@@ -8,6 +9,7 @@ import { workspaceFileDiff } from "./file-wire.ts";
 import { apiError, workspaceAnalysis, workspaceChanges, workspaceIdentity } from "./wire.ts";
 
 export type WorkspaceRouteDeps = {
+	guidance: WorkspaceGuidance;
 	fileRequests: {
 		run: <T>(
 			work: (signal: AbortSignal, own: <R>(pending: Promise<R>) => Promise<R>) => Promise<T>,
@@ -39,6 +41,7 @@ export type WorkspaceRouteDeps = {
 };
 
 export function createWorkspaceRoutes({
+	guidance,
 	root,
 	name,
 	repositories,
@@ -77,7 +80,7 @@ export function createWorkspaceRoutes({
 				},
 			});
 		}, context.req.raw.signal);
-		return context.json(workspaceAnalysis(root, result));
+		return context.json(workspaceAnalysis(root, result, guidance));
 	});
 	routes.get("/changes/file", async (context) => {
 		const query = parseFileQuery(context.req.url);

@@ -64,7 +64,7 @@ function fixture(): WorkspaceAnalysis {
 		...nodes["transition/child.md"],
 		classification: { value: "docs" },
 	});
-	return { root: ".", nodes, codebases: {}, handlers: {} };
+	return { root: ".", nodes, codebases: {}, handlers: {}, guidance: { workspace: [], codebases: {} } };
 }
 function observation(path: string, context: 3 | "all" = 3, facts = fixture()): WorkspaceFileDiff {
 	const entry = facts.nodes[path];
@@ -238,7 +238,13 @@ it("cancels obsolete selection work and removes a disappeared subject only after
 	expect(pending.state).toBe("cancelled");
 	network.use(
 		http.get("http://localhost/api/changes/analysis", () =>
-			Response.json({ root: ".", nodes: { ".": node(".") }, codebases: {}, handlers: {} }),
+			Response.json({
+				root: ".",
+				nodes: { ".": node(".") },
+				codebases: {},
+				handlers: {},
+				guidance: { workspace: [], codebases: {} },
+			}),
 		),
 	);
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
@@ -345,7 +351,7 @@ it("loads a transition's own diff alongside its subtree and supports signal-sour
 	const { reads } = serve();
 	const user = start("transition");
 	await loaded("transition");
-	expect(screen.getByText(/2 matching changed files/)).toBeInTheDocument();
+	expect(screen.getAllByRole("img", { name: /^2 files,/ }).length).toBeGreaterThan(0);
 	expect(screen.getByRole("region", { name: "Selected entry metadata" })).toHaveTextContent("directory");
 	await user.click(screen.getByRole("button", { name: "Inspect warnings for ." }));
 	await user.click(screen.getByRole("button", { name: "Inspect source a.ts" }));

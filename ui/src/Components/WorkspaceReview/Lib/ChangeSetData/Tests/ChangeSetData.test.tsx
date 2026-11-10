@@ -12,7 +12,7 @@ const suite = createTestSuiteLifecycle({
 	beforeCancel: [() => cleanup()],
 	runCleanup: (finish) => act(finish),
 });
-const facts = { root: ".", codebases: {}, handlers: {}, nodes: {} };
+const facts = { root: ".", codebases: {}, handlers: {}, nodes: {}, guidance: { workspace: [], codebases: {} } };
 
 it("reads analysis independently and coalesces refresh with initial and retained-data reads", async () => {
 	const network = suite.createHttpScenario();

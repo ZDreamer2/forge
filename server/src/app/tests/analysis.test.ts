@@ -115,6 +115,7 @@ test("a failed size candidate aborts and drains the other probe before releasing
 		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		materializeChanges: async () => tree,
 		analyze: analyzer.analyze,
+		guidance: { workspace: [], codebases: {} },
 		currentByteSize: async (_tree, node, signal) => {
 			reads.push(node.path);
 			if (node.path === "a.md") return failure.promise;
@@ -184,6 +185,7 @@ test("shutdown keeps a cancelled analysis registered until its source probe is r
 		changesRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		materializeChanges: async () => tree,
 		analyze: analyzer.analyze,
+		guidance: { workspace: [], codebases: {} },
 		currentByteSize: async (_tree, _node, signal) => {
 			signal.addEventListener("abort", () => aborted.resolve(), { once: true });
 			started.resolve();

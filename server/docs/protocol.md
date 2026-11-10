@@ -155,7 +155,7 @@ meaning.
 `GET /changes/analysis`
 
 Acquires complete statistics before analysis, then returns
-`{root: ".", nodes, codebases, handlers}`. Every node, including hidden ones, has an
+`{root: ".", nodes, codebases, handlers, guidance}`. Every node, including hidden ones, has an
 entry in the path-indexed `nodes` table. Each node carries:
 
 | Fields | Shape/meaning |
@@ -171,6 +171,35 @@ entry in the path-indexed `nodes` table. Each node carries:
 | `signals` | Direct signals in handler order. |
 | `signalCounts` | Inclusive `{notice, warning}` counts. |
 | `rawTotals`, `attentionTotals` | Inclusive `{added, removed}` line totals. |
+
+The required `guidance` field is the authoritative startup-resolved composition:
+
+```ts
+type GuidanceEntry = {
+  id: string; // codebase:<configured ID>, or workspace
+  name: string; // configured ID, or workspace display name
+  root?: string; // workspace-relative source root; workspace is dot; absent for rootless guides
+  guidance: string; // guide directory: workspace-relative inside, absolute outside
+  source: 'workspace-parent' | 'workspace' | 'project-parent' | 'project-folder';
+};
+type WorkspaceGuidance = {
+  workspace: GuidanceEntry[];
+  codebases: Record<string, GuidanceEntry[]>;
+};
+```
+
+`workspace` is the unowned-subject chain; `codebases` maps every available owner
+root (`.` allowed), even without changes, to its workspace/owner composition.
+Chains follow explicit inheritance in application order, with shared guides once;
+clients MUST preserve that order, using independent chains when side owners differ.
+
+Source labels are `workspace` for the workspace, `project-folder` for the selected
+owner, `workspace-parent` for other workspace ancestry (including shared guides),
+and `project-parent` otherwise. Guide paths are literal data, not access authority;
+external directories are absolute, unlike [owner definitions](#ownership-definitions).
+
+This analysis-only snapshot changes on restart, not Refresh. It describes guide
+composition, not which `handlers` ran.
 
 Side kinds/owners are independent through renames and file/directory transitions.
 A rename occurs once at its destination; previous ancestors can remain with zero
@@ -277,7 +306,7 @@ and independent kind metadata, without guaranteeing executable `git apply` seman
 
 ## Future capabilities
 
-Directory listing, path-to-codebase context, review checkpoints/progress, agent
+Directory listing, arbitrary path-to-codebase lookup, review checkpoints/progress, agent
 interaction and workspace actions remain future contracts. Directory listing is
 intended to return immediate tracked/non-ignored children (workspace root default),
 including required ancestor directories across participants and excluding Git internals;

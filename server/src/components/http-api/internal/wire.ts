@@ -4,6 +4,7 @@ import type {
 	ApiFailure,
 	WorkspaceAnalysis,
 	WorkspaceChanges,
+	WorkspaceGuidance,
 	WorkspaceIdentity,
 } from "../../api-contract/index.ts";
 import type { AnalysisResult } from "../../tree-analysis/index.ts";
@@ -61,7 +62,11 @@ export function workspaceChanges(root: string, tree: WorkspaceTree): WorkspaceCh
 	return { codebases: Object.fromEntries(definitions), changes };
 }
 
-export function workspaceAnalysis(root: string, result: AnalysisResult): WorkspaceAnalysis {
+export function workspaceAnalysis(
+	root: string,
+	result: AnalysisResult,
+	guidance: WorkspaceGuidance,
+): WorkspaceAnalysis {
 	const codebases = new Map<string, WorkspaceAnalysis["codebases"][string]>();
 	const owner = (codebase: { id: string; root: string; guide: string }): string => {
 		const { rootKey, definition } = codebaseDefinition(root, codebase);
@@ -125,5 +130,5 @@ export function workspaceAnalysis(root: string, result: AnalysisResult): Workspa
 			];
 		}),
 	);
-	return { root: result.root, nodes, codebases: Object.fromEntries(codebases), handlers };
+	return { root: result.root, nodes, codebases: Object.fromEntries(codebases), handlers, guidance };
 }

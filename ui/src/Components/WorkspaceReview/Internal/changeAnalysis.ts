@@ -1,4 +1,5 @@
-import type { AnalysisWireNode, ClassificationValue, WorkspaceAnalysis, WorkspaceIdentity } from "@forge/api-contract";
+import type { AnalysisWireNode, ClassificationValue, WorkspaceIdentity } from "@forge/api-contract";
+import { isWorkspaceGuidanceRoot, type WorkspaceAnalysis } from "./guidance";
 
 export const typeLabels = {
 	code: "Code",
@@ -111,6 +112,14 @@ export function analyzeChanges(
 ): ReviewAnalysis {
 	const subjects = new Map<string, ReviewSubject>();
 	for (const node of Object.values(analysis?.nodes ?? {})) subjects.set(node.path, subject(node.path, node));
+	// Root links can select unchanged guides without inventing tree nodes or ownership.
+	if (analysis)
+		for (const chain of [analysis.guidance.workspace, ...Object.values(analysis.guidance.codebases)]) {
+			for (const guide of chain)
+				if (guide.root !== undefined && isWorkspaceGuidanceRoot(guide.root) && !subjects.has(guide.root)) {
+					subjects.set(guide.root, subject(guide.root));
+				}
+		}
 	for (const repository of identity?.repositories ?? []) {
 		const entry = subjects.get(repository.path) ?? subject(repository.path);
 		entry.repository = repository;

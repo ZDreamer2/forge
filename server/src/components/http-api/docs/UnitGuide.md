@@ -24,6 +24,11 @@ and finalized comparison context; HTTP maps those facts without constructing an
 incomplete analysis tree. Excluded participation maps to forbidden; operational
 failures become sanitized internal errors.
 
+At startup, `resolveWorkspaceGuidance` validates and projects the
+`workspace-config` composition for the workspace and every rooted participant.
+`app` retains and injects this wire snapshot; analysis serializes it without
+per-request resolution. Ordering remains owned by `workspace-config`.
+
 Analysis mapping supplies explicit root/child adjacency and response-local owner
 and handler definitions, preserving safe literal keys. The
 [API contract](../../../../docs/protocol.md) owns wire shapes, operation-scoped

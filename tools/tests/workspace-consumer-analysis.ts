@@ -365,6 +365,36 @@ await assert.rejects(import('@zdreamer/forge/dist/server/src/components/tree-ana
 			tests: { id: "foreign-guide", root: "tests", guidance: "owner" },
 			"other-files": { id: "other-guide", root: "other-files", guidance: "other" },
 		});
+		assert.equal(result.guidance.workspace.at(-1)?.id, "workspace");
+		assert.equal(result.guidance.workspace.at(-1)?.root, ".");
+		assert.equal(result.guidance.workspace.at(-1)?.guidance, "docs/forge/workspace");
+		assert.equal(result.guidance.workspace.at(-1)?.source, "workspace");
+		assert.equal(result.guidance.workspace[0]?.id, "codebase:forge-base");
+		assert.equal(result.guidance.workspace[0]?.source, "workspace-parent");
+		assert.equal(Object.hasOwn(result.guidance.workspace[0] ?? {}, "root"), false);
+		for (const [root, id, directory] of [
+			["tests", "foreign-guide", "owner"],
+			["other-files", "other-guide", "other"],
+		] as const) {
+			const chain = result.guidance.codebases[root];
+			assert.ok(chain);
+			assert.equal(new Set(chain.map((guide) => guide.id)).size, chain.length, "Shared guides appear once");
+			assert.deepEqual(chain.at(-1), {
+				id: `codebase:${id}`,
+				name: id,
+				root,
+				guidance: directory,
+				source: "project-folder",
+			});
+			const reusable = chain.find((guide) => guide.id === "codebase:reusable-guide");
+			assert.deepEqual(reusable, {
+				id: "codebase:reusable-guide",
+				name: "reusable-guide",
+				guidance: "reusable",
+				source: "project-parent",
+			});
+			assert.ok(chain.findIndex((guide) => guide.id === "workspace") < chain.indexOf(reusable));
+		}
 		assert.ok(result.handlers["workspace#classifyNode"]);
 		assert.ok(result.handlers["codebase:forge-base#classifyNode"]);
 		assert.deepEqual(requiredNode(result, ".").classification, { value: "code" });

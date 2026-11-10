@@ -161,6 +161,49 @@ test("socket requests collect fresh changes with startup routing and fail safely
 	assert.deepEqual(execFileSync("git", ["-C", input.directory, "status", "--porcelain=v1"]), status);
 });
 
+test("analysis publishes startup guidance for unchanged owners and keeps it across configuration edits", async (t) => {
+	const input = await fixture(t);
+	await mkdir(join(input.root, "app"));
+	await writeFixtureFile(join(input.root, "guides/base/forge-codebase.yaml"), "id: base\n");
+	await writeFixtureFile(
+		join(input.root, "guides/app/forge-codebase.yaml"),
+		"id: app\nroot: ../../app\nparents: [base]\n",
+	);
+	await writeFixtureFile(
+		input.configPath,
+		"display_name: Selected workspace\nrepositories: ['.']\nparents: [base]\ncodebases: [../../../guides/base/forge-codebase.yaml, ../../../guides/app/forge-codebase.yaml]\n",
+	);
+	const server = await start(input.options);
+	t.after(server.close);
+	const workspace = [
+		{ id: "codebase:base", name: "base", guidance: "guides/base", source: "workspace-parent" },
+		{ id: "workspace", name: "Selected workspace", root: ".", guidance: "docs/forge/workspace", source: "workspace" },
+	];
+	const guidance = {
+		workspace,
+		codebases: {
+			app: [
+				...workspace,
+				{ id: "codebase:app", name: "app", root: "app", guidance: "guides/app", source: "project-folder" },
+			],
+		},
+	};
+	for (let request = 0; request < 2; request++) {
+		const response = await fetch(`${server.address}/api/changes/analysis`);
+		assert.equal(response.status, 200);
+		const body = (await response.json()) as WorkspaceAnalysis;
+		assert.deepEqual(body.guidance, guidance);
+		assert.deepEqual(body.codebases, {});
+		assert.deepEqual(server.snapshot.guidance, guidance);
+		await writeFixtureFile(input.configPath, "not: [valid YAML");
+	}
+	for (const path of ["workspace", "changes", "changes/file?path=not-changed.txt"]) {
+		const response = await fetch(`${server.address}/api/${path}`);
+		assert.equal(response.status, 200);
+		assert.equal("guidance" in ((await response.json()) as object), false);
+	}
+});
+
 test("termination signals dispose the listener and remove both owned signal handlers", async (t) => {
 	for (const signal of ["SIGINT", "SIGTERM"] as const) {
 		const input = await fixture(t);

@@ -11,11 +11,13 @@ import {
 	type Summary,
 	typeLabels,
 } from "../../Internal/changeAnalysis";
+import type { WorkspaceGuidance } from "../../Internal/guidance";
 import { consumePathRequest, type PathRequest, type PathRequestCursor } from "../../Internal/pathRequest";
 import { type SignalAnalysis, signalMessages } from "../../Internal/signalAnalysis";
-import { ChangesSummary } from "../ChangesSummary/ChangesSummary";
 import { SignalSummary } from "../SignalSummary/SignalSummary";
 import { FileDiff, FileDiffMode, FileDiffScope } from "./Components/FileDiff/FileDiff";
+import { FolderContext } from "./Components/FolderContext/FolderContext";
+import { PathHeader } from "./Components/PathHeader/PathHeader";
 import { SignalDetails } from "./Components/SignalDetails/SignalDetails";
 import styles from "./SelectionViewer.module.css";
 
@@ -23,10 +25,13 @@ export function SelectionViewer({
 	review,
 	selectedPath,
 	codebases,
+	guidance,
+	onCopyPath,
 	signals,
 	inspectionRequest,
 	onInspect,
 	onSourceNavigate,
+	onFolderNavigate,
 	onReveal,
 	onRefresh,
 }: {
@@ -35,9 +40,12 @@ export function SelectionViewer({
 	inspectionRequest?: PathRequest | undefined;
 	onInspect?: ((path: string) => void) | undefined;
 	onSourceNavigate?: ((path: string) => void) | undefined;
+	onFolderNavigate?: ((path: string) => void) | undefined;
 	onReveal?: ((path: string) => void) | undefined;
 	selectedPath?: string | undefined;
 	codebases?: WorkspaceAnalysis["codebases"] | undefined;
+	guidance?: WorkspaceGuidance | undefined;
+	onCopyPath?: ((path: string) => void) | undefined;
 	onRefresh: () => void;
 }) {
 	const selected = resolveSelection(review, selectedPath);
@@ -59,11 +67,9 @@ export function SelectionViewer({
 	}
 	const node = selected?.node;
 	const path = selected?.path;
-	const fragments = path?.split("/") ?? [];
-	const filename = fragments.pop();
-	const first = fragments.length > 1 ? `${fragments.shift()}/` : "";
-	const parent = fragments.length > 0 ? `${fragments.pop()}/` : "";
-	const middle = fragments.length > 0 ? `${fragments.join("/")}/` : "";
+	const folder =
+		selected &&
+		(!node?.kind || node.children.length > 0 || node.base?.kind === "directory" || node.current?.kind === "directory");
 	const filtered =
 		selected &&
 		((node?.kind && !selected.ownVisible) || (!node?.kind && selected.total.files > 0 && !selected.shown.files));
@@ -72,21 +78,7 @@ export function SelectionViewer({
 			<section aria-label="Selection details" className={styles.details}>
 				<header className={styles.header}>
 					{path ? (
-						<h2 className={styles.title} aria-label={path}>
-							<Tooltip
-								label={path}
-								multiline
-								events={{ hover: true, focus: true, touch: true }}
-								classNames={{ tooltip: styles.tooltip }}
-							>
-								<button type="button" className={styles.path} aria-label={`Full path: ${path}`}>
-									<span className={styles.first}>{first}</span>
-									<span className={styles.middle}>{middle}</span>
-									<span className={styles.parent}>{parent}</span>
-									<strong>{filename}</strong>
-								</button>
-							</Tooltip>
-						</h2>
+						<PathHeader key={path} path={path} onCopy={onCopyPath} />
 					) : (
 						<h2 className={styles.title}>Workspace changes</h2>
 					)}
@@ -124,33 +116,29 @@ export function SelectionViewer({
 									The selected change is outside the current filters. Its diff and metadata remain available.
 								</p>
 							)}
-							{selected.repository && (
+							{selected.repository && !folder && (
 								<p className={styles.repository}>
 									Repository {selected.repository.status === "missing" ? "· Missing at startup" : "· Available"}
 								</p>
 							)}
-							{(!node?.kind ||
-								(node?.children.length ?? 0) > 0 ||
-								node.base?.kind === "directory" ||
-								node.current?.kind === "directory") && (
+							{folder && (
 								<section className={styles.subtree} aria-label="Matching subtree summary">
-									<h3>
-										{selected.shown.files} matching changed files <span>of {selected.total.files} in this subtree</span>
-									</h3>
-									<ChangesSummary summary={selected.shown} label={`${path} matching subtree`} />
-									<p>
-										Matching descendants, including nested repositories. Folder expansion does not affect these totals.
-									</p>
+									<FolderContext selected={selected} guidance={guidance} onNavigate={onFolderNavigate} />
 									{selected.shown.files ? (
 										<>
 											{!selected.shown.added && !selected.shown.removed && (
 												<p>No line changes. Binary files and pure renames still count as changed files.</p>
 											)}
-											<FolderMatrix summary={selected.shown} />
+											<FolderMatrix summary={selected.shown} totalFiles={selected.total.files} />
 										</>
-									) : selected.total.files > 0 ? (
-										<p>No changes match the current filters.</p>
-									) : null}
+									) : (
+										<>
+											<h3>
+												<MatrixTitle files={0} totalFiles={selected.total.files} />
+											</h3>
+											{selected.total.files > 0 && <p>No changes match the current filters.</p>}
+										</>
+									)}
 								</section>
 							)}
 							{node?.kind && (
@@ -286,7 +274,34 @@ function SideDetails({
 	);
 }
 
-function FolderMatrix({ summary }: { summary: Summary }) {
+function MatrixTitle({ files, totalFiles }: { files: number; totalFiles: number }) {
+	return (
+		<>
+			<Tooltip
+				label="Files / added lines / removed lines"
+				events={{ hover: true, focus: true, touch: true }}
+				classNames={{ tooltip: styles.tooltip }}
+			>
+				{/* biome-ignore lint/a11y/noNoninteractiveTabindex: Informational title tooltip must be keyboard accessible without implying a matrix action. */}
+				<span tabIndex={0}>Type × importance</span>
+			</Tooltip>
+			{(files !== totalFiles || !files) && (
+				<Tooltip
+					label="Matching files out of all changed descendants, including nested repositories. Folder expansion does not affect these totals."
+					events={{ hover: true, focus: true, touch: true }}
+					classNames={{ tooltip: styles.tooltip }}
+				>
+					{/* biome-ignore lint/a11y/noNoninteractiveTabindex: Scope explanation must also be available on keyboard focus. */}
+					<span tabIndex={0} className={styles.matrixScope}>
+						{files} of {totalFiles} files
+					</span>
+				</Tooltip>
+			)}
+		</>
+	);
+}
+
+function FolderMatrix({ summary, totalFiles }: { summary: Summary; totalFiles: number }) {
 	const types = Object.keys(typeLabels) as ClassificationValue[];
 	const importance = Object.keys(importanceLabels) as Importance[];
 	function total(type?: ClassificationValue, level?: Importance): MatrixCell {
@@ -314,7 +329,7 @@ function FolderMatrix({ summary }: { summary: Summary }) {
 		<div className={styles.matrixScroll}>
 			<table className={styles.matrix} aria-label="Matching changes by type and importance">
 				<caption>
-					Type × importance<span className={styles.matrixLegend}>Files / added / removed</span>
+					<MatrixTitle files={summary.files} totalFiles={totalFiles} />
 				</caption>
 				<thead>
 					<tr>

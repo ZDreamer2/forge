@@ -51,6 +51,7 @@ it("contains an asynchronous highlighter rejection and recovers through explicit
 				nodes: { "file.ts": summary },
 				codebases: {},
 				handlers: {},
+				guidance: { workspace: [], codebases: {} },
 			});
 			if (reads === 1 && observation.kind === "text")
 				observation.patch = observation.patch.replace("+new file.ts 0", `+new file.ts ${longLine}`);

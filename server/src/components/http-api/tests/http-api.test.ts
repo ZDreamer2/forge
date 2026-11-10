@@ -15,6 +15,7 @@ test("identity snapshots repository declarations without collecting or exposing 
 	const routes = createWorkspaceRoutes({
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),
+		guidance: { workspace: [], codebases: {} },
 		root: "/parent/selected",
 		name: "Selected",
 		repositories,
@@ -62,6 +63,7 @@ test("flat projection uses present-side concrete roots, safe keys and response-l
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),
 		root,
+		guidance: { workspace: [], codebases: {} },
 		name: "Selected",
 		repositories: [],
 		analysis: { run: (work) => work(new AbortController().signal, (pending) => pending) },
@@ -147,6 +149,7 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),
 		root,
+		guidance: { workspace: [], codebases: {} },
 		name: "selected",
 		repositories: [],
 		discoverChanges: async () => ({ kind: "working-changes-discovery" }),
@@ -194,6 +197,7 @@ test("analysis emits finalized adjacency, owners, annotations and totals with sa
 test("file queries decode once, validate context and preserve literal names", async () => {
 	const seen: unknown[][] = [];
 	const routes = createWorkspaceRoutes({
+		guidance: { workspace: [], codebases: {} },
 		root: "/selected",
 		name: "Selected",
 		repositories: [],
@@ -281,6 +285,7 @@ test("all projections keep root keys distinct from stable IDs, including the wor
 	const analysis = workspaceAnalysis(
 		root,
 		await analyzer.analyze(tree, { currentByteSize: async () => 0, signal: new AbortController().signal }),
+		{ workspace: [], codebases: {} },
 	);
 	assert.deepEqual(analysis.codebases, definitions);
 	assert.equal(analysis.nodes["."]?.current?.codebaseRoot, ".");
@@ -372,6 +377,7 @@ test("classification maps one canonical assignment while preserving rename sides
 	const result = workspaceAnalysis(
 		root,
 		await analyzer.analyze(tree, { currentByteSize: async () => 0, signal: new AbortController().signal }),
+		{ workspace: [], codebases: {} },
 	);
 	assert.equal(canonicalCalls.length, Object.keys(result.nodes).length);
 	assert.equal(new Set(canonicalCalls).size, canonicalCalls.length);

@@ -114,7 +114,7 @@ function fixture(): WorkspaceAnalysis {
 		return entry.signalCounts;
 	}
 	count(".");
-	return { root: ".", nodes, handlers: {}, codebases: {} };
+	return { root: ".", nodes, handlers: {}, codebases: {}, guidance: { workspace: [], codebases: {} } };
 }
 function serve(facts = fixture()) {
 	return suite.createHttpScenario(
@@ -242,7 +242,7 @@ it("keeps Ctrl+Click path copying and ordinary selection separate from signal in
 	await user.keyboard("{Control>}");
 	await user.click(navigator().getByRole("button", { name: "Select src/renamed.ts" }));
 	await user.keyboard("{/Control}");
-	expect(await screen.findByText("Copied: src/renamed.ts")).toBeInTheDocument();
+	expect(screen.queryByText(/^Copied:/)).not.toBeInTheDocument();
 	expect(copy).toHaveBeenCalledWith("src/renamed.ts");
 	expect(selectedPath()).toBe("src/renamed.ts");
 	expect(viewer().getByRole("button", { name: "Show signal details" })).toBeInTheDocument();
@@ -286,7 +286,13 @@ it("removes vanished messages, resets a surviving subject and clears a disappear
 	await viewer().findByRole("button", { name: "Show signal details" });
 	expect(navigator().queryByRole("button", { name: "Select nested" })).not.toBeInTheDocument();
 	await user.click(viewer().getByRole("button", { name: "Show signal details" }));
-	const empty: WorkspaceAnalysis = { root: ".", nodes: { ".": node(".") }, handlers: {}, codebases: {} };
+	const empty: WorkspaceAnalysis = {
+		root: ".",
+		nodes: { ".": node(".") },
+		handlers: {},
+		codebases: {},
+		guidance: { workspace: [], codebases: {} },
+	};
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(empty)));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
 	await screen.findByRole("img", { name: /All workspace changes: 0 changed files/ });

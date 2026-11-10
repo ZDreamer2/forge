@@ -36,6 +36,7 @@ function analysis(empty = false): WorkspaceAnalysis {
 	return {
 		root: ".",
 		codebases: {},
+		guidance: { workspace: [], codebases: {} },
 		handlers: {},
 		nodes: empty
 			? { ".": node(".") }

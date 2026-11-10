@@ -22,54 +22,6 @@
 	font-weight: 650;
 	margin: 0;
 }
-.path {
-	width: 100%;
-	border: 0;
-	background: none;
-	padding: 0;
-	text-align: left;
-	cursor: help;
-	display: flex;
-	align-items: baseline;
-	font:
-		13px / 1.8 "JetBrains Mono",
-		Consolas,
-		ui-monospace,
-		monospace;
-	color: #78877c;
-	margin: 0;
-	min-width: 0;
-	white-space: nowrap;
-	overflow: hidden;
-}
-.path strong {
-	font-weight: 600;
-	color: #34483b;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	flex: 0 1 auto;
-}
-.first {
-	flex-shrink: 2;
-	max-width: 25%;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.middle {
-	flex: 0 3 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-.parent {
-	flex: 0 2 auto;
-	min-width: 0;
-	max-width: 30%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
 .content {
 	overflow: auto;
 	flex: 1;
@@ -180,10 +132,6 @@
 	max-width: min(620px, calc(100vw - 16px));
 	overflow-wrap: anywhere;
 }
-.path:focus-visible {
-	outline: 2px solid #267553;
-	outline-offset: 2px;
-}
 @media (max-width: 900px) {
 	.header {
 		display: flex;
@@ -271,7 +219,7 @@
 .matrix th,
 .matrix td {
 	text-align: right;
-	padding: 12px 10px;
+	padding: 6px 10px;
 	border-bottom: 1px solid #e3e8e4;
 	font-variant-numeric: tabular-nums;
 	font-weight: 400;
@@ -303,12 +251,12 @@
 	background: #e6eee5;
 	color: #315e42;
 }
-.matrixLegend {
-	display: block;
-	margin-top: 6px;
+.matrixScope {
+	margin-left: 8px;
 	font-size: 11px;
 	font-weight: 400;
 	color: #829087;
+	cursor: help;
 }
 .matrixValues {
 	display: inline-grid;

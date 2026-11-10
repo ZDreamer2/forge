@@ -2,7 +2,7 @@
 
 Open `index.html` in a browser. No installation, build, live Forge server, or network access is needed. Classic scripts and bundled assets support direct local-file opening. All workspace data is fictional; this page does not inspect your checkout.
 
-[UiSpec](UiSpec.md) explains the intended experience, behavior, and rationale, including unresolved application-contract questions. [DesignDecisions](DesignDecisions.md) retains concrete presentation and asset notes.
+[UiSpec](UiSpec.md) explains the intended experience, behavior, and rationale. [DesignDecisions](DesignDecisions.md) retains concrete presentation and asset notes.
 
 ## Explore the demo
 
@@ -11,7 +11,9 @@ Open `index.html` in a browser. No installation, build, live Forge server, or ne
 - Select files or folders; click the selected name again to clear selection. Ctrl+Click selects and copies its workspace-relative path.
 - Low/None-only matching branches start collapsed; branches containing Medium/High changes start expanded. Filter changes preserve established expansion choices.
 - Use disclosure arrows or the collapse/expand icons beside Changes. Shown counts line changes in matching files exposed by expansion, not the scroll viewport; hover or focus its label for an explanation. Folder counters always include all matching descendants.
-- Select a folder for matching/total file counts, line totals, and a Type-by-Importance matrix with All totals first and count / +added / −removed in each cell. Expansion does not affect the folder page; binary-only and rename-only groups retain their file counts.
+- Hover or focus a bordered `c` beside a folder name to see its codebase and guide directory. Repository roots use the colored folder icon without a separate badge.
+- Select a folder for Context and the Type-by-Importance matrix. Context separates the repository from explicit guide composition, including workspace parents; hover or focus guide names for their directories. Root links select their folders. All totals come first in the matrix; a filtered file count appears inline beside its title. Hover or focus the title for cell-value help.
+- Click a header path segment to copy the workspace-relative path through it, or focus it and press Enter/Space. Drag to select text normally; long paths scroll horizontally.
 - Resize the sidebar by dragging the divider or focusing it and using Left/Right. Its width is restored from LocalStorage on subsequent visits.
 - Switch unified/split views; TenderList includes long text and an unbroken URL to demonstrate wrapping. Tree names and change counters have no tooltips; hover or focus signal icons for structured messages.
 - Click a signal icon to open details below the main header. BiCo includes a warning on filtered-out plans; Reveal file enables the needed categories and expands its ancestors. Forge includes a direct repository notice and a located file notice.
@@ -46,7 +48,7 @@ Core/Domain folders containing High files remain expanded while their Low-only b
 
 ## Prototype limits
 
-This is a design sandbox, not delivery of Chunks 10–13. Types, importance, tree construction, and analysis signals are authored fixtures; the page does not implement the production server contract. Counts and excerpts are authored separately.
+Types, importance, guide composition, tree construction, and analysis signals are authored fixtures; the page does not implement the production server contract. Counts and excerpts are authored separately.
 
 Diff rendering has no syntax highlighting, aligned split rows, patch parsing, or real context loading. Refresh, failure, and empty states are demonstrations, not API integration. Production retains the accepted API/data owner and uses Pierre.
 

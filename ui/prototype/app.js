@@ -415,6 +415,8 @@
 	let copyNoticeTimer;
 	async function copyPath(path) {
 		const notice = $("copy-status");
+		clearTimeout(copyNoticeTimer);
+		notice.hidden = true;
 		try {
 			if (navigator.clipboard?.writeText) {
 				await navigator.clipboard.writeText(path);
@@ -433,15 +435,13 @@
 					previousFocus?.focus();
 				}
 			}
-			notice.textContent = `Copied: ${path}`;
 		} catch {
 			notice.textContent = "Could not copy path. Clipboard access is unavailable.";
+			notice.hidden = false;
+			copyNoticeTimer = setTimeout(() => {
+				notice.hidden = true;
+			}, 3000);
 		}
-		clearTimeout(copyNoticeTimer);
-		notice.hidden = false;
-		copyNoticeTimer = setTimeout(() => {
-			notice.hidden = true;
-		}, 3000);
 	}
 	document.addEventListener("keydown", (event) => {
 		const segment = event.target.closest("[data-copy-prefix]");

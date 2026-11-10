@@ -52,6 +52,7 @@ async function fixture(t: TestContext, decorate: (git: GitProcess) => GitProcess
 		await rm(root, { recursive: true, force: true });
 	});
 	const app = createHttpApp({
+		guidance: { workspace: [], codebases: {} },
 		root,
 		name: "Fixture",
 		repositories,

@@ -106,17 +106,20 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 		setNotice("");
 		setCopyFeedback("");
 		onNavigate(!copy && path === selectedPath ? undefined : path);
+		++copyAttempt.current;
+		if (copy) copyPath(path);
+	}
+
+	function copyPath(path: string) {
+		setCopyFeedback("");
 		const attempt = ++copyAttempt.current;
-		if (copy) {
-			void (async () => {
-				try {
-					await navigator.clipboard.writeText(path);
-					if (attempt === copyAttempt.current) setCopyFeedback(`Copied: ${path}`);
-				} catch {
-					if (attempt === copyAttempt.current) setCopyFeedback("Could not copy path. Clipboard access is unavailable.");
-				}
-			})();
-		}
+		void (async () => {
+			try {
+				await navigator.clipboard.writeText(path);
+			} catch {
+				if (attempt === copyAttempt.current) setCopyFeedback("Could not copy path. Clipboard access is unavailable.");
+			}
+		})();
 	}
 
 	const root = analysis.data?.nodes["."];
@@ -233,10 +236,15 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 						review={review}
 						selectedPath={selectedPath}
 						codebases={analysis.data.codebases}
+						guidance={analysis.data.guidance}
+						onCopyPath={copyPath}
 						signals={signals}
 						inspectionRequest={inspectionRequest}
 						onInspect={inspect}
 						onSourceNavigate={inspect}
+						onFolderNavigate={(path) => {
+							if (path !== selectedPath) select(path, false);
+						}}
 						onReveal={(path) => inspect(path, true)}
 					/>
 				) : (
