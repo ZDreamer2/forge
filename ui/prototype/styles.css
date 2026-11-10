@@ -462,8 +462,34 @@ aside {
 	flex-shrink: 0;
 	padding: 2px 0;
 }
+#visible-summary > .line-counts,
+.tree-row:not(.folder-row) > .line-counts {
+	font-weight: 700;
+}
 .folder-row > .line-counts {
-	opacity: 0.45;
+	opacity: 0.85;
+}
+.folder-name-group {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+}
+.folder-name-group > .node-label {
+	flex: 0 1 auto;
+}
+.codebase-boundary {
+	border: 1px solid #d8dfd8;
+	border-radius: 3px;
+	background: transparent;
+	padding: 0 2px;
+	color: #879286;
+	font:
+		8px / 12px system-ui,
+		sans-serif;
+	cursor: help;
+	flex-shrink: 0;
 }
 .selection-note {
 	padding: 10px 16px;
@@ -635,24 +661,83 @@ aside {
 .folder-details {
 	max-width: 1000px;
 }
-.folder-summary {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
+.folder-context {
+	margin-bottom: 24px;
 }
-.folder-summary h3 {
-	margin: 0;
-	font-size: 15px;
+.folder-context h3 {
+	font-size: 12px;
+	font-weight: 550;
+	margin: 0 0 10px;
+}
+.folder-repository {
+	font-size: 11px;
+	color: #45594b;
+	margin: 0 0 16px;
+}
+.folder-location .workspace-guide > * {
+	background: #f1f5f2;
+}
+.folder-location {
+	border-collapse: collapse;
+	font-size: 11px;
+	color: #45594b;
+	max-width: 100%;
+}
+.folder-location caption {
+	text-align: left;
+	font-size: 12px;
+	font-weight: 550;
+	padding-bottom: 8px;
+}
+.folder-location th,
+.folder-location td {
+	text-align: left;
+	padding: 6px 18px 6px 0;
+	border-bottom: 1px solid var(--line);
+	font-weight: 400;
+}
+.guide-name {
+	cursor: help;
+}
+.context-help {
+	border: 0;
+	background: transparent;
+	padding: 0 2px;
+	color: #829087;
+	font:
+		12px / 1.6 system-ui,
+		sans-serif;
+	cursor: help;
+}
+.folder-location thead th {
+	color: #829087;
+}
+.location-root {
+	border: 0;
+	padding: 0;
+	background: transparent;
+	font: inherit;
+	color: #3e70b7;
+	text-align: left;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+.location-root:hover {
+	text-decoration: underline;
+}
+.matrix-heading {
+	margin: 0 0 12px;
+	font-size: 13px;
 	font-weight: 550;
 	color: #46594c;
 }
-.folder-summary h3 span {
-	font-size: 12px;
+.matrix-scope {
+	margin-left: 8px;
+	font-size: 11px;
 	font-weight: 400;
 	color: #829087;
+	cursor: help;
 }
-.folder-scope,
 .folder-empty {
 	color: #829087;
 	font-size: 12px;
@@ -667,12 +752,6 @@ aside {
 	border-collapse: collapse;
 	font-size: 12px;
 	color: #46594c;
-}
-.folder-breakdowns caption {
-	text-align: left;
-	font-size: 13px;
-	font-weight: 550;
-	padding-bottom: 12px;
 }
 .folder-breakdowns th,
 .folder-breakdowns td {
@@ -709,12 +788,8 @@ aside {
 	background: #e6eee5;
 	color: #315e42;
 }
-.matrix-legend {
-	display: block;
-	margin-top: 6px;
-	font-size: 11px;
-	font-weight: 400;
-	color: #829087;
+.matrix-title {
+	cursor: help;
 }
 .matrix-values {
 	display: inline-grid;
@@ -890,6 +965,17 @@ aside {
 	white-space: nowrap;
 	overflow-x: auto;
 	scrollbar-width: thin;
+}
+.path-copy {
+	cursor: copy;
+	user-select: text;
+}
+.path-copy:hover {
+	text-decoration: underline;
+}
+.path-copy:focus-visible {
+	outline: 1px solid #879286;
+	outline-offset: 2px;
 }
 .workspace-file-path strong {
 	font-weight: 600;

@@ -1,4 +1,43 @@
 // Presentation fixtures only. These do not interpret or read the real workspace.
+window.forgeGuides = [
+	{ id: "forge-base", name: "Forge base", directory: "ai/bc-plugins/dev/forge/codebases/base", parents: [] },
+	{ id: "workspace", name: "BiCo workspace", root: ".", directory: "docs/forge/workspace", parents: ["forge-base"] },
+	{
+		id: "react",
+		name: "React frontend",
+		directory: "ai/bc-plugins/dev/forge/codebases/ts-react-frontend",
+		parents: [],
+	},
+	{
+		id: "typescript",
+		name: "TypeScript service",
+		directory: "ai/bc-plugins/dev/forge/codebases/ts-service",
+		parents: [],
+	},
+	{ id: "web", root: ".", name: "Web application", directory: "docs/code", parents: [] },
+	{
+		id: "forge",
+		root: "library/tools/forge",
+		name: "Forge application",
+		directory: "library/tools/forge/docs/forge",
+		parents: [],
+	},
+	{
+		id: "forge-server",
+		root: "library/tools/forge/server",
+		name: "Forge server",
+		directory: "library/tools/forge/server/docs/forge",
+		parents: ["typescript", "forge"],
+	},
+	{
+		id: "forge-ui",
+		root: "library/tools/forge/ui",
+		name: "Forge UI",
+		directory: "library/tools/forge/ui/docs/forge",
+		parents: ["react", "forge"],
+	},
+];
+window.forgeCodebases = window.forgeGuides.filter((guide) => guide.root !== undefined && guide.id !== "workspace");
 window.forgeFixtures = [
 	{
 		repo: "BiCo",

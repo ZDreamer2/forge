@@ -30,7 +30,7 @@
 		columns.unshift(["all", "All"]);
 		const rows = Object.entries(types).filter(([key]) => entries.some((file) => file.type === key));
 		rows.unshift(["all", "All"]);
-		return `<table><caption>Type × importance<span class="matrix-legend">Files / added / removed</span></caption><thead><tr><th scope="col">Type / Importance</th>${columns.map(([key, name]) => `<th scope="col"${key === "all" ? ' class="matrix-total"' : ""}><span class="matrix-label">${name}</span></th>`).join("")}</tr></thead><tbody>${rows
+		return `<table aria-label="Type by importance"><thead><tr><th scope="col">Type / Importance</th>${columns.map(([key, name]) => `<th scope="col"${key === "all" ? ' class="matrix-total"' : ""}><span class="matrix-label">${name}</span></th>`).join("")}</tr></thead><tbody>${rows
 			.map(
 				([type, name]) =>
 					`<tr${type === "all" ? ' class="matrix-total"' : ""}><th scope="row"><span class="matrix-label">${name}</span></th>${columns
@@ -175,10 +175,12 @@
 		$("totals").innerHTML = `<span><strong>${all.length}</strong> files</span>${counters(all)}`;
 		const shown = [];
 		const repositories = new Map(fixtures.map((file) => [file.root, file.repo]));
+		const codebases = new Map(window.forgeCodebases.map((codebase) => [codebase.root, codebase]));
 		const makeFolder = (name, path) => ({
 			name,
 			path,
 			repository: repositories.get(path),
+			codebase: codebases.get(path),
 			children: new Map(),
 			files: [],
 			entries: [],
@@ -200,9 +202,9 @@
 		}
 		function prepare(node, depth = 0) {
 			// Compact chains of directories while keeping a single canonical path per row.
-			while (!node.repository && !node.files.length && node.children.size === 1 && depth > 0) {
+			while (!node.repository && !node.codebase && !node.files.length && node.children.size === 1 && depth > 0) {
 				const child = [...node.children.values()][0];
-				if (child.repository) break;
+				if (child.repository || child.codebase) break;
 				node = { ...child, name: `${node.name}/${child.name}` };
 			}
 			const key = `folder:${node.path}`;
@@ -224,7 +226,7 @@
 				node.entries.length && node.entries.every((file) => file.kind === node.entries[0].kind)
 					? node.entries[0].kind
 					: "M";
-			const folderRow = `<div class="tree-row folder-row ${node.repository ? "repository-row" : ""} change-${homogeneous} importance-${folderImportance} ${selected === key ? "active" : ""}" style="--depth:${depth}"><button class="disclosure" data-toggle="${escapeHtml(key)}" aria-label="${closed.has(key) ? "Expand" : "Collapse"} ${escapeHtml(node.name)}" aria-expanded="${!closed.has(key)}">${closed.has(key) ? "▸" : "▾"}</button>${window.forgeIcons["folder-neutral"]}<button class="node-label" data-folder="${escapeHtml(key)}" aria-pressed="${selected === key}">${escapeHtml(node.name)}</button>${signalBadges(scopeSignals(node.path), key, true, node.path)}${counters(node.entries)}</div>`;
+			const folderRow = `<div class="tree-row folder-row ${node.repository ? "repository-row" : ""} change-${homogeneous} importance-${folderImportance} ${selected === key ? "active" : ""}" style="--depth:${depth}"><button class="disclosure" data-toggle="${escapeHtml(key)}" aria-label="${closed.has(key) ? "Expand" : "Collapse"} ${escapeHtml(node.name)}" aria-expanded="${!closed.has(key)}">${closed.has(key) ? "▸" : "▾"}</button>${window.forgeIcons["folder-neutral"]}<span class="folder-name-group"><button class="node-label" data-folder="${escapeHtml(key)}" aria-pressed="${selected === key}">${escapeHtml(node.name)}</button>${node.codebase ? `<button class="codebase-boundary" aria-label="${escapeHtml(node.codebase.name)} codebase; guide: ${escapeHtml(node.codebase.directory)}" data-tooltip="${escapeHtml(`<b>${escapeHtml(node.codebase.name)}</b> codebase<br>Guide: <code>${escapeHtml(node.codebase.directory)}</code>`)}">c</button>` : ""}</span>${signalBadges(scopeSignals(node.path), key, true, node.path)}${counters(node.entries)}</div>`;
 			if (closed.has(key)) return folderRow;
 			shown.push(...node.files);
 			return (
@@ -252,16 +254,52 @@
 		}
 	}
 
+	function folderLocation(path) {
+		const repositories = [...new Map(fixtures.map((file) => [file.root, file.repo]))]
+			.filter(([root]) => within(path, root))
+			.sort(([a], [b]) => b.length - a.length);
+		const project = window.forgeCodebases
+			.filter((codebase) => within(path, codebase.root))
+			.sort((a, b) => b.root.length - a.root.length)[0];
+		const guides = new Map(window.forgeGuides.map((guide) => [guide.id, guide]));
+		const seen = new Set();
+		const rows = [];
+		function visit(id, source, parentSource) {
+			if (seen.has(id)) return;
+			const guide = guides.get(id);
+			seen.add(id);
+			for (const parent of guide.parents) visit(parent, parentSource, parentSource);
+			rows.push({ ...guide, source });
+		}
+		visit("workspace", "Workspace", "Workspace parent");
+		if (project) visit(project.id, "Project folder", "Project parent");
+		const rootLink = (root) =>
+			root === undefined
+				? "—"
+				: `<button class="location-root" data-location-root="${escapeHtml(root)}">${root === "." ? "Workspace" : escapeHtml(root)}</button>`;
+		return `<section class="folder-context" aria-label="Folder context"><h3>Context</h3>${repositories.length ? `<p class="folder-repository">Repository: <strong>${escapeHtml(repositories[0][1])}</strong> · ${rootLink(repositories[0][0])}</p>` : ""}<table class="folder-location"><caption>Forge guidance <button class="context-help" aria-label="About Forge guidance order" data-tooltip="Application order: parents before consumers, shared guides once. Folder ancestry alone does not imply inherited guidance.">ⓘ</button></caption><thead><tr><th scope="col">Guide / scope</th><th scope="col">Source</th><th scope="col">Root</th></tr></thead><tbody>${rows.map((row) => `<tr data-guide="${escapeHtml(row.id)}"${row.id === "workspace" ? ' class="workspace-guide"' : ""}><th scope="row"><span class="guide-name" tabindex="0" data-tooltip="Guide directory: ${escapeHtml(row.directory)}">${escapeHtml(row.name)}</span></th><td>${row.source}</td><td>${rootLink(row.root)}</td></tr>`).join("")}</tbody></table></section>`;
+	}
+
+	function pathHeader(path, folder = false) {
+		const parts = path === "." ? ["Workspace"] : path.split("/");
+		return `<h2 class="workspace-file-path" aria-label="${escapeHtml(path)}">${parts
+			.map((part, index) => {
+				const prefix = path === "." ? "." : parts.slice(0, index + 1).join("/");
+				const label = index === parts.length - 1 ? `<strong>${escapeHtml(part)}</strong>` : escapeHtml(part);
+				return `<span class="path-copy" role="button" tabindex="0" data-copy-prefix="${escapeHtml(prefix)}" aria-label="Copy ${escapeHtml(prefix)}" data-tooltip="${escapeHtml(`<code>${escapeHtml(prefix)}</code><br>Click to copy this workspace-relative path. Drag to select text.`)}">${label}</span>${index < parts.length - 1 || folder ? "/" : ""}`;
+			})
+			.join("")}</h2>`;
+	}
+
 	function renderFile() {
 		renderSignals();
 		if (selectedFolder) {
 			const entries = visibleFiles().filter((file) => within(file.path, selectedFolder.path));
-			$("file-header").innerHTML =
-				`<div class="selected-file-bar"><h2 class="workspace-file-path" title="Workspace-relative folder path">${escapeHtml(selectedFolder.path)}/</h2></div>`;
+			$("file-header").innerHTML = `<div class="selected-file-bar">${pathHeader(selectedFolder.path, true)}</div>`;
 			const allEntries = files().filter((file) => within(file.path, selectedFolder.path));
 			const count = totals(entries);
 			$("diff").innerHTML =
-				`<section class="folder-details" aria-label="Folder changes"><div class="folder-summary"><h3>${entries.length} matching files <span>of ${allEntries.length} changed files</span></h3>${counters(entries)}</div><p class="folder-scope">Matching descendants, including nested repositories. Folder expansion does not affect these totals.</p>${!entries.length ? '<p class="folder-empty">No changes match the current filters.</p>' : `${!count.added && !count.removed ? '<p class="folder-empty">No line changes. Binary files and pure renames still count as changed files.</p>' : ""}<div class="folder-breakdowns">${breakdown(entries)}</div>`}</section>`;
+				`<section class="folder-details" aria-label="Folder changes">${folderLocation(selectedFolder.path)}<div class="folder-breakdowns"><h3 class="matrix-heading"><span class="matrix-title" tabindex="0" data-tooltip="Files / added lines / removed lines">Type × importance</span>${entries.length !== allEntries.length || !entries.length ? ` <span class="matrix-scope" tabindex="0" data-tooltip="Matching files out of all changed descendants, including nested repositories. Folder expansion does not affect these totals.">${entries.length} of ${allEntries.length} files</span>` : ""}</h3>${!entries.length ? '<p class="folder-empty">No changes match the current filters.</p>' : `${!count.added && !count.removed ? '<p class="folder-empty">No line changes. Binary files and pure renames still count as changed files.</p>' : ""}${breakdown(entries)}`}</div></section>`;
 			return;
 		}
 		const file = files().find((entry) => entry.path === selected);
@@ -272,16 +310,11 @@
 			return;
 		}
 		const kind = { M: "Modified", A: "Added", D: "Deleted", R: "Renamed" }[file.kind];
-		const parts = file.path.split("/");
-		const filename = parts.pop();
-		const first = parts.length ? `${parts.shift()}/` : "";
-		const parent = parts.length ? `${parts.pop()}/` : "";
-		const middle = parts.length ? `${parts.join("/")}/` : "";
 		const renameNote = file.from
 			? `<div class="rename-note">Renamed from <code>${escapeHtml(file.from)}</code></div>`
 			: "";
 		$("file-header").innerHTML =
-			`<div class="selected-file-bar"><h2 class="workspace-file-path file-path-fragments" aria-label="${escapeHtml(file.path)}" title="${escapeHtml(file.path)} · ${kind}"><span class="path-first">${escapeHtml(first)}</span><span class="path-middle">${escapeHtml(middle)}</span><span class="path-parent">${escapeHtml(parent)}</span><strong>${escapeHtml(filename)}</strong></h2><div class="segments" aria-label="Diff layout"><button data-mode="unified" class="${mode === "unified" ? "active" : ""}" aria-pressed="${mode === "unified"}">Unified</button><button data-mode="split" class="${mode === "split" ? "active" : ""}" aria-pressed="${mode === "split"}">Split</button></div></div>`;
+			`<div class="selected-file-bar">${pathHeader(file.path)}<div class="segments" aria-label="Diff layout"><button data-mode="unified" class="${mode === "unified" ? "active" : ""}" aria-pressed="${mode === "unified"}">Unified</button><button data-mode="split" class="${mode === "split" ? "active" : ""}" aria-pressed="${mode === "split"}">Split</button></div></div>`;
 		if (file.message) {
 			$("diff").innerHTML =
 				`${renameNote}<div class="empty"><strong>${kind} file</strong>${escapeHtml(file.message)}</div>`;
@@ -410,7 +443,24 @@
 			notice.hidden = true;
 		}, 3000);
 	}
+	document.addEventListener("keydown", (event) => {
+		const segment = event.target.closest("[data-copy-prefix]");
+		if (segment && (event.key === "Enter" || event.key === " ")) {
+			event.preventDefault();
+			void copyPath(segment.dataset.copyPrefix);
+		}
+	});
 	document.addEventListener("click", (event) => {
+		const segment = event.target.closest("[data-copy-prefix]");
+		if (segment) {
+			const selection = window.getSelection();
+			const selectingPath =
+				selection &&
+				!selection.isCollapsed &&
+				selection.rangeCount &&
+				selection.getRangeAt(0).intersectsNode(segment.closest(".workspace-file-path"));
+			if (!selectingPath) void copyPath(segment.dataset.copyPrefix);
+		}
 		const toggle = event.target.closest("[data-toggle]");
 		if (toggle) {
 			const key = toggle.dataset.toggle;
@@ -422,6 +472,12 @@
 		if (link) {
 			select(link.dataset.file, null, event.ctrlKey);
 			if (event.ctrlKey) void copyPath(link.dataset.file);
+		}
+		const locationRoot = event.target.closest("[data-location-root]");
+		if (locationRoot) {
+			const root = locationRoot.dataset.locationRoot;
+			selectFolder(`folder:${root}`, true);
+			if (event.ctrlKey) void copyPath(root);
 		}
 		const folder = event.target.closest("[data-folder]");
 		if (folder) {
