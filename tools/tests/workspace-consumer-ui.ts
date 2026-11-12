@@ -866,6 +866,16 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.reload();
 		await settled(page);
 		assert.equal(Number(await separator.getAttribute("aria-valuenow")), 390, "Blocked storage getter uses fallback");
+		const blockedFolderToggle = page.getByRole("button", { name: "Show folder counters", exact: true });
+		assert.equal(await blockedFolderToggle.getAttribute("aria-pressed"), "false");
+		await blockedFolderToggle.click();
+		assert.equal(await blockedFolderToggle.getAttribute("aria-pressed"), "true");
+		assert.equal(
+			await row(page, "app")
+				.getByLabel(/^app visible subtree:/)
+				.isVisible(),
+			true,
+		);
 		await separator.focus();
 		await separator.press("ArrowRight");
 		assert.equal(
@@ -908,6 +918,55 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		assert.equal(Number(await separator.getAttribute("aria-valuenow")), preferredWidth);
 		await expectPortal(page, page.getByRole("button", { name: `Copy ${unusual}`, exact: true }));
 
+		const folderToggle = page.getByRole("button", { name: "Show folder counters", exact: true });
+		const folderCount = row(page, "app").getByLabel(/^app visible subtree:/);
+		assert.equal(await folderToggle.getAttribute("aria-pressed"), "false");
+		assert.equal(await folderCount.isVisible(), false);
+		assert.equal(
+			await row(page, ".")
+				.getByLabel(/^\. visible subtree:/)
+				.isVisible(),
+			true,
+		);
+		assert.equal(
+			await row(page, "nested")
+				.getByLabel(/^nested visible subtree:/)
+				.isVisible(),
+			true,
+		);
+		const hiddenGeometry = await folderCount.evaluate((element) => {
+			const rect = element.getBoundingClientRect();
+			return { x: rect.x, width: rect.width };
+		});
+		await folderToggle.click();
+		assert.equal(await folderCount.isVisible(), true);
+		assert.deepEqual(
+			await folderCount.evaluate((element) => {
+				const rect = element.getBoundingClientRect();
+				return { x: rect.x, width: rect.width };
+			}),
+			hiddenGeometry,
+			"Hidden counters reserve the same space",
+		);
+		assert.equal(await page.evaluate(() => localStorage.getItem("forge-folder-counters")), "true");
+		await page.reload();
+		await settled(page);
+		assert.equal(await folderToggle.getAttribute("aria-pressed"), "true");
+		assert.equal(await folderCount.isVisible(), true);
+		await page.evaluate(() =>
+			Object.defineProperty(localStorage, "setItem", {
+				configurable: true,
+				value: () => {
+					throw new Error("Storage blocked");
+				},
+			}),
+		);
+		await folderToggle.click();
+		assert.equal(await folderCount.isVisible(), false, "Write failures leave toggling usable");
+		await folderToggle.click();
+		assert.equal(await folderCount.isVisible(), true);
+		await page.evaluate(() => Reflect.deleteProperty(localStorage, "setItem"));
+
 		await expectNoTooltip(page, page.getByLabel(/^All workspace changes:/));
 		await expectNoTooltip(page, page.getByLabel(/^Shown changes:/));
 		await expectNoTooltip(page, row(page, ".").getByLabel(/^\. visible subtree:/));
@@ -925,21 +984,28 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 				);
 		const folderColors = await countColors("app");
 		const fileColors = await countColors("app/tracked.txt");
-		assert.deepEqual(folderColors, fileColors, "Folder and file counts share the prototype's base colors");
+		assert.deepEqual(folderColors, ["rgb(144, 110, 104)", "rgb(96, 120, 104)"]);
+		assert.notDeepEqual(folderColors, fileColors, "Aggregate counts use desaturated colors");
 		const countStyle = (target: Locator) =>
 			target.evaluate((element) => {
 				const style = element.ownerDocument.defaultView.getComputedStyle(element);
-				return { weight: style.fontWeight, opacity: style.opacity };
+				return { weight: style.fontWeight, opacity: style.opacity, size: style.fontSize };
 			});
 		assert.deepEqual(await countStyle(row(page, "app").getByLabel(/^app visible subtree:/)), {
 			weight: "400",
-			opacity: "0.85",
+			opacity: "1",
+			size: "10px",
 		});
 		assert.deepEqual(await countStyle(row(page, "app/tracked.txt").getByLabel(/^app\/tracked.txt visible subtree:/)), {
 			weight: "700",
 			opacity: "1",
+			size: "11px",
 		});
-		assert.deepEqual(await countStyle(page.getByLabel(/^Shown changes:/)), { weight: "700", opacity: "1" });
+		assert.deepEqual(await countStyle(page.getByLabel(/^Shown changes:/)), {
+			weight: "700",
+			opacity: "1",
+			size: "10px",
+		});
 		assert.deepEqual(
 			await countColors("app/transition"),
 			folderColors,
@@ -1064,7 +1130,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		);
 
 		console.log(
-			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, retained help portals, name/counter tooltip absence, matching folder matrix/zero/empty/overflow states, authoritative guide context/order/tooltips and root navigation, deduplicated adjacent codebase badges, copyable native-selectable path prefixes, bold file/Shown and 85%-opacity folder counters, compact tree geometry, local assets and persisted/blocked-storage resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
+			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, retained help portals, name/counter tooltip absence, matching folder matrix/zero/empty/overflow states, authoritative guide context/order/tooltips and root navigation, deduplicated adjacent codebase badges, copyable native-selectable path prefixes, larger bold file counters, bold Shown totals, muted aggregate counters, persisted folder-counter toggle with reserved space and blocked-storage fallback, compact tree geometry, local assets and persisted/blocked-storage resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
 		);
 	} finally {
 		try {

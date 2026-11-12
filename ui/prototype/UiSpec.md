@@ -56,7 +56,7 @@ Workspace header file and line totals always cover all changes. The sidebar's ma
 
 Removed lines occupy the left numeric column, added lines the right. Consistent right alignment supports scanning additions and deletions independently. Zero values are blank while their column space remains; binary changes and pure renames can have no displayed line counts without ceasing to be changes.
 
-Change counters have no tooltips. File and Shown counters have stronger visual weight than regular, subdued folder counters, distinguishing actual file changes from aggregate subtree totals. Signal tooltips, control help, and the Shown explanation remain available.
+Change counters have no tooltips. A compact folder-with-plus/minus icon toggle, labeled Show folder counters for assistive technology and hover help, sits right-aligned in the second row of filter actions and controls ordinary folder line counters, hidden by default. Hidden counters retain their layout space so warning and notice indicators stay in the same columns. File and repository counters always remain visible; repository totals retain the subdued aggregate styling. Persist this preference in LocalStorage, with an off default and a usable toggle if storage is unavailable, in both the prototype and production. This is presentation only: filtering, expansion, Shown totals and folder-detail totals do not change. File and Shown counters have stronger visual weight than regular, subdued folder counters, distinguishing actual file changes from aggregate subtree totals. Signal tooltips, control help, and the Shown explanation remain available.
 
 ### Folder overview
 

@@ -292,7 +292,9 @@ aside {
 	min-width: 0;
 }
 .filter-actions {
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(2, auto);
+	justify-items: end;
 	flex-shrink: 0;
 	gap: 3px;
 }
@@ -453,7 +455,7 @@ aside {
 }
 .line-counts {
 	display: inline-grid;
-	grid-template-columns: repeat(2, 6ch);
+	grid-template-columns: repeat(2, 36px);
 	column-gap: 7px;
 	text-align: right;
 	font: 10px / 1.6 var(--tree-font);
@@ -466,8 +468,25 @@ aside {
 .tree-row:not(.folder-row) > .line-counts {
 	font-weight: 700;
 }
-.folder-row > .line-counts {
-	opacity: 0.85;
+.tree-row:not(.folder-row) > .line-counts {
+	font-size: 11px;
+}
+/* Aggregates stay readable without competing with saturated, bold file counts. */
+.folder-row > .line-counts .added {
+	color: #607868;
+}
+.folder-row > .line-counts .removed {
+	color: #906e68;
+}
+body:not(.show-folder-counters) .folder-row:not(.repository-row) > .line-counts {
+	visibility: hidden;
+}
+.folder-counters-toggle {
+	grid-column: 2;
+}
+.folder-counters-toggle[aria-pressed="true"] {
+	background: #e6eee5;
+	color: #315e42;
 }
 .folder-name-group {
 	display: flex;
@@ -890,7 +909,7 @@ aside {
 		--sidebar-width: 370px;
 	}
 	.line-counts {
-		font-size: 9px;
+		font-size: 10px;
 	}
 }
 @media (max-width: 900px) {

@@ -73,6 +73,17 @@
 	color: #45594b;
 	min-width: 0;
 }
+.rowCounters {
+	--change-count-size: 11px;
+	flex-shrink: 0;
+}
+.rowCounters[data-folder="true"] {
+	--change-count-size: 10px;
+}
+/* Keep signal columns aligned even when ordinary folder totals are hidden. */
+.rowCounters[data-hidden="true"] {
+	visibility: hidden;
+}
 .row:hover {
 	background: #f0f4ef;
 }

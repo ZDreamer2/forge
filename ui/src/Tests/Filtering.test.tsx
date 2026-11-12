@@ -180,6 +180,11 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 	totals("All workspace changes", 13, 19, 43);
 	totals("Shown changes", 10, 10, 25);
 	const user = userEvent.setup();
+	const folderCounters = screen.getByRole("button", { name: "Show folder counters" });
+	expect(folderCounters).toHaveAttribute("aria-pressed", "false");
+	await user.click(folderCounters);
+	expect(folderCounters).toHaveAttribute("aria-pressed", "true");
+	expect(localStorage.getItem("forge-folder-counters")).toBe("true");
 	expect(screen.getByRole("button", { name: "Collapse tests" })).toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "Expand tests/unit" })).toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "Expand tools" })).toBeInTheDocument();

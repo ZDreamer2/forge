@@ -567,6 +567,25 @@
 		if (event.key === "Escape") hideTooltip();
 	});
 	document.addEventListener("click", hideTooltip);
+	const folderCounters = $("folder-counters");
+	function setFolderCounters(visible) {
+		document.body.classList.toggle("show-folder-counters", visible);
+		folderCounters.setAttribute("aria-pressed", String(visible));
+	}
+	try {
+		setFolderCounters(localStorage.getItem("forge-prototype-folder-counters") === "true");
+	} catch {
+		// Ordinary folder counters default off when browser storage is unavailable.
+	}
+	folderCounters.addEventListener("click", () => {
+		const visible = folderCounters.getAttribute("aria-pressed") !== "true";
+		setFolderCounters(visible);
+		try {
+			localStorage.setItem("forge-prototype-folder-counters", String(visible));
+		} catch {
+			// The toggle remains usable without persistence.
+		}
+	});
 	const resize = $("resize");
 	function setWidth(width) {
 		const bounded = Math.max(240, Math.min(600, width));

@@ -1,5 +1,5 @@
 import type { WorkspaceAnalysis, WorkspaceIdentity } from "@forge/api-contract";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Filters, ReviewAnalysis } from "../../Internal/changeAnalysis";
 import type { PathRequest } from "../../Internal/pathRequest";
 import type { SignalAnalysis } from "../../Internal/signalAnalysis";
@@ -40,13 +40,35 @@ export function ChangesNavigator({
 	// divider and clipboard updates in the composing review do not change its inputs.
 	const projection = useMemo(() => projectTree(review), [review]);
 	const expansion = useExpansion(projection, selectedPath, revealRequest);
+	const [showFolderCounters, setShowFolderCounters] = useState(() => {
+		try {
+			return localStorage.getItem("forge-folder-counters") === "true";
+		} catch {
+			return false;
+		}
+	});
+	function toggleFolderCounters() {
+		const visible = !showFolderCounters;
+		setShowFolderCounters(visible);
+		try {
+			localStorage.setItem("forge-folder-counters", String(visible));
+		} catch {
+			// The preference remains usable when browser storage is unavailable.
+		}
+	}
 	return (
 		<aside className={styles.sidebar} aria-label="Changes navigator">
-			<ChangeFilters filters={filters} onChange={onFiltersChange} />
+			<ChangeFilters
+				filters={filters}
+				onChange={onFiltersChange}
+				showFolderCounters={showFolderCounters}
+				onToggleFolderCounters={toggleFolderCounters}
+			/>
 			<div className={styles.treeScroll}>
 				{analysis ? (
 					<ChangesTree
 						projection={projection}
+						showFolderCounters={showFolderCounters}
 						expansionVisibleSummary={expansionVisibleSummary(projection, expansion.expanded)}
 						workspaceName={identity?.workspace.name ?? "."}
 						signals={signals}

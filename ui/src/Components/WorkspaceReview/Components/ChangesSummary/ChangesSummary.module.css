@@ -10,10 +10,10 @@
 }
 .counts {
 	display: inline-grid;
-	grid-template-columns: repeat(2, 6ch);
+	grid-template-columns: repeat(2, 36px);
 	column-gap: 7px;
 	text-align: right;
-	font: 10px / 1.6 var(--tree-font, "JetBrains Mono", Consolas, ui-monospace, monospace);
+	font: var(--change-count-size, 10px) / 1.6 var(--tree-font, "JetBrains Mono", Consolas, ui-monospace, monospace);
 	font-weight: var(--change-count-weight, 400);
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
@@ -29,10 +29,10 @@
 }
 .aggregate .counts {
 	font-weight: 400;
-	opacity: 0.85;
 }
-@media (max-width: 1000px) {
-	.counts {
-		font-size: 9px;
-	}
+.aggregate .added {
+	color: #607868;
+}
+.aggregate .removed {
+	color: #906e68;
 }

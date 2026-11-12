@@ -21,6 +21,7 @@ type Codebases = WorkspaceAnalysis["codebases"];
 
 export function ChangesTree({
 	projection,
+	showFolderCounters = false,
 	expansionVisibleSummary,
 	workspaceName,
 	signals,
@@ -34,6 +35,7 @@ export function ChangesTree({
 	codebases,
 }: {
 	projection: TreeProjection;
+	showFolderCounters?: boolean;
 	expansionVisibleSummary: Summary;
 	workspaceName: string;
 	signals?: SignalAnalysis | undefined;
@@ -135,7 +137,13 @@ export function ChangesTree({
 						)}
 					</div>
 					{signals && onInspect && <SignalSummary signals={signals} path={path} onInspect={onInspect} />}
-					<ChangesSummary summary={count} label={`${path} visible subtree`} aggregate={folder} />
+					<span
+						className={styles.rowCounters}
+						data-folder={folder}
+						data-hidden={folder && !actualRepository && !showFolderCounters}
+					>
+						<ChangesSummary summary={count} label={`${path} visible subtree`} aggregate={folder} />
+					</span>
 				</div>
 				{isExpanded &&
 					entry.children.map((child) => {

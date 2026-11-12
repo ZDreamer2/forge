@@ -52,7 +52,9 @@
 	border-color: #d6e2d6;
 }
 .actions {
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(2, auto);
+	justify-items: end;
 	flex-shrink: 0;
 	gap: 3px;
 }
@@ -67,6 +69,13 @@
 	background: none;
 	color: #7c8b80;
 	cursor: pointer;
+}
+.folderCounters {
+	grid-column: 2;
+}
+.folderCounters[aria-pressed="true"] {
+	background: #e6eee5;
+	color: #315e42;
 }
 .action:hover {
 	background: #edf1ec;
