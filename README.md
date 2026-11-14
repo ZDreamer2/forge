@@ -100,7 +100,7 @@ from `.env`, without interpolation; unreadable or invalid-encoding files fail st
 
 Once ready, the foreground process prints its version, executable/workspace paths
 and loopback address. Open that address for the viewer. Refresh observes changes;
-restart reloads configuration, extensions and repository participation. Stop with
+restart reloads authored workspace configuration, extensions and repository participation. Stop with
 SIGINT or SIGTERM.
 
 GET/HEAD `/` and exact `/assets/` resources are served from the installed package,
@@ -137,6 +137,54 @@ selection, refresh and recovery behavior, the
 and the [viewer design specification](ui/prototype/UiSpec.md) for interaction and
 presentation design. The prototype demonstrates intended behavior with fictional
 data; it does not establish production implementation or performance.
+
+## Local configuration and reload
+
+Local settings live in `$XDG_CONFIG_HOME/zd-forge` when `XDG_CONFIG_HOME` is a
+nonempty absolute path, otherwise in `$HOME/.config/zd-forge`. Relative XDG values
+are ignored. Reads do not create files. The supported data-only YAML files are:
+
+`config.yaml`:
+
+```yaml
+serverHubUrl: http://127.0.0.1:4311/
+```
+
+`server-hub.yaml`:
+
+```yaml
+servers:
+  - id: bico
+    name: BiCo workspace
+    url: http://127.0.0.1:4311/
+```
+
+IDs are unique ASCII slugs; names are literal nonblank display strings. URLs are
+absolute HTTP(S) base URLs with optional base paths, without credentials, query or
+fragment. Unknown fields, explicit null settings and duplicate YAML keys are
+rejected. Missing/empty documents mean no hub URL or an empty registration list.
+These settings store local inputs; they do not activate hub hosting or network access.
+
+After editing a file, use the server's printed address:
+
+```sh
+curl -H 'Content-Type: application/json' -d '{}' "$FORGE_ADDRESS/api/configuration/reload"
+```
+
+Each concern independently accepts or rejects the change. Rejection retains an
+earlier accepted value; invalid initial configuration is unavailable and logged,
+while workspace review remains usable. Repair the file and reload to recover.
+The [reload contract](server/docs/protocol.md#reload-local-configuration) defines
+result metadata and diagnostics. Reload does not apply authored registry, extension,
+guidance-path or port changes; restart for those.
+
+Current-issue storage stays in the selected guidance folder's `.local/state.json`,
+including with a relative or external guidance override. Compatible Python/server
+writers preserve unrelated fields under the shared `.local/state.json.lock`
+directory lock. A crashed writer can leave this lock: confirm no writer remains
+before manually removing that exact lock directory, then retry. Reload only reads
+state. The [storage guide](server/src/components/configuration/docs/UnitGuide.md)
+owns the format and writer protocol.
 
 ## Workspace configuration and migration
 

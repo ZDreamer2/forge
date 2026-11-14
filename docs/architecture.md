@@ -34,12 +34,13 @@ its design context.
 | Component | Responsibility | Outgoing component imports |
 | --- | --- | --- |
 | `workspace-config` | Trusted authored workspace knowledge: registered codebases, declared repositories, display name and guide composition | None |
+| `configuration` | Accepted user hub settings and workspace current-issue storage, with explicit independent concern reload | None |
 | `workspace-repositories` | Observed participating repositories: startup resolution, status, path participation | workspace-config |
 | `workspace-tree` | Canonical tree vocabulary, ownership and derived review data | workspace-config |
 | `tree-sources` | Builds base trees from sources of workspace state, with bounded source capabilities | workspace-tree, workspace-repositories, workspace-config |
 | `tree-analysis` | Schedules applicable guide hooks per node over a run-local tree facade and finalizes review metadata | workspace-tree, workspace-config |
 | `guide-extensions` | Discovers and validates trusted guide modules; publishes the authoring contract listing engine-known hooks | workspace-config, tree-analysis |
-| `http-api` | Domain endpoints: selects a source, builds and analyzes its tree, maps results to the wire contract | tree-sources, tree-analysis, workspace-tree, workspace-repositories, workspace-config, api-contract |
+| `http-api` | Domain endpoints: selects a source, builds and analyzes its tree, maps results to the wire contract; validates reload requests | tree-sources, tree-analysis, workspace-tree, workspace-repositories, workspace-config, api-contract; configuration (type-only) |
 | `api-contract` | Browser-safe wire vocabulary consumed by server and UI; contract changes also require consumer verification | None |
 | `ui-assets` | Delivers installed HTML and bundled assets through protected HTTP routes | None |
 
@@ -76,6 +77,15 @@ Static delivery has no workspace-data responsibility.
 Authored configuration and repository participation are loaded at startup and
 replaced on restart. Missing-at-startup repositories stay excluded; loss of an
 available repository fails collection instead of silently reducing the result.
+
+Local configuration is separate from that authored workspace snapshot. `app`
+resolves its user and selected-guidance locations once and constructs one
+`configuration` owner. Explicit reload accepts each valid concern independently;
+rejection retains its prior accepted value, or leaves an initially invalid concern
+unavailable. The app injects reload behavior into protected HTTP composition.
+Reload neither reselects the workspace/guidance nor restarts listeners or extensions.
+The [configuration guide](../server/src/components/configuration/docs/UnitGuide.md)
+owns storage and compatible Python/server writes.
 
 Refresh observes current Git state within that startup context. Overlapping
 requests share in-flight source discovery, cleared on settlement. The source owns

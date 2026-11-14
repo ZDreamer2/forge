@@ -18,6 +18,9 @@ test("HTTP page and API operations have consistent routing failures", async (t) 
 	await writeFile(join(uiDirectory, "assets/index-abcd.js"), "export {};\n");
 	let collections = 0;
 	const app = createHttpApp({
+		reloadConfiguration: async () => {
+			throw new Error("Unexpected configuration reload");
+		},
 		guidance: { workspace: [], codebases: {} },
 		uiDirectory,
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
@@ -100,7 +103,12 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 	await writeFile(join(uiDirectory, "assets/index-abcd.js"), "export {};\n");
 	let collections = 0;
 	const reported: Error[] = [];
+	let reloads = 0;
 	const app = createHttpApp({
+		reloadConfiguration: async () => {
+			reloads++;
+			throw new Error("secret configuration failure");
+		},
 		guidance: { workspace: [], codebases: {} },
 		uiDirectory,
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
@@ -138,11 +146,22 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 		"/api/changes/analysis",
 		"/api/changes/file",
 		"/api/unknown",
+		"/api/configuration/reload",
 	]) {
-		for (const headers of [{ host: "foreign:43210" }, { host: "127.0.0.1:43210", origin: "http://foreign:43210" }]) {
-			for (const method of ["GET", "HEAD", "OPTIONS"]) {
-				const denied = await app.request(path, { method, headers });
+		for (const headers of [
+			{},
+			{ host: "foreign:43210" },
+			{ host: "127.0.0.1:43210", origin: "http://foreign:43210" },
+			{ host: "127.0.0.1:43210", origin: "null" },
+		]) {
+			for (const method of ["GET", "HEAD", "OPTIONS", "POST"]) {
+				const denied = await app.request(path, {
+					method,
+					headers: { ...headers, "content-type": "application/json" },
+					...(method === "POST" ? { body: "{}" } : {}),
+				});
 				assert.equal(denied.status, 403);
+				assert.equal(denied.headers.get("access-control-allow-origin"), null);
 				if (method !== "HEAD") {
 					assert.deepEqual(await denied.json(), { error: { code: "forbidden", message: "Request forbidden" } });
 				}
@@ -150,6 +169,7 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 		}
 	}
 	assert.equal(reported.length, 0);
+	assert.equal(reloads, 0);
 	assert.equal(reached, false);
 	assert.equal(collections, 0);
 	for (const path of ["/explode", "/api/changes"]) {
@@ -158,8 +178,20 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 		assert.deepEqual(await failed.json(), { error: { code: "internal_error", message: "Internal server error" } });
 	}
 	assert.equal(collections, 1);
+	const reloadFailure = await app.request("/api/configuration/reload", {
+		method: "POST",
+		headers: { host: "127.0.0.1:43210", "content-type": "application/json" },
+		body: "{}",
+	});
+	assert.equal(reloadFailure.status, 500);
+	assert.deepEqual(await reloadFailure.json(), { error: { code: "internal_error", message: "Internal server error" } });
+	assert.equal(reloads, 1);
 	assert.deepEqual(
 		reported.map((error) => error.message),
-		["secret subprocess and environment values", "secret subprocess and environment values"],
+		[
+			"secret subprocess and environment values",
+			"secret subprocess and environment values",
+			"secret configuration failure",
+		],
 	);
 });

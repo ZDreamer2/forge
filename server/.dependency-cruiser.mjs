@@ -66,6 +66,7 @@ export default {
 				"workspace-repositories",
 				"workspace-config",
 				"api-contract",
+				"configuration",
 			],
 		}).map(([component, dependencies]) => ({
 			name: `${component}-component-edges`,
@@ -92,8 +93,14 @@ export default {
 		{
 			name: "yaml-confinement",
 			severity: "error",
-			from: { path: "^src/", pathNot: "^src/components/workspace-config/" },
+			from: { path: "^src/", pathNot: "^src/components/(workspace-config|configuration)/" },
 			to: { path: "(^|/)yaml/" },
+		},
+		{
+			name: "http-configuration-types-only",
+			severity: "error",
+			from: { path: "^src/components/http-api/" },
+			to: { path: "^src/components/configuration/", dependencyTypesNot: ["type-only"] },
 		},
 		{
 			name: "no-unlisted-third-party-runtime",

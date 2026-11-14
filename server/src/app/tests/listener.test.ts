@@ -79,6 +79,9 @@ test("real adapter preserves Host and Origin restrictions including spoofed forw
 		port: 0,
 		fetch: (incoming) =>
 			createHttpApp({
+				reloadConfiguration: async () => {
+					throw new Error("Unexpected configuration reload");
+				},
 				guidance: { workspace: [], codebases: {} },
 				fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 				fileDiff: async () => ({ kind: "not_changed" }),

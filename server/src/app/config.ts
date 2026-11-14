@@ -1,9 +1,12 @@
 import { readFile, realpath, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 export interface Config {
 	readonly root: string;
 	readonly configPath: string;
+	readonly guidanceDirectory: string;
+	readonly userConfigDirectory: string;
 	readonly port: number;
 }
 
@@ -30,7 +33,15 @@ export async function loadConfig({ workspace, cwd, env }: ConfigInput): Promise<
 	if (!/^[0-9]{1,5}$/.test(value) || Number(value) < 1024 || Number(value) > 65535) {
 		throw new Error("ZD_AI_FORGE_PORT must be an ASCII decimal TCP port from 1024 through 65535");
 	}
-	return Object.freeze({ root, configPath, port: Number(value) });
+	const xdg = env.XDG_CONFIG_HOME;
+	const userConfigDirectory = join(xdg && isAbsolute(xdg) ? xdg : join(env.HOME || homedir(), ".config"), "zd-forge");
+	return Object.freeze({
+		root,
+		configPath,
+		guidanceDirectory: dirname(configPath),
+		userConfigDirectory,
+		port: Number(value),
+	});
 }
 
 async function readDotenvPort(path: string): Promise<string | undefined> {

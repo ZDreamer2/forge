@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import { loadConfig } from "../config.ts";
@@ -23,6 +23,8 @@ test("resolves selected workspace from invocation CWD, canonicalizes it and free
 	assert.deepEqual(config, {
 		root: await realpath(input.root),
 		configPath: join(await realpath(input.root), "docs/forge/workspace/forge-workspace.yaml"),
+		guidanceDirectory: join(await realpath(input.root), "docs/forge/workspace"),
+		userConfigDirectory: join(homedir(), ".config/zd-forge"),
 		port: 12345,
 	});
 	assert.equal(Object.isFrozen(config), true);
@@ -44,10 +46,9 @@ test("selects default, relative and external absolute guidance using only proces
 		const expected = guidance.startsWith("/") ? guidance : folder;
 		await mkdir(expected);
 		await writeFile(join(expected, "forge-workspace.yaml"), "export default {};");
-		assert.equal(
-			(await loadConfig({ ...input, env: { ZD_AI_FORGE_WORKSPACE_GUIDE: guidance } })).configPath,
-			join(expected, "forge-workspace.yaml"),
-		);
+		const config = await loadConfig({ ...input, env: { ZD_AI_FORGE_WORKSPACE_GUIDE: guidance } });
+		assert.equal(config.configPath, join(expected, "forge-workspace.yaml"));
+		assert.equal(config.guidanceDirectory, expected);
 	}
 });
 
@@ -128,4 +129,18 @@ test("existing unreadable and invalid UTF-8 dotenv files fail even with a proces
 	await rm(join(input.root, ".env"), { recursive: true });
 	await writeFile(join(input.root, ".env"), Buffer.from([0xff, 0xfe]));
 	await assert.rejects(loadConfig(input), { message: "Cannot read the workspace .env file as UTF-8" });
+});
+
+test("personal configuration uses absolute XDG or supplied home without creating files", async (t) => {
+	const input = await fixture(t);
+	const home = join(input.directory, "home");
+	for (const [xdg, expected] of [
+		[join(input.directory, "xdg"), join(input.directory, "xdg/zd-forge")],
+		["", join(home, ".config/zd-forge")],
+		["relative", join(home, ".config/zd-forge")],
+	] as const) {
+		const config = await loadConfig({ ...input, env: { ...input.env, HOME: home, XDG_CONFIG_HOME: xdg } });
+		assert.equal(config.userConfigDirectory, expected);
+		await assert.rejects(realpath(expected), { code: "ENOENT" });
+	}
 });

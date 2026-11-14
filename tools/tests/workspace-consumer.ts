@@ -134,9 +134,16 @@ async function installedServer(executable: string, cwd: string, workspace: strin
 	// Ignore ambient configuration and module injection: only the installed package supplies runtime code.
 	// biome-ignore lint/style/noProcessEnv: subprocess fixture explicitly sanitizes the inherited execution environment.
 	const { NODE_PATH: _nodePath, NODE_OPTIONS: _nodeOptions, ...environment } = process.env;
+	const xdgDirectory = mkdtempSync(join(temporary, "user-config-"));
+	const userConfigDirectory = join(xdgDirectory, "zd-forge");
 	const child = spawn(executable, ["serve", "--workspace", workspace], {
 		cwd,
-		env: { ...environment, ZD_AI_FORGE_WORKSPACE_GUIDE: "", ZD_AI_FORGE_PORT: String(port) },
+		env: {
+			...environment,
+			XDG_CONFIG_HOME: xdgDirectory,
+			ZD_AI_FORGE_WORKSPACE_GUIDE: "",
+			ZD_AI_FORGE_PORT: String(port),
+		},
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	let stdout = "";
@@ -181,7 +188,7 @@ async function installedServer(executable: string, cwd: string, workspace: strin
 		await stop("SIGKILL").catch(() => {});
 		throw error;
 	}
-	return { address: `http://127.0.0.1:${port}`, stop, stderr: () => stderr };
+	return { address: `http://127.0.0.1:${port}`, userConfigDirectory, stop, stderr: () => stderr };
 }
 
 async function verifyServer(executable: string, consumer: string) {
@@ -313,6 +320,36 @@ codebases:
 					{ path: "not-cloned", status: "missing" },
 				],
 			});
+			const reload = () =>
+				request("/api/configuration/reload", {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: "{}",
+				});
+			const defaults = await reload();
+			assert.equal(defaults.status, 200);
+			const defaultResult = (await defaults.json()) as {
+				ok: boolean;
+				concerns: Record<string, { status: string; source: { scope: string; path: string; provenance: string } }>;
+			};
+			assert.equal(defaultResult.ok, true);
+			assert.deepEqual(defaultResult.concerns.serverHubUrl?.source, {
+				scope: "user",
+				path: join(server.userConfigDirectory, "config.yaml"),
+				provenance: "default",
+			});
+			mkdirSync(server.userConfigDirectory);
+			writeFileSync(join(server.userConfigDirectory, "config.yaml"), "serverHubUrl: https://hub.example/base/\n");
+			const configured = await reload();
+			assert.equal(configured.status, 200);
+			const configuredResult = (await configured.json()) as typeof defaultResult;
+			assert.equal(configuredResult.ok, true);
+			assert.deepEqual(configuredResult.concerns.serverHubUrl?.source, {
+				scope: "user",
+				path: join(server.userConfigDirectory, "config.yaml"),
+				provenance: "file",
+			});
+			assert.equal("value" in (configuredResult.concerns.serverHubUrl ?? {}), false);
 			const page = await request("/");
 			assert.equal(page.status, 200);
 			assert.match(page.headers.get("content-type") ?? "", /text\/html/);
@@ -443,8 +480,13 @@ function verifyInvalidStartup(executable: string, consumer: string) {
 			cwd: consumer,
 			encoding: "utf8",
 			timeout: 5000,
-			// biome-ignore lint/style/noProcessEnv: installed CLI fixtures override inherited workspace selection.
-			env: { ...process.env, ZD_AI_FORGE_WORKSPACE_GUIDE: "", ZD_AI_FORGE_PORT: "47999" },
+			env: {
+				// biome-ignore lint/style/noProcessEnv: installed CLI fixtures override inherited workspace selection.
+				...process.env,
+				XDG_CONFIG_HOME: join(temporary, "invalid-user-config"),
+				ZD_AI_FORGE_WORKSPACE_GUIDE: "",
+				ZD_AI_FORGE_PORT: "47999",
+			},
 		});
 		assert.equal(result.status, 1, result.stderr);
 		assert.match(result.stderr, diagnostic);
@@ -595,7 +637,7 @@ export type NodeGlobal = typeof process;
 		writeFileSync(join(artifactDirectory, "pack.json"), `${JSON.stringify(packed, null, 2)}\n`);
 	}
 	console.log(
-		"Tarball-only consumer: installed server/React/CSS/Chromium, read-only changes/analysis/files, normalized patches and full context, guide extensions and native TS imports, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
+		"Tarball-only consumer: installed server/React/CSS/Chromium, configuration reload, read-only changes/analysis/files, normalized patches and full context, guide extensions and native TS imports, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
 	);
 } finally {
 	rmSync(temporary, { recursive: true, force: true });

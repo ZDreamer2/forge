@@ -52,6 +52,9 @@ async function fixture(t: TestContext, decorate: (git: GitProcess) => GitProcess
 		await rm(root, { recursive: true, force: true });
 	});
 	const app = createHttpApp({
+		reloadConfiguration: async () => {
+			throw new Error("Unexpected configuration reload");
+		},
 		guidance: { workspace: [], codebases: {} },
 		root,
 		name: "Fixture",

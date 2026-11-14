@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { createConfiguration } from "../components/configuration/index.ts";
 import { loadGuideExtensions } from "../components/guide-extensions/index.ts";
 import { resolveWorkspaceGuidance } from "../components/http-api/index.ts";
 import { AnalysisHandlerError, createTreeAnalyzer } from "../components/tree-analysis/index.ts";
@@ -22,6 +23,21 @@ type Options = {
 
 export async function start(options: Options) {
 	const config = await loadConfig(options);
+	const configuration = await createConfiguration({
+		workspaceRoot: config.root,
+		userConfigDirectory: config.userConfigDirectory,
+		guidanceDirectory: config.guidanceDirectory,
+	});
+	for (const concern of [
+		configuration.readServerHubUrl(),
+		configuration.readServers(),
+		configuration.readCurrentIssue(),
+	]) {
+		if (!concern.available) {
+			const diagnostic = `${concern.source.path}: ${concern.diagnostic}`.replace(/\p{Cc}/gu, " ").slice(0, 1600);
+			console.error(`Forge configuration unavailable: ${diagnostic}`);
+		}
+	}
 	const workspaceConfig = await loadWorkspaceConfig(config.configPath);
 	const codebases = rootedCodebases(workspaceConfig);
 	const name = workspaceConfig.displayName ?? (basename(config.root) || config.root);
@@ -52,6 +68,7 @@ export async function start(options: Options) {
 	const collection = createCollection({ collect: (signal) => changes.discover(signal) });
 	const app = createHttpApp({
 		...snapshot,
+		reloadConfiguration: () => configuration.reload(),
 		discoverChanges: collection.collect,
 		materializeChanges: changes.materialize,
 		changesRequests,

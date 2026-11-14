@@ -38,7 +38,11 @@ async function fixture(t: TestContext) {
 		directory,
 		root,
 		configPath,
-		options: { workspace: root, cwd: directory, env: { ZD_AI_FORGE_PORT: String(await availablePort()) } },
+		options: {
+			workspace: root,
+			cwd: directory,
+			env: { ZD_AI_FORGE_PORT: String(await availablePort()), XDG_CONFIG_HOME: join(directory, "user-config") },
+		},
 	};
 }
 
@@ -610,4 +614,76 @@ test("a broken rooted participant fails analysis only after Refresh finds an own
 	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
 	assert.equal((await fetch(`${server.address}/api/workspace`)).status, 200);
 	assert.deepEqual(await readFile(join(input.directory, ".git/index")), index);
+});
+
+test("protected reload recovers independent local concerns while startup declarations stay fixed", async (t) => {
+	const input = await fixture(t);
+	const userDirectory = join(input.directory, "user-config/zd-forge");
+	await mkdir(userDirectory, { recursive: true });
+	await writeFile(join(userDirectory, "config.yaml"), "serverHubUrl: null\n");
+	const diagnostics = t.mock.method(console, "error", () => {});
+	const server = await start(input.options);
+	t.after(server.close);
+	assert.equal(diagnostics.mock.calls.length, 1);
+	assert.match(String(diagnostics.mock.calls[0]?.arguments[0]), /configuration unavailable.*config.yaml.*serverHubUrl/);
+	const statePath = join(dirname(input.configPath), ".local/state.json");
+	await assert.rejects(readFile(statePath), { code: "ENOENT" });
+	const identity = await (await fetch(`${server.address}/api/workspace`)).json();
+	const reload = async () => {
+		const response = await fetch(`${server.address}/api/configuration/reload`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "{}",
+		});
+		assert.equal(response.status, 200);
+		return (await response.json()) as {
+			ok: boolean;
+			concerns: Record<
+				string,
+				{
+					status: "accepted" | "rejected";
+					source: { scope: string; path: string; provenance: string };
+					retainedPriorValue: boolean;
+				}
+			>;
+		};
+	};
+	const rejected = await reload();
+	assert.equal(rejected.ok, false);
+	assert.equal(rejected.concerns.serverHubUrl?.status, "rejected");
+	assert.equal(rejected.concerns.serverHubUrl?.retainedPriorValue, false);
+	assert.equal(rejected.concerns.servers?.status, "accepted");
+	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+	await writeFile(join(userDirectory, "config.yaml"), "serverHubUrl: https://hub.example/base/\n");
+	await writeFile(join(userDirectory, "server-hub.yaml"), "servers: []\n");
+	const recovered = await reload();
+	assert.equal(recovered.ok, true);
+	assert.deepEqual(recovered.concerns.serverHubUrl?.source, {
+		scope: "user",
+		path: join(userDirectory, "config.yaml"),
+		provenance: "file",
+	});
+	assert.deepEqual(recovered.concerns.currentIssue?.source, {
+		scope: "workspace",
+		path: statePath,
+		provenance: "default",
+	});
+	await writeFile(join(userDirectory, "config.yaml"), "serverHubUrl: null\n");
+	await mkdir(dirname(statePath));
+	await writeFile(statePath, '{"current_issue":{"directory":"plans/stale"}}');
+	await writeFile(input.configPath, "not: [valid YAML");
+	await writeFile(join(input.root, ".env"), "ZD_AI_FORGE_PORT=not-a-port\n");
+	Object.assign(input.options.env, {
+		XDG_CONFIG_HOME: join(input.directory, "another-user"),
+		ZD_AI_FORGE_WORKSPACE_GUIDE: "another-guide",
+		ZD_AI_FORGE_PORT: "invalid",
+	});
+	const partial = await reload();
+	assert.equal(partial.ok, false);
+	assert.equal(partial.concerns.serverHubUrl?.status, "rejected");
+	assert.equal(partial.concerns.serverHubUrl?.retainedPriorValue, true);
+	assert.equal(partial.concerns.currentIssue?.status, "accepted");
+	assert.equal(partial.concerns.currentIssue?.source.path, statePath);
+	assert.deepEqual(await (await fetch(`${server.address}/api/workspace`)).json(), identity);
+	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
 });

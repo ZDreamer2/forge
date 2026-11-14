@@ -104,6 +104,9 @@ test("a failed size candidate aborts and drains the other probe before releasing
 		],
 	});
 	const app = createHttpApp({
+		reloadConfiguration: async () => {
+			throw new Error("Unexpected configuration reload");
+		},
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),
 		root: "/selected",
@@ -174,6 +177,9 @@ test("shutdown keeps a cancelled analysis registered until its source probe is r
 		],
 	});
 	const app = createHttpApp({
+		reloadConfiguration: async () => {
+			throw new Error("Unexpected configuration reload");
+		},
 		fileRequests: { run: (work) => work(new AbortController().signal, (pending) => pending) },
 		fileDiff: async () => ({ kind: "not_changed" }),
 		root: "/selected",

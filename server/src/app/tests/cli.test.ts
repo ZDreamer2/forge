@@ -40,7 +40,16 @@ async function reservePort() {
 function run(args: string[], env: Record<string, string | undefined> = {}) {
 	const child = spawn(process.execPath, [main, ...args], {
 		cwd: tmpdir(),
-		env: { ...process.env, ZD_AI_FORGE_PORT: "", ZD_AI_FORGE_WORKSPACE_GUIDE: "", ...env },
+		env: {
+			...process.env,
+			XDG_CONFIG_HOME: join(
+				args.includes("--workspace") ? args[args.indexOf("--workspace") + 1] || tmpdir() : tmpdir(),
+				".forge-cli-test-config",
+			),
+			ZD_AI_FORGE_PORT: "",
+			ZD_AI_FORGE_WORKSPACE_GUIDE: "",
+			...env,
+		},
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	let stdout = "";

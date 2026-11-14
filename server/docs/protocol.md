@@ -19,17 +19,46 @@ Failures use `{ "error": { "code": "...", "message": "..." } }`:
 
 | Status | Code | Meaning |
 | --- | --- | --- |
-| 400 | `invalid_request` | Malformed file query, duplicate or unknown parameters. |
+| 400 | `invalid_request` | Invalid query, media type or request body. |
 | 403 | `forbidden` | Failed authority/origin checks or excluded file participation. |
 | 404 | `not_found` | Unknown operation. |
 | 405 | `method_not_allowed` | Unsupported method on a known operation; `Allow` lists supported methods. |
 | 500 | `internal_error` | Operation failure. |
 
 Routing/middleware share this envelope. Messages omit stacks, environment values
-and raw subprocess output. HEAD MAY perform GET without a response body; both are
-read-only. Other methods, including OPTIONS, receive 405 on known paths and 404 on
+and raw subprocess output. Inspection HEAD MAY perform GET without a response body;
+both are read-only. The configuration reload operation below supports only POST.
+Unsupported methods, including OPTIONS, receive 405 on known paths and 404 on
 unknown paths after access checks. Startup failures instead emit
 terminal diagnostics and exit nonzero.
+
+### Reload local configuration
+
+`POST /configuration/reload` requires `Content-Type: application/json` (an optional
+charset parameter is allowed), no query parameters, and an empty JSON object `{}`.
+The body is limited to 1024 bytes, including whitespace. Invalid requests return
+400 before reload executes. Every other method, including GET/HEAD/OPTIONS,
+returns 405 with `Allow: POST`. The shared Host/Origin protections apply first.
+
+A completed reload returns 200 with `{ok, concerns}`. The concern keys are
+`serverHubUrl`, `servers` and `currentIssue`; each contains:
+
+- `status`: `accepted` or `rejected`.
+- `source`: `{scope: "user" | "workspace", path: string, provenance: "file" | "default"}`,
+  identifying the attempted source. An absent source uses default provenance.
+- `retainedPriorValue`: true only when a rejection retained an earlier accepted value.
+- `diagnostic`: a bounded field-level explanation, present only on rejection.
+
+`ok` is true only when all concerns accept. A rejected concern preserves its prior
+accepted value; without one it remains unavailable. Other valid concerns still
+apply. Accepted deletion resets that concern to absence or an empty list. Reload
+exposes no accepted values, raw documents or unrelated workspace state. Unexpected
+failures use the sanitized 500 envelope.
+
+Reload changes local accepted configuration only. Workspace registries, guidance
+selection, extensions, repositories, ports and service installation remain under
+their startup/restart lifecycle. This endpoint neither edits configuration files nor
+writes current-issue selection. Workspace inspection retains its read-only effects.
 
 ### Participation and comparison
 
