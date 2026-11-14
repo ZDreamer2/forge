@@ -50,7 +50,7 @@ selections may be stale; storage does not inspect IssueSpec or issue semantics.
 Writes replace the entire `current_issue` object with `{directory}`, using a
 workspace-relative POSIX directory where possible and an absolute path otherwise.
 
-Python `workspace_state.py` and server writers share this private protocol:
+The Python `workspace_state` package and server writers share this private protocol:
 
 1. Create the selected guidance folder's `.local` directory as needed and maintain
    its `.gitignore` containing `*`.
