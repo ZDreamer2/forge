@@ -36,3 +36,23 @@ export type ProbeResult =
 export function unavailable(error: string): ProbeResult {
 	return { status: "unavailable", error: error.slice(0, 320) };
 }
+
+export type SelectedHubSource =
+	| { readonly status: "selected"; readonly url: string }
+	| { readonly status: "unconfigured" }
+	| { readonly status: "configuration-unavailable"; readonly error: string };
+
+export interface SelectedHubSnapshot {
+	readonly source: { readonly status: SelectedHubSource["status"]; readonly url: string | null };
+	readonly servers: readonly ObservedServer[] | null;
+	readonly lastSuccessAt: string | null;
+	readonly error: string | null;
+	readonly stale: boolean;
+}
+
+export interface SelectedHub {
+	inspect(): SelectedHubSnapshot;
+	replaceSource(source: SelectedHubSource): Promise<void>;
+	start(): void;
+	close(): Promise<void>;
+}

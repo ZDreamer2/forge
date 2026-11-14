@@ -23,13 +23,10 @@ Specification for creating and editing the [workspace changes and file-diff cont
 
 ### 💡 Distinct usage patterns for changes.md
 
-#### Loaded from the API overview for change implementation
+#### Usage inherited from the API overview
 
-User asks to implement change collection or file diffs -> builder reads `overview.md` -> follows its detailed change-contract link.
-
-#### Direct reference for comparison or patch semantics
-
-`Implement GET /changes/file using server/docs/protocol/changes.md in the Forge application repository.`
+`changes.md` is a satellite of the [workspace server API](overview.md). Usage initially
+follows the overview's change-operation references; direct usage has not yet been observed.
 
 ### Role changes.md serves during use
 

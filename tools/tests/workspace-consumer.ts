@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import type { ServerHubServers } from "../../server/src/components/api-contract/index.ts";
+import type { ServerHubSelection, ServerHubServers } from "../../server/src/components/api-contract/index.ts";
 
 import { verifyInstalledAnalysis } from "./workspace-consumer-analysis.ts";
 import { verifyInstalledFiles } from "./workspace-consumer-files.ts";
@@ -54,6 +54,19 @@ async function bounded<T>(operation: Promise<T>, label: string): Promise<T> {
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+async function waitForSelection(address: string, accept: (snapshot: ServerHubSelection) => boolean) {
+	// Production refresh remains fixed; allow a full interval plus its bounded request.
+	const deadline = Date.now() + 45_000;
+	while (Date.now() < deadline) {
+		const response = await fetch(`${address}/api/server-hub/selection`, { signal: AbortSignal.timeout(5000) });
+		assert.equal(response.status, 200);
+		const snapshot = (await response.json()) as ServerHubSelection;
+		if (accept(snapshot)) return snapshot;
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	throw new Error("Installed consumer did not reach the expected selection state within 45 seconds");
 }
 
 async function portReservation(port = 0) {
@@ -317,6 +330,7 @@ codebases:
 		await reservation.close();
 		const beforeStartup = sourceState(workspace);
 		const server = await installedServer(executable, consumer, workspace, reservation.port);
+		let selectedHost: Awaited<ReturnType<typeof installedServer>> | undefined;
 		const request = (path: string, options: RequestInit = {}) =>
 			fetch(`${server.address}${path}`, {
 				...options,
@@ -354,7 +368,19 @@ codebases:
 				provenance: "default",
 			});
 			mkdirSync(server.userConfigDirectory);
-			writeFileSync(join(server.userConfigDirectory, "config.yaml"), "serverHubUrl: https://hub.example/base/\n");
+			let selectedUrl = `${server.address}/`;
+			if (signal === "SIGTERM") {
+				const hostPort = await portReservation();
+				await hostPort.close();
+				selectedUrl = `http://127.0.0.1:${hostPort.port}/`;
+				selectedHost = await installedServer(executable, consumer, workspace, hostPort.port, {
+					serverHub: true,
+					serverHubConfiguration: JSON.stringify({
+						servers: [{ id: "packed-host", name: "Packed selected host", url: selectedUrl }],
+					}),
+				});
+			}
+			writeFileSync(join(server.userConfigDirectory, "config.yaml"), `serverHubUrl: ${selectedUrl}\n`);
 			const configured = await reload();
 			assert.equal(configured.status, 200);
 			const configuredResult = (await configured.json()) as typeof defaultResult;
@@ -365,6 +391,41 @@ codebases:
 				provenance: "file",
 			});
 			assert.equal("value" in (configuredResult.concerns.serverHubUrl ?? {}), false);
+			if (selectedHost) {
+				const learned = await waitForSelection(server.address, (snapshot) => snapshot.servers?.length === 1);
+				assert.deepEqual(learned.source, { status: "selected", url: selectedUrl });
+				assert.equal(learned.servers?.[0]?.name, "Packed selected host");
+				assert.ok(learned.lastSuccessAt);
+				assert.equal(learned.error, null);
+				assert.equal(learned.stale, false);
+				writeFileSync(
+					join(selectedHost.userConfigDirectory, "server-hub.yaml"),
+					JSON.stringify({ servers: [{ id: "packed-host", name: "Updated packed host", url: selectedUrl }] }),
+				);
+				const hostReload = await fetch(`${selectedHost.address}/api/configuration/reload`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: "{}",
+					signal: AbortSignal.timeout(5000),
+				});
+				assert.equal(hostReload.status, 200);
+				assert.equal(((await hostReload.json()) as { ok: boolean }).ok, true);
+				const refreshed = await waitForSelection(
+					server.address,
+					(snapshot) => snapshot.servers?.[0]?.name === "Updated packed host",
+				);
+				assert.ok(refreshed.lastSuccessAt);
+				assert.notEqual(refreshed.lastSuccessAt, learned.lastSuccessAt);
+				assert.equal(refreshed.error, null);
+				assert.deepEqual(await selectedHost.stop("SIGTERM"), { code: 0, signal: null }, selectedHost.stderr());
+				const failed = await waitForSelection(server.address, (snapshot) => snapshot.error !== null);
+				assert.deepEqual(failed.source, refreshed.source);
+				assert.equal(failed.lastSuccessAt, refreshed.lastSuccessAt);
+				assert.equal(failed.servers?.[0]?.name, "Updated packed host");
+				assert.equal(failed.stale, true);
+				assert.ok(failed.servers?.every((entry) => entry.availability.stale));
+				// The API and Chromium review below run while selected-hub refresh is failing.
+			}
 			const page = await request("/");
 			assert.equal(page.status, 200);
 			assert.match(page.headers.get("content-type") ?? "", /text\/html/);
@@ -473,7 +534,7 @@ codebases:
 			const released = await portReservation(reservation.port);
 			await released.close();
 		} finally {
-			await server.stop("SIGKILL");
+			await Promise.all([server.stop("SIGKILL"), selectedHost?.stop("SIGKILL")]);
 		}
 	}
 	const reservation = await portReservation();
@@ -630,7 +691,7 @@ export type Removed = WorkspacePolicy;
 	// Check the UI-facing source seam in the actual artifact, not as a new npm export.
 	writeFileSync(
 		join(consumer, "api-contract.ts"),
-		`import type { ApiErrorCode, ApiFailure, WorkspaceChanges, WorkspaceIdentity, FileBaseline, FileSide, FileUnsupportedReason, WorkspaceFileDiff } from './node_modules/@zdreamer/forge/dist/server/src/components/api-contract/index.js';
+		`import type { ApiErrorCode, ApiFailure, WorkspaceChanges, WorkspaceIdentity, FileBaseline, FileSide, FileUnsupportedReason, WorkspaceFileDiff, ServerHubSelection } from './node_modules/@zdreamer/forge/dist/server/src/components/api-contract/index.js';
 export const changes = {codebases: {app: {id: 'service-guide', root: 'app', guidance: 'docs/app'}}, changes: []} satisfies WorkspaceChanges;
 // @ts-expect-error Concrete definitions require their root.
 export const missingRoot: WorkspaceChanges = {codebases: {app: {guidance: 'docs/app'}}, changes: []};
@@ -639,6 +700,7 @@ export const missingId: WorkspaceChanges = {codebases: {app: {root: 'app', guida
 // @ts-expect-error Legacy type is unsupported.
 export const legacyType: WorkspaceChanges = {codebases: {app: {id: 'service-guide', root: 'app', guidance: 'docs/app', type: 'service'}}, changes: []};
 export const identity = {workspace: {root: '/example', name: 'Example'}, repositories: []} satisfies WorkspaceIdentity;
+export const selectedHub = {source: {status: 'unconfigured', url: null}, servers: null, lastSuccessAt: null, error: null, stale: false} satisfies ServerHubSelection;
 export const error = 'not_found' satisfies ApiErrorCode;
 export const invalidRequest = 'invalid_request' satisfies ApiErrorCode;
 export const baseline = {kind: 'commit', oid: '0123456789012345678901234567890123456789'} satisfies FileBaseline;
@@ -705,7 +767,7 @@ export type NodeGlobal = typeof process;
 		writeFileSync(join(artifactDirectory, "pack.json"), `${JSON.stringify(packed, null, 2)}\n`);
 	}
 	console.log(
-		"Tarball-only consumer: installed server/React/CSS/Chromium, configuration reload and explicit server-hub hosting/self probe, read-only changes/analysis/files, normalized patches and full context, guide extensions and native TS imports, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
+		"Tarball-only consumer: installed server/React/CSS/Chromium, configuration reload, explicit server-hub hosting/self probe and automatic selected-hub refresh/outage retention during Chromium review, read-only changes/analysis/files, normalized patches and full context, guide extensions and native TS imports, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
 	);
 } finally {
 	rmSync(temporary, { recursive: true, force: true });

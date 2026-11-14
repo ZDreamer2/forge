@@ -56,3 +56,27 @@ empty or unavailable lists need neither. Unexpected operational failures preserv
 prior observations, report a sanitized diagnostic and allow freshness to age.
 Fetch, time and timer capabilities can be injected for deterministic owner tests;
 there is no subscription, persistence or generic scheduler framework.
+
+## Selected-hub consumption
+
+Every server owns a consumer independently of hosting. App supplies the accepted
+URL concern, distinguishing absent selection from initially unavailable configuration.
+A host consumes itself only through an explicitly configured URL and the same HTTP
+contract used for other hubs. Hosted inspection always uses the hosted owner.
+
+The consumer starts after listening, fetches immediately for a selected source,
+and schedules its next attempt after the previous one settles. Reapplying the same
+source preserves work and observations. Replacement clears learned data immediately,
+cancels and drains superseded work, then starts only the latest source; generation
+checks prevent late publication. Close drains requests, releases timers and prevents
+later source application from restarting work. Inspection is an immutable immediate
+read and never starts network activity.
+
+The remote seam validates a complete bounded response before publication. Failed
+refreshes retain the last successful list, including valid empty lists, and report a
+fixed diagnostic. No learned data is persisted. The consumer's clock ages its local
+copy independently of remote observation timestamps: effective entry staleness is
+the host's flag OR local-list staleness. It preserves host timestamps and never
+infers probe freshness from clock comparisons between machines. The
+[selected inspection contract](../../../../docs/protocol/overview.md#inspect-selected-server-hub)
+owns wire fields, refresh/deadline limits and freshness thresholds.

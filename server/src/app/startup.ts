@@ -2,7 +2,7 @@ import { basename } from "node:path";
 import { createConfiguration } from "../components/configuration/index.ts";
 import { loadGuideExtensions } from "../components/guide-extensions/index.ts";
 import { resolveWorkspaceGuidance } from "../components/http-api/index.ts";
-import { createServerHub } from "../components/server-hub/index.ts";
+import { createSelectedHub, createServerHub, type SelectedHubSource } from "../components/server-hub/index.ts";
 import { AnalysisHandlerError, createTreeAnalyzer } from "../components/tree-analysis/index.ts";
 import { createWorkingChanges } from "../components/tree-sources/index.ts";
 import { loadWorkspaceConfig, rootedCodebases } from "../components/workspace-config/index.ts";
@@ -75,13 +75,26 @@ export async function start(options: Options) {
 				reportError: (message) => console.error(`Forge server hub failed: ${message}`),
 			})
 		: undefined;
+	function selectedSource(): SelectedHubSource {
+		const accepted = configuration.readServerHubUrl();
+		if (!accepted.available)
+			return {
+				status: "configuration-unavailable",
+				error: "Server hub URL configuration is unavailable; repair configuration and reload",
+			};
+		return accepted.value === undefined ? { status: "unconfigured" } : { status: "selected", url: accepted.value };
+	}
+	const selectedHub = createSelectedHub({ source: selectedSource() });
 	let reloadTail: Promise<unknown> = Promise.resolve();
 	function reloadConfiguration() {
 		// Storage serialization alone cannot order application of the accepted snapshot.
 		const result = reloadTail.then(async () => {
 			const reloaded = await configuration.reload();
 			const accepted = configuration.readServers();
-			await hub?.replaceServers(accepted.available ? accepted.value : null);
+			await Promise.all([
+				hub?.replaceServers(accepted.available ? accepted.value : null),
+				selectedHub.replaceSource(selectedSource()),
+			]);
 			return reloaded;
 		});
 		reloadTail = result.catch(() => undefined);
@@ -92,6 +105,7 @@ export async function start(options: Options) {
 		const app = createHttpApp({
 			...snapshot,
 			reloadConfiguration,
+			inspectSelectedHub: selectedHub.inspect,
 			...(hub ? { serverHub: { inspectServerHub: hub.inspect } } : {}),
 			discoverChanges: collection.collect,
 			materializeChanges: changes.materialize,
@@ -120,6 +134,7 @@ export async function start(options: Options) {
 		});
 		listener = await createListener({ fetch: app.fetch, port: config.port });
 		hub?.start();
+		selectedHub.start();
 		let disposal: Promise<void> | undefined;
 		function close(): Promise<void> {
 			if (disposal === undefined) {
@@ -132,6 +147,7 @@ export async function start(options: Options) {
 					collection.close(),
 					listener?.close(),
 					hub?.close(),
+					selectedHub.close(),
 				]).then(() => {});
 			}
 			return disposal;
@@ -153,6 +169,7 @@ export async function start(options: Options) {
 			collection.close(),
 			listener?.close(),
 			hub?.close(),
+			selectedHub.close(),
 		]);
 		throw error;
 	}

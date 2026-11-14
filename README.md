@@ -170,8 +170,10 @@ rejected. Missing/empty documents mean no hub URL or an empty registration list.
 A list has at most 64 registrations; ID/name/URL limits are 128/256/2048 UTF-8
 bytes (URL checked before and after normalization). Editing files does not activate
 hosting. On an active host, accepted registration reloads change background probes.
-`serverHubUrl` consumption and UI switching are deferred; selecting a URL does not
-change the hosted list or relay another hub.
+Every server consumes its explicitly selected `serverHubUrl` independently of
+hosting. A host with no URL selected learns no list; to consume itself, set its own
+base URL in `config.yaml`. Selection does not change the hosted list. UI switching
+remains deferred.
 
 After editing a file, use the server's printed address:
 
@@ -198,6 +200,20 @@ does not prove that a browser can reach a target. Invalid initial registrations
 return 503 until repaired and reloaded; rejected later edits retain the accepted
 list. The [hub contract](server/docs/protocol/overview.md#inspect-hosted-server-hub) defines
 freshness, limits and failures.
+
+On any server, inspect its selected source and learned list:
+
+```sh
+curl "$FORGE_ADDRESS/api/server-hub/selection"
+```
+
+After a selection reload, fetching starts in the background. The response distinguishes
+no selection, unavailable configuration, waiting for a first success, successful empty
+lists and retained stale data after a refresh failure. Refreshes run automatically;
+review remains usable during an outage. The
+[selected hub contract](server/docs/protocol/overview.md#inspect-selected-server-hub)
+defines fields, validation limits and the separate host-observation and consumer-cache
+freshness rules. Reload each process that should adopt shared user-file edits.
 
 Current-issue storage stays in the selected guidance folder's `.local/state.json`,
 including with a relative or external guidance override. Compatible Python/server

@@ -14,6 +14,7 @@ export type {
 	FileUnsupportedReason,
 	GuidanceEntry,
 	ServerHubAvailability,
+	ServerHubSelection,
 	ServerHubServers,
 	WorkspaceAnalysis,
 	WorkspaceChanges,

@@ -122,3 +122,11 @@ export interface ServerHubServers {
 		availability: ServerHubAvailability;
 	}[];
 }
+
+export interface ServerHubSelection {
+	source: { status: "unconfigured" | "configuration-unavailable" | "selected"; url: string | null };
+	servers: ServerHubServers["servers"] | null;
+	lastSuccessAt: string | null;
+	error: string | null;
+	stale: boolean;
+}

@@ -36,7 +36,7 @@ its design context.
 | --- | --- | --- |
 | `workspace-config` | Trusted authored workspace knowledge: registered codebases, declared repositories, display name and guide composition | None |
 | `configuration` | Accepted user hub settings and workspace current-issue storage, with explicit independent concern reload | None |
-| `server-hub` | Explicit registered targets and centrally collected availability; background probing and reconciliation | configuration (type-only) |
+| `server-hub` | Independent hosted observations and selected-hub consumption; background refresh and reconciliation | configuration (type-only) |
 | `workspace-repositories` | Observed participating repositories: startup resolution, status, path participation | workspace-config |
 | `workspace-tree` | Canonical tree vocabulary, ownership and derived review data | workspace-config |
 | `tree-sources` | Builds base trees from sources of workspace state, with bounded source capabilities | workspace-tree, workspace-repositories, workspace-config |
@@ -54,10 +54,13 @@ ownership, line totals and review metadata from the server; the UI may derive
 display projections from that vocabulary.
 
 `app` constructs components and owns HTTP assembly and process configuration.
-An explicit startup role constructs the hub, starts probes after listening and drains
-it during shutdown. App serializes configuration reload with accepted-registration
-application; the configuration owner retains storage authority. Hosting does not
-consume `serverHubUrl` or grant authority over registered workspaces. The
+An explicit startup role constructs the hosted hub; every server has a separate
+selected-hub consumer. App starts both after listening and drains both at shutdown.
+App serializes configuration reload with accepted registrations and source selection;
+the configuration owner retains storage authority. Hosting and consuming are
+independent: consumption uses only an explicitly selected URL, including for self.
+HTTP inspection maps each owner separately, so hosting never relays a learned list
+or grants authority over registered workspaces. The
 [hub guide](../server/src/components/server-hub/docs/UnitGuide.md) owns observation
 and reconciliation semantics.
 `lib/git` owns bounded Git processes and cancellation; `lib/loopback-access` owns

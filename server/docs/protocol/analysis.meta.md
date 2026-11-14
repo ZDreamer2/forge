@@ -25,13 +25,10 @@ Specification for creating and editing the [workspace change-analysis contract](
 
 ### 💡 Distinct usage patterns for analysis.md
 
-#### Loaded from the API overview for analyzed-tree implementation
+#### Usage inherited from the API overview
 
-User asks to implement analysis -> builder reads `overview.md` -> follows its analysis-contract link for response and annotation semantics.
-
-#### Direct reference for analysis wire behavior
-
-`Implement GET /changes/analysis using server/docs/protocol/analysis.md in the Forge application repository.`
+`analysis.md` is a satellite of the [workspace server API](overview.md). Usage initially
+follows the overview's analysis-operation reference; direct usage has not yet been observed.
 
 ### Role analysis.md serves during use
 

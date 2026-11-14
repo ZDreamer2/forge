@@ -104,6 +104,13 @@ test("a failed size candidate aborts and drains the other probe before releasing
 		],
 	});
 	const app = createHttpApp({
+		inspectSelectedHub: () => ({
+			source: { status: "unconfigured", url: null },
+			servers: null,
+			lastSuccessAt: null,
+			error: null,
+			stale: false,
+		}),
 		reloadConfiguration: async () => {
 			throw new Error("Unexpected configuration reload");
 		},
@@ -177,6 +184,13 @@ test("shutdown keeps a cancelled analysis registered until its source probe is r
 		],
 	});
 	const app = createHttpApp({
+		inspectSelectedHub: () => ({
+			source: { status: "unconfigured", url: null },
+			servers: null,
+			lastSuccessAt: null,
+			error: null,
+			stale: false,
+		}),
 		reloadConfiguration: async () => {
 			throw new Error("Unexpected configuration reload");
 		},

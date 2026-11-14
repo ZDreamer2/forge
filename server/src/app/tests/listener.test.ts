@@ -79,6 +79,13 @@ test("real adapter preserves Host and Origin restrictions including spoofed forw
 		port: 0,
 		fetch: (incoming) =>
 			createHttpApp({
+				inspectSelectedHub: () => ({
+					source: { status: "unconfigured", url: null },
+					servers: null,
+					lastSuccessAt: null,
+					error: null,
+					stale: false,
+				}),
 				reloadConfiguration: async () => {
 					throw new Error("Unexpected configuration reload");
 				},

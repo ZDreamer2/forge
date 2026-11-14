@@ -18,6 +18,13 @@ test("HTTP page and API operations have consistent routing failures", async (t) 
 	await writeFile(join(uiDirectory, "assets/index-abcd.js"), "export {};\n");
 	let collections = 0;
 	const app = createHttpApp({
+		inspectSelectedHub: () => ({
+			source: { status: "unconfigured", url: null },
+			servers: null,
+			lastSuccessAt: null,
+			error: null,
+			stale: false,
+		}),
 		reloadConfiguration: async () => {
 			throw new Error("Unexpected configuration reload");
 		},
@@ -43,6 +50,18 @@ test("HTTP page and API operations have consistent routing failures", async (t) 
 		},
 	});
 	const headers = { host: "127.0.0.1:43210" };
+	const selection = await app.request("/api/server-hub/selection", { headers });
+	assert.equal(selection.status, 200);
+	assert.deepEqual(await selection.json(), {
+		source: { status: "unconfigured", url: null },
+		servers: null,
+		lastSuccessAt: null,
+		error: null,
+		stale: false,
+	});
+	const selectionHead = await app.request("/api/server-hub/selection", { method: "HEAD", headers });
+	assert.equal(selectionHead.status, 200);
+	assert.equal(await selectionHead.text(), "");
 	const response = await app.request("/api/workspace", { headers });
 	assert.equal(response.status, 200);
 	assert.deepEqual(await response.json(), { workspace: { root: "/selected", name: "Selected" }, repositories: [] });
@@ -68,6 +87,7 @@ test("HTTP page and API operations have consistent routing failures", async (t) 
 		"/api/changes",
 		"/api/changes/analysis",
 		"/api/changes/file",
+		"/api/server-hub/selection",
 	]) {
 		for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
 			const unsupported = await app.request(path, { method, headers });
@@ -112,7 +132,18 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 	const reported: Error[] = [];
 	let reloads = 0;
 	let inspections = 0;
+	let selectedInspections = 0;
 	const app = createHttpApp({
+		inspectSelectedHub: () => {
+			selectedInspections++;
+			return {
+				source: { status: "unconfigured", url: null },
+				servers: null,
+				lastSuccessAt: null,
+				error: null,
+				stale: false,
+			};
+		},
 		serverHub: {
 			inspectServerHub: () => {
 				inspections++;
@@ -161,6 +192,7 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 		"/api/changes/file",
 		"/api/unknown",
 		"/api/server-hub/servers",
+		"/api/server-hub/selection",
 		"/api/configuration/reload",
 	]) {
 		for (const headers of [
@@ -184,7 +216,21 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 		}
 	}
 	assert.equal(inspections, 0);
+	assert.equal(selectedInspections, 0);
 	const hubHeaders = { host: "127.0.0.1:43210" };
+	const selected = await app.request("/api/server-hub/selection", { headers: hubHeaders });
+	assert.equal(selected.status, 200);
+	assert.deepEqual(await selected.json(), {
+		source: { status: "unconfigured", url: null },
+		servers: null,
+		lastSuccessAt: null,
+		error: null,
+		stale: false,
+	});
+	const selectedHead = await app.request("/api/server-hub/selection", { method: "HEAD", headers: hubHeaders });
+	assert.equal(selectedHead.status, 200);
+	assert.equal(await selectedHead.text(), "");
+	assert.equal(selectedInspections, 2);
 	const hub = await app.request("/api/server-hub/servers", { headers: hubHeaders });
 	assert.equal(hub.status, 200);
 	assert.deepEqual(await hub.json(), { servers: [] });

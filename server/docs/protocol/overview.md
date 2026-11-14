@@ -57,7 +57,10 @@ sanitized 500 envelope.
 
 On an active hub host, reload applies the accepted registration list even when
 another concern rejects. Concurrent reloads apply in order; responses do not wait
-for availability probes. Rejected registrations retain the live list. Reload cannot
+for availability probes or selected-hub fetch success. The same serialization applies
+the accepted hub selection even when another concern rejects, draining superseded
+fetches before returning. An unchanged selected URL preserves work and observations
+without forcing a refresh. Rejected registrations retain the live list. Reload cannot
 toggle hosting, edit configuration files, write current-issue selection or replace
 workspace registries, guidance selection, extensions, repositories, ports or service
 installation; those retain their startup/restart lifecycle.
@@ -96,6 +99,57 @@ Missing/empty configuration yields an empty list. Initially invalid registration
 return 503 `{error: {code: "internal_error", message: "Server hub registrations are unavailable; repair configuration and reload"}}`.
 Repair plus explicit reload recovers; review remains usable. Hosting and selecting
 a hub URL are independent, without relaying or list aggregation.
+
+### Inspect selected server hub
+
+Every workspace server exposes `GET /server-hub/selection` and HEAD. Queries
+return 400; other methods return 405 with `Allow: GET, HEAD`. Shared access rules
+apply. Reads return an immediate 200 diagnostic snapshot without fetching:
+
+- `source`: `{status: "unconfigured" | "configuration-unavailable" | "selected", url: string | null}`.
+  Only selected sources have a URL. Accepted absence means unconfigured, including
+  on hosts; initially rejected URL configuration means configuration-unavailable.
+- `servers`: the hosted endpoint's ordered registration/availability vocabulary,
+  or null before a successful fetch for this source. A successful empty list is `[]`.
+- `lastSuccessAt`: canonical ISO timestamp of the consumer's last successful fetch,
+  or null before success.
+- `error`: current bounded diagnostic, or null. Unavailable configuration has a
+  diagnostic; a selected source waiting for its first response MAY have none.
+- `stale`: false for unconfigured; true for unavailable configuration, before first
+  success, on current fetch failure, or more than 90 seconds after last success.
+
+Unconfigured and configuration-unavailable snapshots have null list/time. A later
+fetch failure preserves learned data/time and marks it stale. Effective entry
+`availability.stale` is the host's flag OR local-list staleness. Observation times
+remain unchanged: the host owns probe-age assessment; the consumer owns cache age
+using its own clock, without comparing remote timestamps to local time. Fetch
+failure describes the selected source, not unavailable status for each registration.
+
+Selection is explicit everywhere. A host needs its own URL configured to consume
+itself; hosted data is never a fallback for absence or fetch failure. Hosting and
+consumption can use different lists without relaying, aggregation or self-registration.
+Changing or clearing the accepted URL immediately discards prior learned data and
+cancels superseded requests. Rejected reloads retain the accepted selection.
+
+A selected consumer GETs `api/server-hub/servers` relative to its accepted base URL,
+preserving base paths, omitting Origin and credentials, and refusing redirects.
+It fetches after listening and refreshes 30 seconds after each settled attempt,
+including failure and empty success; at most one fetch and one timer are owned.
+One three-second deadline covers headers and streamed decoded body, limited to
+1 MiB. Wrong media type, malformed UTF-8/JSON, non-success HTTP or incompatible
+payloads produce fixed diagnostics of at most 320 characters, without remote bodies
+or raw transport errors. Inspection and workspace review remain usable throughout.
+
+The whole response is validated before acceptance. Require at most 64 entries with
+unique ASCII slug IDs (128 UTF-8 bytes), literal nonblank names (256 bytes), and
+normalized HTTP(S) base URLs (2048 bytes raw and normalized) without credentials,
+query, fragment, whitespace or backslashes. Duplicate URLs are allowed. Require
+all availability fields: known status, boolean stale, nullable canonical ISO
+timestamps and nullable error of at most 320 characters. Unknown observations have
+null timestamps/error and stale true. Reachable observations have equal nonnull
+attempt/success times and null error. Unavailable observations have a nonnull
+attempt time and error, with optional prior success time no later than that attempt.
+Ignore additional fields; missing or mistyped required fields reject the whole list.
 
 ## Operations
 
