@@ -21,6 +21,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import type { ServerHubServers } from "../../server/src/components/api-contract/index.ts";
+
 import { verifyInstalledAnalysis } from "./workspace-consumer-analysis.ts";
 import { verifyInstalledFiles } from "./workspace-consumer-files.ts";
 import { verifyInstalledUi } from "./workspace-consumer-ui.ts";
@@ -130,13 +132,25 @@ function sourceState(workspace: string) {
 	};
 }
 
-async function installedServer(executable: string, cwd: string, workspace: string, port: number) {
+async function installedServer(
+	executable: string,
+	cwd: string,
+	workspace: string,
+	port: number,
+	options: { serverHub?: boolean; serverHubConfiguration?: string } = {},
+) {
 	// Ignore ambient configuration and module injection: only the installed package supplies runtime code.
 	// biome-ignore lint/style/noProcessEnv: subprocess fixture explicitly sanitizes the inherited execution environment.
 	const { NODE_PATH: _nodePath, NODE_OPTIONS: _nodeOptions, ...environment } = process.env;
 	const xdgDirectory = mkdtempSync(join(temporary, "user-config-"));
 	const userConfigDirectory = join(xdgDirectory, "zd-forge");
-	const child = spawn(executable, ["serve", "--workspace", workspace], {
+	if (options.serverHubConfiguration !== undefined) {
+		mkdirSync(userConfigDirectory);
+		writeFileSync(join(userConfigDirectory, "server-hub.yaml"), options.serverHubConfiguration);
+	}
+	const command = ["serve", "--workspace", workspace];
+	if (options.serverHub) command.push("--server-hub");
+	const child = spawn(executable, command, {
 		cwd,
 		env: {
 			...environment,
@@ -320,6 +334,7 @@ codebases:
 					{ path: "not-cloned", status: "missing" },
 				],
 			});
+			assert.equal((await request("/api/server-hub/servers")).status, 404);
 			const reload = () =>
 				request("/api/configuration/reload", {
 					method: "POST",
@@ -460,6 +475,59 @@ codebases:
 		} finally {
 			await server.stop("SIGKILL");
 		}
+	}
+	const reservation = await portReservation();
+	await reservation.close();
+	const self = { id: "self", name: "Packed host", url: `http://127.0.0.1:${reservation.port}/` };
+	const beforeHosting = sourceState(workspace);
+	const host = await installedServer(executable, consumer, workspace, reservation.port, {
+		serverHub: true,
+		serverHubConfiguration: JSON.stringify({ servers: [self] }),
+	});
+	const request = (path: string, options: RequestInit = {}) =>
+		fetch(`${host.address}${path}`, {
+			...options,
+			signal: AbortSignal.timeout(5000),
+		});
+	try {
+		await bounded(
+			(async () => {
+				for (;;) {
+					const response = await request("/api/server-hub/servers");
+					assert.equal(response.status, 200);
+					const snapshot = (await response.json()) as ServerHubServers;
+					assert.equal(snapshot.servers.length, 1);
+					const entry = snapshot.servers[0];
+					assert.ok(entry);
+					assert.deepEqual({ id: entry.id, name: entry.name, url: entry.url }, self);
+					if (entry.availability.status === "reachable") {
+						assert.ok(entry.availability.checkedAt);
+						assert.equal(entry.availability.lastReachableAt, entry.availability.checkedAt);
+						assert.equal(entry.availability.error, null);
+						assert.equal(entry.availability.stale, false);
+						break;
+					}
+					await new Promise((resolve) => setTimeout(resolve, 10));
+				}
+			})(),
+			"Installed host self probe",
+		);
+		writeFileSync(join(host.userConfigDirectory, "server-hub.yaml"), "servers: []\n");
+		const reload = await request("/api/configuration/reload", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "{}",
+		});
+		assert.equal(reload.status, 200);
+		assert.equal(((await reload.json()) as { ok: boolean }).ok, true);
+		assert.deepEqual(await (await request("/api/server-hub/servers")).json(), { servers: [] });
+		assert.equal((await request("/api/changes")).status, 200);
+		assert.deepEqual(await host.stop("SIGTERM"), { code: 0, signal: null }, host.stderr());
+		assert.deepEqual(sourceState(workspace), beforeHosting);
+		const released = await portReservation(reservation.port);
+		await released.close();
+	} finally {
+		await host.stop("SIGKILL");
 	}
 }
 
@@ -637,7 +705,7 @@ export type NodeGlobal = typeof process;
 		writeFileSync(join(artifactDirectory, "pack.json"), `${JSON.stringify(packed, null, 2)}\n`);
 	}
 	console.log(
-		"Tarball-only consumer: installed server/React/CSS/Chromium, configuration reload, read-only changes/analysis/files, normalized patches and full context, guide extensions and native TS imports, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
+		"Tarball-only consumer: installed server/React/CSS/Chromium, configuration reload and explicit server-hub hosting/self probe, read-only changes/analysis/files, normalized patches and full context, guide extensions and native TS imports, rename warnings, restart/failure isolation, protection, shutdown and contract boundaries passed.",
 	);
 } finally {
 	rmSync(temporary, { recursive: true, force: true });

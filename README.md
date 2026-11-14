@@ -35,7 +35,7 @@ dist/          server TypeScript output and Vite-built ui/ assets
 
 See [application architecture](https://github.com/ZDreamer2/forge/blob/main/docs/architecture.md) for boundaries,
 [UI architecture](ui/docs/architecture.md) for frontend ownership and state,
-and the [HTTP API contract](https://github.com/ZDreamer2/forge/blob/main/server/docs/protocol.md) for wire behavior.
+and the [HTTP API contract](https://github.com/ZDreamer2/forge/blob/main/server/docs/protocol/overview.md) for wire behavior.
 Concrete server and UI build guides live under their respective `docs/forge/`
 directories.
 
@@ -84,7 +84,10 @@ After building, run from this repository:
 node dist/server/src/main.js serve --workspace /absolute/path/to/checkout
 ```
 
-The installed CLI form is `forge serve --workspace <path>`. Relative workspace
+The installed CLI form is `forge serve --workspace <path> [--server-hub]`.
+Add `--server-hub` once to explicitly host the server hub in this process. It keeps
+serving its own workspace and UI. The flag can precede or follow `--workspace <path>`;
+user settings cannot turn this role on or off. Relative workspace
 paths resolve against the invocation directory; the selected directory is
 canonicalized as the authoritative checkout.
 
@@ -111,8 +114,9 @@ present, Origin; use `127.0.0.1`, not `localhost`.
 Changes compare HEAD with working content, including non-ignored untracked files.
 Declared repositories participate; missing-at-startup repositories stay excluded
 until restart. Results are live observations. See the
-[shared API contract](server/docs/protocol.md#shared-contract) for comparison,
-ownership, access and lifecycle semantics. Inspection preserves source and Git
+[shared API contract](server/docs/protocol/overview.md#shared-contract) for access and the
+[change contract](server/docs/protocol/changes.md) for comparison, ownership and lifecycle
+semantics. Inspection preserves source and Git
 index/ref/object contents; trusted Git filters and analysis handlers are executable
 code outside that effects guarantee.
 
@@ -133,7 +137,7 @@ selectable. File patches and complete context are live observations.
 
 See [UI architecture](ui/docs/architecture.md#selected-file-observations) for
 selection, refresh and recovery behavior, the
-[API file contract](server/docs/protocol.md#read-file-diff) for patches and limits,
+[API file contract](server/docs/protocol/changes.md#read-file-diff) for patches and limits,
 and the [viewer design specification](ui/prototype/UiSpec.md) for interaction and
 presentation design. The prototype demonstrates intended behavior with fictional
 data; it does not establish production implementation or performance.
@@ -163,7 +167,11 @@ IDs are unique ASCII slugs; names are literal nonblank display strings. URLs are
 absolute HTTP(S) base URLs with optional base paths, without credentials, query or
 fragment. Unknown fields, explicit null settings and duplicate YAML keys are
 rejected. Missing/empty documents mean no hub URL or an empty registration list.
-These settings store local inputs; they do not activate hub hosting or network access.
+A list has at most 64 registrations; ID/name/URL limits are 128/256/2048 UTF-8
+bytes (URL checked before and after normalization). Editing files does not activate
+hosting. On an active host, accepted registration reloads change background probes.
+`serverHubUrl` consumption and UI switching are deferred; selecting a URL does not
+change the hosted list or relay another hub.
 
 After editing a file, use the server's printed address:
 
@@ -174,9 +182,22 @@ curl -H 'Content-Type: application/json' -d '{}' "$FORGE_ADDRESS/api/configurati
 Each concern independently accepts or rejects the change. Rejection retains an
 earlier accepted value; invalid initial configuration is unavailable and logged,
 while workspace review remains usable. Repair the file and reload to recover.
-The [reload contract](server/docs/protocol.md#reload-local-configuration) defines
+The [reload contract](server/docs/protocol/overview.md#reload-local-configuration) defines
 result metadata and diagnostics. Reload does not apply authored registry, extension,
-guidance-path or port changes; restart for those.
+guidance-path or port changes; restart for those. Hosting is a startup role;
+changing installed services to adopt it is a separate administration step.
+
+On a host, inspect the accepted list and centrally observed availability:
+
+```sh
+curl "$FORGE_ADDRESS/api/server-hub/servers"
+```
+
+The response is immediate; probes run in the background from the hub, so status
+does not prove that a browser can reach a target. Invalid initial registrations
+return 503 until repaired and reloaded; rejected later edits retain the accepted
+list. The [hub contract](server/docs/protocol/overview.md#inspect-hosted-server-hub) defines
+freshness, limits and failures.
 
 Current-issue storage stays in the selected guidance folder's `.local/state.json`,
 including with a relative or external guidance override. Compatible Python/server
@@ -258,7 +279,7 @@ source migration.
 
 ## Guide extensions
 
-The [analyzed tree](server/docs/protocol.md#analyze-workspace-changes) supplies
+The [analyzed tree](server/docs/protocol/analysis.md) supplies
 classification, raw and attention totals, emphasis and attributed signals. Policies
 come from adopted guides. Registering Forge-base and adopting it through workspace
 `parents` enables its path classification, planning/test deemphasis and large

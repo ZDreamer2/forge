@@ -31,5 +31,6 @@ per-request resolution. Ordering remains owned by `workspace-config`.
 
 Analysis mapping supplies explicit root/child adjacency and response-local owner
 and handler definitions, preserving safe literal keys. The
-[API contract](../../../../docs/protocol.md) owns wire shapes, operation-scoped
-statistics failures, context semantics, limits and read-only effects.
+[API contract](../../../../docs/protocol/overview.md) and its linked detail contracts own
+wire shapes, operation-scoped statistics failures, context semantics, limits and
+read-only effects.

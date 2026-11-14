@@ -163,3 +163,37 @@ test("invalid UTF-8, unreadable sources and malformed state stay distinct from a
 	assert.equal(owner.readCurrentIssue().available, false);
 	assert.equal(await readFile(f.state, "utf8"), "{");
 });
+
+test("registration count and UTF-8 bounds accept edges and retain accepted data on rejection", async (t) => {
+	const f = await fixture(t);
+	const base = { id: "a".repeat(128), name: "é".repeat(128), url: `https://example.com/${"a".repeat(2027)}/` };
+	assert.equal(Buffer.byteLength(base.url), 2048);
+	await writeFile(f.hub, JSON.stringify({ servers: [base] }));
+	const owner = await createConfiguration(f.locations);
+	assert.deepEqual(value(owner.readServers()), [base]);
+	const accepted = owner.readServers();
+	for (const entry of [
+		{ ...base, id: `${base.id}a` },
+		{ ...base, name: `${base.name}é` },
+		{ ...base, url: `${base.url}a` },
+		{ ...base, url: `${base.url.slice(0, -1)}é` },
+		// Raw input fits; normalization adds a trailing slash or percent-encodes Unicode.
+		{ ...base, url: `${base.url.slice(0, -1)}a` },
+		{ ...base, url: `https://example.com/${"é".repeat(400)}` },
+	]) {
+		await writeFile(f.hub, JSON.stringify({ servers: [entry] }));
+		const outcome = (await owner.reload()).concerns.servers;
+		assert.equal(outcome.status, "rejected");
+		assert.equal(outcome.retainedPriorValue, true);
+		assert.equal(owner.readServers(), accepted);
+	}
+	const entries = Array.from({ length: 64 }, (_, index) => ({ ...base, id: `s${index}` }));
+	await writeFile(f.hub, JSON.stringify({ servers: entries }));
+	assert.equal((await owner.reload()).ok, true);
+	assert.deepEqual(value(owner.readServers()), entries);
+	await writeFile(f.hub, JSON.stringify({ servers: [...entries, { ...base, id: "extra" }] }));
+	assert.equal((await owner.reload()).concerns.servers.status, "rejected");
+	assert.deepEqual(value(owner.readServers()), entries);
+	const fresh = await createConfiguration(f.locations);
+	assert.equal(fresh.readServers().available, false);
+});

@@ -8,7 +8,7 @@ edit-only-context: AI_DOC_PLUGIN/Formats/BaseDoc/BaseDoc.format.md
 
 Help a developer understand agent-produced changes across a workspace, decide what deserves attention, and inspect individual files without losing the overall change context. Repository boundaries orient the review; coordinated changes remain one workspace-level task.
 
-This UiSpec owns the review experience and its rationale. The [application architecture](../../docs/architecture.md) and [server API contract](../../server/docs/protocol.md) own application boundaries and data semantics; issue specifications own delivery scope. The prototype demonstrates the design, not production acceptance.
+This UiSpec owns the review experience and its rationale. The [application architecture](../../docs/architecture.md) and [server API contract](../../server/docs/protocol/overview.md), including its linked detail contracts, own application boundaries and data semantics; issue specifications own delivery scope. The prototype demonstrates the design, not production acceptance.
 
 [README](README.md) explains how to explore the demo and its limitations. [DesignDecisions](DesignDecisions.md) records concrete presentation choices. The prototype is a working example of this design, not an exhaustive specification of application behavior.
 
@@ -48,7 +48,7 @@ A folder name uses a change color only when all matching changes in its subtree 
 
 ## Filtering and totals
 
-The filter dimensions are server-owned Type (Code, Tests, Docs, Config, Assets) and Importance (High, Medium, Low, None). Importance maps effective emphasis: High = emphasized, Medium = normal, Low = deemphasized, None = hidden. The UI displays analysis results rather than evaluating classification or importance policy. The [API contract](../../server/docs/protocol.md#analyze-workspace-changes) owns those semantics; the [demo examples](README.md#importance-examples) illustrate global suffix rules and project-scoped policies without implementing them.
+The filter dimensions are server-owned Type (Code, Tests, Docs, Config, Assets) and Importance (High, Medium, Low, None). Importance maps effective emphasis: High = emphasized, Medium = normal, Low = deemphasized, None = hidden. The UI displays analysis results rather than evaluating classification or importance policy. The [API contract](../../server/docs/protocol/analysis.md) owns those semantics; the [demo examples](README.md#importance-examples) illustrate global suffix rules and project-scoped policies without implementing them.
 
 Each category name is a toggle. Categories within a dimension combine with OR; the dimensions combine with AND. All types and High/Medium/Low start enabled; None starts disabled. Adjacent select-all and deselect-all actions affect both dimensions. This gives the developer control over attention while keeping lower-priority work accessible.
 

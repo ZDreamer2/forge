@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import { createConfiguration } from "../components/configuration/index.ts";
 import { loadGuideExtensions } from "../components/guide-extensions/index.ts";
 import { resolveWorkspaceGuidance } from "../components/http-api/index.ts";
+import { createServerHub } from "../components/server-hub/index.ts";
 import { AnalysisHandlerError, createTreeAnalyzer } from "../components/tree-analysis/index.ts";
 import { createWorkingChanges } from "../components/tree-sources/index.ts";
 import { loadWorkspaceConfig, rootedCodebases } from "../components/workspace-config/index.ts";
@@ -17,6 +18,7 @@ import { createRequestRuns } from "./request-runs.ts";
 
 type Options = {
 	workspace: string;
+	serverHub?: boolean;
 	cwd: string;
 	env: Readonly<Record<string, string | undefined>>;
 };
@@ -66,57 +68,92 @@ export async function start(options: Options) {
 	const fileRequests = createFileRequests();
 	const changesRequests = createRequestRuns({ operation: "Workspace changes" });
 	const collection = createCollection({ collect: (signal) => changes.discover(signal) });
-	const app = createHttpApp({
-		...snapshot,
-		reloadConfiguration: () => configuration.reload(),
-		discoverChanges: collection.collect,
-		materializeChanges: changes.materialize,
-		changesRequests,
-		analysis,
-		fileRequests,
-		fileDiff: changes.fileDiff,
-		analyze: analyzer.analyze,
-		currentByteSize: changes.currentByteSize,
-		port: config.port,
-		reportError: (error) => {
-			const causes: string[] = [];
-			let current: unknown = error;
-			while (current instanceof Error && causes.length < 3) {
-				causes.push(
-					current instanceof AnalysisHandlerError ? `${current.message}: ${current.diagnostic()}` : current.message,
-				);
-				current = current.cause;
-			}
-			const message = causes
-				.join(": ")
-				.replace(/\p{Cc}/gu, " ")
-				.slice(0, 1600);
-			console.error(`Forge workspace request failed: ${message}`);
-		},
-	});
-	const listener = await createListener({ fetch: app.fetch, port: config.port });
-	let disposal: Promise<void> | undefined;
-	function close(): Promise<void> {
-		if (disposal === undefined) {
-			process.off("SIGINT", terminate);
-			process.off("SIGTERM", terminate);
-			disposal = Promise.all([
-				analysis.close(),
-				fileRequests.close(),
-				changesRequests.close(),
-				collection.close(),
-				listener.close(),
-			]).then(() => {});
-		}
-		return disposal;
-	}
-	function terminate() {
-		void close().catch(() => {
-			console.error("Forge shutdown failed");
-			process.exitCode = 1;
+	const registrations = configuration.readServers();
+	const hub = options.serverHub
+		? createServerHub({
+				servers: registrations.available ? registrations.value : null,
+				reportError: (message) => console.error(`Forge server hub failed: ${message}`),
+			})
+		: undefined;
+	let reloadTail: Promise<unknown> = Promise.resolve();
+	function reloadConfiguration() {
+		// Storage serialization alone cannot order application of the accepted snapshot.
+		const result = reloadTail.then(async () => {
+			const reloaded = await configuration.reload();
+			const accepted = configuration.readServers();
+			await hub?.replaceServers(accepted.available ? accepted.value : null);
+			return reloaded;
 		});
+		reloadTail = result.catch(() => undefined);
+		return result;
 	}
-	process.on("SIGINT", terminate);
-	process.on("SIGTERM", terminate);
-	return { address: listener.address, close, snapshot };
+	let listener: Awaited<ReturnType<typeof createListener>> | undefined;
+	try {
+		const app = createHttpApp({
+			...snapshot,
+			reloadConfiguration,
+			...(hub ? { serverHub: { inspectServerHub: hub.inspect } } : {}),
+			discoverChanges: collection.collect,
+			materializeChanges: changes.materialize,
+			changesRequests,
+			analysis,
+			fileRequests,
+			fileDiff: changes.fileDiff,
+			analyze: analyzer.analyze,
+			currentByteSize: changes.currentByteSize,
+			port: config.port,
+			reportError: (error) => {
+				const causes: string[] = [];
+				let current: unknown = error;
+				while (current instanceof Error && causes.length < 3) {
+					causes.push(
+						current instanceof AnalysisHandlerError ? `${current.message}: ${current.diagnostic()}` : current.message,
+					);
+					current = current.cause;
+				}
+				const message = causes
+					.join(": ")
+					.replace(/\p{Cc}/gu, " ")
+					.slice(0, 1600);
+				console.error(`Forge workspace request failed: ${message}`);
+			},
+		});
+		listener = await createListener({ fetch: app.fetch, port: config.port });
+		hub?.start();
+		let disposal: Promise<void> | undefined;
+		function close(): Promise<void> {
+			if (disposal === undefined) {
+				process.off("SIGINT", terminate);
+				process.off("SIGTERM", terminate);
+				disposal = Promise.all([
+					analysis.close(),
+					fileRequests.close(),
+					changesRequests.close(),
+					collection.close(),
+					listener?.close(),
+					hub?.close(),
+				]).then(() => {});
+			}
+			return disposal;
+		}
+		function terminate() {
+			void close().catch(() => {
+				console.error("Forge shutdown failed");
+				process.exitCode = 1;
+			});
+		}
+		process.on("SIGINT", terminate);
+		process.on("SIGTERM", terminate);
+		return { address: listener.address, close, snapshot };
+	} catch (error) {
+		await Promise.allSettled([
+			analysis.close(),
+			fileRequests.close(),
+			changesRequests.close(),
+			collection.close(),
+			listener?.close(),
+			hub?.close(),
+		]);
+		throw error;
+	}
 }

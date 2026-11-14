@@ -76,7 +76,7 @@ topology-only Refresh does not reopen manually collapsed ancestors.
 
 SelectionViewer's FolderContext presents server-resolved guidance in supplied order,
 using workspace or present-side owner composition from the
-[API contract](../../server/docs/protocol.md#analyze-workspace-changes). Repository
+[API contract](../../server/docs/protocol/analysis.md). Repository
 context stays separate; differing side ownership remains explicit. Identity-only
 guide roots can show their registered composition without inferring side ownership.
 

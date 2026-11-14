@@ -105,3 +105,20 @@ export type WorkspaceFileDiff = {
 			| { kind: "unsupported"; reason: FileUnsupportedReason; limitBytes?: number }
 	  ))
 );
+
+export interface ServerHubAvailability {
+	status: "unknown" | "reachable" | "unavailable";
+	checkedAt: string | null;
+	lastReachableAt: string | null;
+	error: string | null;
+	stale: boolean;
+}
+
+export interface ServerHubServers {
+	servers: {
+		id: string;
+		name: string;
+		url: string;
+		availability: ServerHubAvailability;
+	}[];
+}

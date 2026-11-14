@@ -52,7 +52,7 @@ files. The application architecture owns their responsibility and dependency map
 | Work | Read |
 | --- | --- |
 | Assign application responsibilities or change component interactions | [Application architecture](architecture.md) |
-| Change observable server behavior, file access or API schemas | [Workspace server API](../server/docs/protocol.md) |
+| Change observable server behavior, file access or API schemas | [Workspace server API](../server/docs/protocol/overview.md) |
 | Change review presentation, frontend data ownership or interaction state | [UI architecture](../ui/docs/architecture.md) |
 | Work within a server component | Its local `docs/UnitGuide.md` |
 | Set up, run, configure or check the application | [Forge README](../README.md) |

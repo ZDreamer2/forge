@@ -95,6 +95,7 @@ export async function loadServers(path: string): Promise<Loaded<readonly ServerR
 	const loaded = await yaml(path, ["servers"]);
 	const raw = Object.hasOwn(loaded.value, "servers") ? loaded.value.servers : [];
 	if (!Array.isArray(raw)) throw new ConfigurationError("servers: expected an ordered list");
+	if (raw.length > 64) throw new ConfigurationError("servers: at most 64 registrations are allowed");
 	const seen = new Set<string>();
 	const registrations = raw.map((entry: unknown, index) => {
 		const field = `servers[${index}]`;
@@ -102,11 +103,20 @@ export async function loadServers(path: string): Promise<Loaded<readonly ServerR
 		fields(data, ["id", "name", "url"], field);
 		if (typeof data.id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(data.id))
 			throw new ConfigurationError(`${field}.id: expected a nonempty ASCII slug`);
+		if (Buffer.byteLength(data.id, "utf8") > 128)
+			throw new ConfigurationError(`${field}.id: at most 128 UTF-8 bytes are allowed`);
 		if (seen.has(data.id)) throw new ConfigurationError(`${field}.id: duplicate registration ID`);
 		seen.add(data.id);
 		if (typeof data.name !== "string" || !data.name.trim())
 			throw new ConfigurationError(`${field}.name: expected a nonblank display string`);
-		return Object.freeze({ id: data.id, name: data.name, url: serverUrl(data.url, `${field}.url`) });
+		if (Buffer.byteLength(data.name, "utf8") > 256)
+			throw new ConfigurationError(`${field}.name: at most 256 UTF-8 bytes are allowed`);
+		if (typeof data.url === "string" && Buffer.byteLength(data.url, "utf8") > 2048)
+			throw new ConfigurationError(`${field}.url: at most 2048 UTF-8 bytes are allowed`);
+		const url = serverUrl(data.url, `${field}.url`);
+		if (Buffer.byteLength(url, "utf8") > 2048)
+			throw new ConfigurationError(`${field}.url: normalized URL exceeds 2048 UTF-8 bytes`);
+		return Object.freeze({ id: data.id, name: data.name, url });
 	});
 	return { value: Object.freeze(registrations), provenance: loaded.provenance };
 }

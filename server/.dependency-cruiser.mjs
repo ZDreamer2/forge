@@ -49,11 +49,12 @@ export default {
 			from: {
 				path: "^src/components/([^/]+)/",
 				pathNot:
-					"^src/components/(workspace-repositories|workspace-tree|tree-sources|tree-analysis|guide-extensions|http-api)/",
+					"^src/components/(workspace-repositories|workspace-tree|tree-sources|tree-analysis|guide-extensions|http-api|server-hub)/",
 			},
 			to: { path: "^src/components/", pathNot: "^src/components/$1/" },
 		},
 		...Object.entries({
+			"server-hub": ["configuration"],
 			"workspace-repositories": ["workspace-config"],
 			"workspace-tree": ["workspace-config"],
 			"tree-sources": ["workspace-tree", "workspace-repositories", "workspace-config"],
@@ -67,6 +68,7 @@ export default {
 				"workspace-config",
 				"api-contract",
 				"configuration",
+				"server-hub",
 			],
 		}).map(([component, dependencies]) => ({
 			name: `${component}-component-edges`,
@@ -101,6 +103,18 @@ export default {
 			severity: "error",
 			from: { path: "^src/components/http-api/" },
 			to: { path: "^src/components/configuration/", dependencyTypesNot: ["type-only"] },
+		},
+		{
+			name: "hub-configuration-types-only",
+			severity: "error",
+			from: { path: "^src/components/server-hub/" },
+			to: { path: "^src/components/configuration/", dependencyTypesNot: ["type-only"] },
+		},
+		{
+			name: "http-hub-types-only",
+			severity: "error",
+			from: { path: "^src/components/http-api/" },
+			to: { path: "^src/components/server-hub/", dependencyTypesNot: ["type-only"] },
 		},
 		{
 			name: "no-unlisted-third-party-runtime",

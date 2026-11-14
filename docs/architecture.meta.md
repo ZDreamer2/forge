@@ -18,7 +18,7 @@ Editing context for [application architecture](architecture.md).
 ## MAY read for additional context
 
 - [UI architecture](../ui/docs/architecture.md) - Owns frontend component/data responsibilities and presentation-state boundaries.
-- [API contract](../server/docs/protocol.md) - For observable semantics and effects.
+- [API contract](../server/docs/protocol/overview.md) - For observable semantics and effects.
 - [README](../README.md) - For configuration and commands.
 - [Server planning](../server/docs/forge/on-plan.md) - For service conventions; graph rules live in the installation and server dependency-cruiser configs.
 

@@ -98,6 +98,15 @@ test("CLI validates serve arguments and rejects the removed policy diagnostic", 
 			["serve", "--workspace"],
 			["serve", root],
 			["serve", "--workspace", root, "extra"],
+			["serve", "--server-hub"],
+			["serve", "--workspace", ""],
+			["serve", "--workspace", "--server-hub"],
+			["serve", "--workspace", root, "--workspace", root],
+			["serve", "--server-hub", "--workspace", root, "--server-hub"],
+			["serve", "--workspace", root, "--server-hub=true"],
+			["serve", "--workspace", root, "--server-hub", "true"],
+			["serve", "--workspace", root, "--unknown"],
+			["--help", "extra"],
 			["inspect-workspace", configuration, ".", "a.ts"],
 		]) {
 			const process = run(args);
@@ -143,7 +152,11 @@ test("CLI uses selected .env, serves fresh read-only changes and releases port o
 				join(root, ".env"),
 				`ZD_AI_FORGE_PORT=${reservation.port}\nPRIVATE_TOKEN=must-not-appear-in-startup\n`,
 			);
-			const process = run(["serve", "--workspace", root], { PRIVATE_TOKEN: "must-not-appear-in-startup" });
+			const args =
+				signal === "SIGINT"
+					? ["serve", "--server-hub", "--workspace", root]
+					: ["serve", "--workspace", root, "--server-hub"];
+			const process = run(args, { PRIVATE_TOKEN: "must-not-appear-in-startup" });
 			try {
 				await ready(process);
 				const address = `http://127.0.0.1:${reservation.port}`;
@@ -160,6 +173,7 @@ test("CLI uses selected .env, serves fresh read-only changes and releases port o
 						{ path: "absent", status: "missing" },
 					],
 				});
+				assert.deepEqual(await (await fetch(`${address}/api/server-hub/servers`)).json(), { servers: [] });
 				assert.equal((await fetch(`${address}/unknown`)).status, 404);
 				assert.equal((await fetch(address, { headers: { origin: "http://foreign" } })).status, 403);
 				const foreignStatus = await new Promise<number | undefined>((resolve, reject) => {
@@ -254,6 +268,7 @@ test("CLI shares active GET/HEAD work and shutdown reaps a TERM-resistant Git ch
 		await ready(server);
 		const address = server.stdout().trim().split("\n").at(-1);
 		assert.ok(address);
+		assert.equal((await fetch(`${address}/api/server-hub/servers`)).status, 404);
 		const firstClient = new AbortController();
 		const first = fetch(`${address}/api/changes`, { signal: firstClient.signal }).catch(() => undefined);
 		for (let attempt = 0; attempt < 100; attempt++) {

@@ -1,6 +1,11 @@
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
-import { apiError, createConfigurationRoutes, createWorkspaceRoutes } from "../components/http-api/index.ts";
+import {
+	apiError,
+	createConfigurationRoutes,
+	createServerHubRoutes,
+	createWorkspaceRoutes,
+} from "../components/http-api/index.ts";
 import { AnalysisHandlerError } from "../components/tree-analysis/index.ts";
 import { createUiAssetRoutes } from "../components/ui-assets/index.ts";
 import { AccessRejectedError, createRequestGuard } from "../lib/loopback-access/index.ts";
@@ -8,6 +13,7 @@ import { AccessRejectedError, createRequestGuard } from "../lib/loopback-access/
 type Deps = import("../components/http-api/index.ts").WorkspaceRouteDeps &
 	import("../components/http-api/index.ts").ConfigurationRouteDeps & {
 		port: number;
+		serverHub?: import("../components/http-api/index.ts").ServerHubRouteDeps;
 		uiDirectory?: string;
 		reportError?: (error: Error) => void;
 	};
@@ -27,6 +33,7 @@ export function createHttpApp({
 	fileRequests,
 	fileDiff,
 	reloadConfiguration,
+	serverHub,
 	reportError,
 	uiDirectory = fileURLToPath(new URL("../../../ui/", import.meta.url)),
 }: Deps) {
@@ -42,6 +49,7 @@ export function createHttpApp({
 	app.use("*", createRequestGuard({ port }));
 	app.route("/", createUiAssetRoutes({ directory: uiDirectory }));
 	app.route("/api", createConfigurationRoutes({ reloadConfiguration }));
+	if (serverHub) app.route("/api", createServerHubRoutes(serverHub));
 	app.route(
 		"/api",
 		createWorkspaceRoutes({

@@ -13,6 +13,8 @@ export type {
 	FileSide,
 	FileUnsupportedReason,
 	GuidanceEntry,
+	ServerHubAvailability,
+	ServerHubServers,
 	WorkspaceAnalysis,
 	WorkspaceChanges,
 	WorkspaceFileDiff,

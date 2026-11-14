@@ -22,8 +22,9 @@ results, with no server implementation or configuration exposed.
 Workspace configuration is the `forge-workspace.yaml` registry Python Forge also
 reads.
 
-The [HTTP API contract](../server/docs/protocol.md) owns observable behavior;
-the [README](../README.md) owns configuration and development commands.
+The [HTTP API contract](../server/docs/protocol/overview.md) and its linked detail contracts
+own observable behavior; the [README](../README.md) owns configuration and
+development commands.
 
 ## Server components
 
@@ -35,12 +36,13 @@ its design context.
 | --- | --- | --- |
 | `workspace-config` | Trusted authored workspace knowledge: registered codebases, declared repositories, display name and guide composition | None |
 | `configuration` | Accepted user hub settings and workspace current-issue storage, with explicit independent concern reload | None |
+| `server-hub` | Explicit registered targets and centrally collected availability; background probing and reconciliation | configuration (type-only) |
 | `workspace-repositories` | Observed participating repositories: startup resolution, status, path participation | workspace-config |
 | `workspace-tree` | Canonical tree vocabulary, ownership and derived review data | workspace-config |
 | `tree-sources` | Builds base trees from sources of workspace state, with bounded source capabilities | workspace-tree, workspace-repositories, workspace-config |
 | `tree-analysis` | Schedules applicable guide hooks per node over a run-local tree facade and finalizes review metadata | workspace-tree, workspace-config |
 | `guide-extensions` | Discovers and validates trusted guide modules; publishes the authoring contract listing engine-known hooks | workspace-config, tree-analysis |
-| `http-api` | Domain endpoints: selects a source, builds and analyzes its tree, maps results to the wire contract; validates reload requests | tree-sources, tree-analysis, workspace-tree, workspace-repositories, workspace-config, api-contract; configuration (type-only) |
+| `http-api` | Domain endpoints: selects a source, builds and analyzes its tree, maps results to the wire contract; validates reload requests | tree-sources, tree-analysis, workspace-tree, workspace-repositories, workspace-config, api-contract; configuration, server-hub (type-only) |
 | `api-contract` | Browser-safe wire vocabulary consumed by server and UI; contract changes also require consumer verification | None |
 | `ui-assets` | Delivers installed HTML and bundled assets through protected HTTP routes | None |
 
@@ -52,6 +54,12 @@ ownership, line totals and review metadata from the server; the UI may derive
 display projections from that vocabulary.
 
 `app` constructs components and owns HTTP assembly and process configuration.
+An explicit startup role constructs the hub, starts probes after listening and drains
+it during shutdown. App serializes configuration reload with accepted-registration
+application; the configuration owner retains storage authority. Hosting does not
+consume `serverHubUrl` or grant authority over registered workspaces. The
+[hub guide](../server/src/components/server-hub/docs/UnitGuide.md) owns observation
+and reconciliation semantics.
 `lib/git` owns bounded Git processes and cancellation; `lib/loopback-access` owns
 the Host/Origin guard. Domain components receive dependencies from composition.
 

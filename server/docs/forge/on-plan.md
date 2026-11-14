@@ -8,5 +8,5 @@ each affected component's `docs/UnitGuide.md`; consumption and limitations are i
 publication and aggregate acceptance belong to the repository root. The server owns
 its browser-safe API vocabulary in `server/src/components/api-contract/index.ts`; this is the public
 entry available to UI source, not permission to import other server units. The
-[HTTP API contract](../protocol.md) owns behavioral semantics. UI implementation is
+[HTTP API contract](../protocol/overview.md) and its linked satellites own behavioral semantics. UI implementation is
 not a server unit.

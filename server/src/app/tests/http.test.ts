@@ -47,7 +47,14 @@ test("HTTP page and API operations have consistent routing failures", async (t) 
 	assert.equal(response.status, 200);
 	assert.deepEqual(await response.json(), { workspace: { root: "/selected", name: "Selected" }, repositories: [] });
 	assert.equal(response.headers.get("access-control-allow-origin"), null);
-	for (const path of ["/workspace", "/changes", "/api/unknown", "/assets/missing.js", "/assets/%2fsecret.js"]) {
+	for (const path of [
+		"/workspace",
+		"/changes",
+		"/api/unknown",
+		"/api/server-hub/servers",
+		"/assets/missing.js",
+		"/assets/%2fsecret.js",
+	]) {
 		for (const method of ["GET", "OPTIONS"]) {
 			const missing = await app.request(path, { method, headers });
 			assert.equal(missing.status, 404);
@@ -104,7 +111,14 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 	let collections = 0;
 	const reported: Error[] = [];
 	let reloads = 0;
+	let inspections = 0;
 	const app = createHttpApp({
+		serverHub: {
+			inspectServerHub: () => {
+				inspections++;
+				return { servers: [] };
+			},
+		},
 		reloadConfiguration: async () => {
 			reloads++;
 			throw new Error("secret configuration failure");
@@ -146,6 +160,7 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 		"/api/changes/analysis",
 		"/api/changes/file",
 		"/api/unknown",
+		"/api/server-hub/servers",
 		"/api/configuration/reload",
 	]) {
 		for (const headers of [
@@ -168,6 +183,21 @@ test("access rejection precedes all paths and unexpected failures reveal no diag
 			}
 		}
 	}
+	assert.equal(inspections, 0);
+	const hubHeaders = { host: "127.0.0.1:43210" };
+	const hub = await app.request("/api/server-hub/servers", { headers: hubHeaders });
+	assert.equal(hub.status, 200);
+	assert.deepEqual(await hub.json(), { servers: [] });
+	const hubHead = await app.request("/api/server-hub/servers", { method: "HEAD", headers: hubHeaders });
+	assert.equal(hubHead.status, 200);
+	assert.equal(await hubHead.text(), "");
+	const hubOptions = await app.request("/api/server-hub/servers", { method: "OPTIONS", headers: hubHeaders });
+	assert.equal(hubOptions.status, 405);
+	assert.equal(hubOptions.headers.get("allow"), "GET, HEAD");
+	for (const response of [hub, hubHead, hubOptions]) {
+		assert.equal(response.headers.get("access-control-allow-origin"), null);
+	}
+	assert.equal(inspections, 2);
 	assert.equal(reported.length, 0);
 	assert.equal(reloads, 0);
 	assert.equal(reached, false);

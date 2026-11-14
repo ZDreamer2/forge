@@ -21,7 +21,7 @@ App ownership shares active discovery and clears it on settlement. Each request
 owns its materialization/patch work independently. Bounded repository lanes cancel
 and join peers before propagating failure. Omitting unrelated statistics also
 excludes their failures from a selected-file operation; the
-[protocol](../../../../docs/protocol.md) owns that failure scope and observable limits.
+[change contract](../../../../docs/protocol/changes.md) owns that failure scope and observable limits.
 
 ## Comparison and patch context
 

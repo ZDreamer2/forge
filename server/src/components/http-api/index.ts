@@ -3,4 +3,6 @@ export { createConfigurationRoutes } from "./internal/configuration-routes.ts";
 export { resolveWorkspaceGuidance } from "./internal/guidance.ts";
 export type { WorkspaceRouteDeps } from "./internal/routes.ts";
 export { createWorkspaceRoutes } from "./internal/routes.ts";
+export type { ServerHubRouteDeps } from "./internal/server-hub-routes.ts";
+export { createServerHubRoutes } from "./internal/server-hub-routes.ts";
 export { apiError } from "./internal/wire.ts";

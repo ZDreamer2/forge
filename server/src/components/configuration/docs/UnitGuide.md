@@ -20,8 +20,11 @@ interprets no authored workspace registry and imports no other component.
 YAML is strict data: unknown fields, duplicate keys, explicit null settings and
 invalid shapes reject their concern. URLs are HTTP(S) base URLs, normalized with
 a trailing slash while preserving base paths. Registration IDs are unique ASCII
-slugs; duplicate URLs are allowed. Registration use and remote availability belong
-to consumers, outside structural validation.
+slugs; duplicate URLs are allowed. Lists contain at most 64 registrations. ID, name
+and URL limits are 128, 256 and 2048 UTF-8 bytes respectively; URLs are checked both
+raw and normalized. These bounds constrain runtime fan-out and response size.
+Registration use and remote availability belong to the
+[hub](../../server-hub/docs/UnitGuide.md), outside structural validation.
 
 Initialization and explicit reload use the same validators. A present invalid or
 unreadable initial source leaves its concern unavailable with a bounded field-level
@@ -64,6 +67,6 @@ the shared lock prevents cross-process lost updates. A crash may leave a lock:
 the timeout diagnostic identifies its path and requires confirming no writer
 remains before manual cleanup. There is no automatic stale-lock recovery.
 
-The [HTTP contract](../../../../docs/protocol.md#reload-local-configuration) owns
+The [HTTP contract](../../../../docs/protocol/overview.md#reload-local-configuration) owns
 wire validation and privacy. The [README](../../../../../README.md#local-configuration-and-reload)
 owns file examples, operating commands and recovery instructions.

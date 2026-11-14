@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { request } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -686,4 +687,222 @@ test("protected reload recovers independent local concerns while startup declara
 	assert.equal(partial.concerns.currentIssue?.source.path, statePath);
 	assert.deepEqual(await (await fetch(`${server.address}/api/workspace`)).json(), identity);
 	assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+});
+
+async function readHub(address: string) {
+	const response = await fetch(`${address}/api/server-hub/servers`, { signal: AbortSignal.timeout(2000) });
+	assert.equal(response.status, 200);
+	return (await response.json()) as import("../../components/server-hub/index.ts").ServerHubSnapshot;
+}
+
+async function waitForHub(
+	address: string,
+	accept: (snapshot: import("../../components/server-hub/index.ts").ServerHubSnapshot) => boolean,
+) {
+	for (let attempt = 0; attempt < 200; attempt++) {
+		const snapshot = await readHub(address);
+		if (accept(snapshot)) return snapshot;
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	throw new Error("Hub observation timed out");
+}
+
+test("a hosted hub probes explicit remote and self registrations and applies independent reloads", async (t) => {
+	const remoteInput = await fixture(t);
+	const hostInput = await fixture(t);
+	const remote = await start(remoteInput.options);
+	t.after(remote.close);
+	const userDirectory = join(hostInput.directory, "user-config/zd-forge");
+	const registrationsPath = join(userDirectory, "server-hub.yaml");
+	const selfUrl = `http://127.0.0.1:${hostInput.options.env.ZD_AI_FORGE_PORT}/`;
+	const unavailableUrl = `http://127.0.0.1:${await availablePort()}/`;
+	const registrations = [
+		{ id: "remote", name: "Remote workspace", url: `${remote.address}/` },
+		{ id: "self", name: "Explicit self", url: selfUrl },
+		{ id: "unavailable", name: "Unavailable workspace", url: unavailableUrl },
+	];
+	await writeFixtureFile(registrationsPath, JSON.stringify({ servers: registrations }));
+	await writeFixtureFile(join(userDirectory, "config.yaml"), "serverHubUrl: https://unused-hub.invalid/base/\n");
+	const host = await start({ ...hostInput.options, serverHub: true });
+	t.after(host.close);
+	const observed = await waitForHub(host.address, (snapshot) =>
+		snapshot.servers.every((server) => server.availability.status !== "unknown"),
+	);
+	assert.deepEqual(
+		observed.servers.map(({ availability: _availability, ...server }) => server),
+		registrations,
+	);
+	assert.deepEqual(
+		observed.servers.map((server) => server.availability.status),
+		["reachable", "reachable", "unavailable"],
+	);
+	assert.equal((await fetch(`${remote.address}/api/server-hub/servers`)).status, 404);
+	for (const server of [remote, host]) {
+		assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+		assert.equal((await fetch(`${server.address}/api/workspace`)).status, 200);
+	}
+	assert.equal(
+		(await fetch(`${host.address}/api/server-hub/servers`, { headers: { origin: "http://foreign.invalid" } })).status,
+		403,
+	);
+	const foreignHost = await new Promise<number | undefined>((resolve, reject) => {
+		const probe = request(
+			`${host.address}/api/server-hub/servers`,
+			{ headers: { host: "foreign.invalid" } },
+			(response) => {
+				response.resume();
+				response.once("end", () => resolve(response.statusCode));
+			},
+		);
+		probe.once("error", reject);
+		probe.end();
+	});
+	assert.equal(foreignHost, 403);
+	const reload = async () => {
+		const response = await fetch(`${host.address}/api/configuration/reload`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "{}",
+			signal: AbortSignal.timeout(2000),
+		});
+		assert.equal(response.status, 200);
+		return (await response.json()) as import("../../components/configuration/index.ts").ConfigurationReloadResult;
+	};
+	await writeFixtureFile(registrationsPath, "servers: null\n");
+	const rejected = await reload();
+	assert.equal(rejected.concerns.servers.status, "rejected");
+	assert.equal(rejected.concerns.servers.retainedPriorValue, true);
+	assert.deepEqual(await readHub(host.address), observed);
+	await writeFixtureFile(join(userDirectory, "config.yaml"), "serverHubUrl: null\n");
+	const renamed = { ...registrations[0], name: "Renamed workspace" };
+	await writeFixtureFile(registrationsPath, JSON.stringify({ servers: [renamed] }));
+	const partial = await reload();
+	assert.equal(partial.ok, false);
+	assert.equal(partial.concerns.serverHubUrl.status, "rejected");
+	assert.equal(partial.concerns.servers.status, "accepted");
+	const retained = await readHub(host.address);
+	assert.equal(retained.servers.length, 1);
+	const retainedServer = retained.servers[0];
+	assert.ok(retainedServer);
+	assert.deepEqual({ id: retainedServer.id, name: retainedServer.name, url: retainedServer.url }, renamed);
+	assert.equal(retainedServer.availability.status, "reachable");
+	assert.ok(retainedServer.availability.lastReachableAt);
+	assert.ok(retainedServer.availability.lastReachableAt >= (observed.servers[0]?.availability.lastReachableAt ?? ""));
+	await writeFixtureFile(join(userDirectory, "config.yaml"), "serverHubUrl: https://still-unused.invalid/\n");
+	await writeFixtureFile(registrationsPath, JSON.stringify({ servers: [registrations[1]] }));
+	assert.equal((await reload()).ok, true);
+	await waitForHub(host.address, (snapshot) => snapshot.servers[0]?.availability.status === "reachable");
+	assert.equal((await fetch(`${host.address}/api/changes`)).status, 200);
+});
+
+test("host inspection distinguishes an unavailable initial list from valid empty defaults and recovers", async (t) => {
+	for (const initial of [undefined, "servers: []\n", "servers: null\n"]) {
+		const input = await fixture(t);
+		const registrations = join(input.directory, "user-config/zd-forge/server-hub.yaml");
+		if (initial !== undefined) await writeFixtureFile(registrations, initial);
+		const diagnostics = t.mock.method(console, "error", () => {});
+		const server = await start({ ...input.options, serverHub: true });
+		t.after(server.close);
+		const response = await fetch(`${server.address}/api/server-hub/servers`);
+		assert.equal(response.status, initial === "servers: null\n" ? 503 : 200);
+		if (response.status === 503) {
+			assert.equal(diagnostics.mock.calls.length, 1);
+			assert.equal((await fetch(`${server.address}/api/changes`)).status, 200);
+			await writeFixtureFile(registrations, "servers: []\n");
+			const reloaded = await fetch(`${server.address}/api/configuration/reload`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: "{}",
+			});
+			assert.equal(reloaded.status, 200);
+			assert.deepEqual(await readHub(server.address), { servers: [] });
+		} else {
+			assert.deepEqual(await response.json(), { servers: [] });
+		}
+		await server.close();
+		diagnostics.mock.restore();
+	}
+});
+
+test("app serializes overlapping reloads through accepted-list application and superseded work drainage", {
+	timeout: 10000,
+}, async (t) => {
+	const input = await fixture(t);
+	const registrations = join(input.directory, "user-config/zd-forge/server-hub.yaml");
+	await writeFixtureFile(registrations, "servers: [{id: old, name: Old, url: 'http://old.invalid/'}]\n");
+	const nativeFetch = globalThis.fetch;
+	let began: (() => void) | undefined;
+	const started = new Promise<void>((resolve) => {
+		began = resolve;
+	});
+	let release: (() => void) | undefined;
+	let superseded: (() => void) | undefined;
+	const aborted = new Promise<void>((resolve) => {
+		superseded = resolve;
+	});
+	t.mock.method(globalThis, "fetch", (url: string | URL | Request, options?: RequestInit) => {
+		if (String(url) !== "http://old.invalid/api/workspace") {
+			return Promise.resolve(Response.json({ workspace: { root: "/remote", name: "Remote" }, repositories: [] }));
+		}
+		began?.();
+		return new Promise<Response>((_resolve, reject) => {
+			release = () => reject(new Error("Superseded probe drained"));
+			options?.signal?.addEventListener("abort", () => superseded?.(), { once: true });
+		});
+	});
+	const server = await start({ ...input.options, serverHub: true });
+	t.after(async () => {
+		release?.();
+		await server.close();
+	});
+	await started;
+	const reload = () =>
+		nativeFetch(`${server.address}/api/configuration/reload`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "{}",
+			signal: AbortSignal.timeout(2000),
+		});
+	await writeFixtureFile(registrations, "servers: [{id: first, name: First, url: 'http://first.invalid/'}]\n");
+	const first = reload();
+	await aborted;
+	await writeFixtureFile(registrations, "servers: []\n");
+	let secondCompleted = false;
+	const second = reload().then((response) => {
+		secondCompleted = true;
+		return response;
+	});
+	const during = await nativeFetch(`${server.address}/api/server-hub/servers`);
+	assert.equal(during.status, 200);
+	assert.equal(((await during.json()) as { servers: { id: string }[] }).servers[0]?.id, "first");
+	assert.equal(secondCompleted, false);
+	release?.();
+	for (const response of await Promise.all([first, second])) {
+		assert.equal(response.status, 200);
+		assert.equal(((await response.json()) as { ok: boolean }).ok, true);
+	}
+	const final = await nativeFetch(`${server.address}/api/server-hub/servers`);
+	assert.deepEqual(await final.json(), { servers: [] });
+	await server.close();
+});
+
+test("occupied-port host startup creates no probe work or signal handlers", async (t) => {
+	const input = await fixture(t);
+	await writeFixtureFile(
+		join(input.directory, "user-config/zd-forge/server-hub.yaml"),
+		"servers: [{id: remote, name: Remote, url: 'http://never-probed.invalid/'}]\n",
+	);
+	const port = createServer();
+	await new Promise<void>((resolve, reject) => {
+		port.once("error", reject);
+		port.listen(Number(input.options.env.ZD_AI_FORGE_PORT), "127.0.0.1", resolve);
+	});
+	t.after(() => new Promise<void>((resolve) => port.close(() => resolve())));
+	const fetches = t.mock.method(globalThis, "fetch", async () => {
+		throw new Error("Unexpected hub probe");
+	});
+	const previous = signalListeners();
+	await assert.rejects(start({ ...input.options, serverHub: true }), { code: "EADDRINUSE" });
+	assert.equal(fetches.mock.calls.length, 0);
+	assert.deepEqual(signalListeners(), previous);
 });

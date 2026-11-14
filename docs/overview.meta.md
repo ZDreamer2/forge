@@ -21,7 +21,7 @@ Specification for creating and editing the [Forge codebase overview](overview.md
 
 ## MAY read for additional context before editing overview.md
 
-- [Workspace server API](../server/docs/protocol.md) - Relevant when changing how the overview routes readers to API behavior.
+- [Workspace server API](../server/docs/protocol/overview.md) - Relevant when changing how the overview routes readers to API behavior.
 - [UI architecture](../ui/docs/architecture.md) - Relevant when changing frontend source or ownership orientation.
 - [Release operations](releasing.md) - Relevant when changing distribution and publication routes.
 
