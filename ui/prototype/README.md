@@ -6,6 +6,7 @@ Open `index.html` in a browser. No installation, build, live Forge server, or ne
 
 ## Explore the demo
 
+- Explore the header's Bico 1–5, Eden and Admin destinations. Bico 2 is current; example dots include reachable, unavailable, unknown and stale observations. Narrow the window to reveal More, which lists every destination and its status. Clicking previews same-tab navigation without leaving the Bico 2 fixture.
 - Toggle file types and importance categories. The None importance category starts disabled; all types and High/Medium/Low start enabled. Select-all/deselect-all icons affect both dimensions.
 - Explore one workspace tree: the `Bico 2` root (workspace-relative path `.`) contains the nested repository at `library/tools/forge`, marked with the repository icon. Filters prune all empty branches, including repository roots; ancestor summaries include matching nested-repository files once.
 - Select files or folders; click the selected name again to clear selection. Ctrl+Click selects and copies its workspace-relative path.
@@ -42,7 +43,8 @@ Core/Domain folders containing High files remain expanded while their Low-only b
 - `index.html`: application shell.
 - `styles.css`: appearance and pane layout.
 - `fixtures.js`: example changes and analysis signals across two repositories.
-- `app.js`: HTML rendering and interaction state.
+- `app.js`: HTML rendering and review interaction state.
+- `switcher.js`: fictional workspace destinations, responsive overflow and navigation previews.
 - `icons.js`: inline adaptations of local SVG assets.
 - `fonts/`: JetBrains Mono 2.304 and its license, `OFL.txt`.
 - `icons/`: Material Icon Theme assets, local adaptations, source revision, and license.

@@ -172,7 +172,6 @@
 		const visible = visibleFiles();
 		folders = new Map();
 		$("count").textContent = `· ${visible.length} of ${all.length}`;
-		$("totals").innerHTML = `<span><strong>${all.length}</strong> files</span>${counters(all)}`;
 		const shown = [];
 		const repositories = new Map(fixtures.map((file) => [file.root, file.repo]));
 		const codebases = new Map(window.forgeCodebases.map((codebase) => [codebase.root, codebase]));
@@ -361,7 +360,7 @@
 			renderNotice();
 			return;
 		}
-		$("refresh").querySelector("span").textContent = "Refreshed just now";
+		$("refresh").title = "Refresh workspace · refreshed just now";
 		render();
 	}
 	document.querySelector(".filter-bar").addEventListener("click", (event) => {
@@ -385,7 +384,7 @@
 	$("select-all-filters").addEventListener("click", () => setAllFilters(true));
 	$("deselect-all-filters").addEventListener("click", () => setAllFilters(false));
 	$("scenario").addEventListener("change", () => {
-		$("refresh").querySelector("span").textContent = "Refresh";
+		$("refresh").title = "Refresh workspace";
 		render();
 	});
 	$("refresh").addEventListener("click", refresh);

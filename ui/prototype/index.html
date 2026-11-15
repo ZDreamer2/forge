@@ -8,12 +8,17 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="sidebar-header"><div class="workspace-identity"><span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path class="mark-letter" d="M9 7h15l-2 4H13v4h8l-2 4h-6v7H9z"/><path class="mark-glint" d="M9.5 7.5h13.7M9.5 8v17"/></svg></span><h1 title="~/bico/newbicotender.ru">Bico 2</h1></div></div><div class="header-separator" aria-hidden="true"></div>
-    <div class="workspace-actions"><div id="totals" title="All workspace changes · HEAD → working tree, including untracked files"></div><button type="button" id="refresh" class="refresh">↻ <span>Refresh</span></button>
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path class="mark-letter" d="M9 7h15l-2 4H13v4h8l-2 4h-6v7H9z"/><path class="mark-glint" d="M9.5 7.5h13.7M9.5 8v17"/></svg></span>
+    <nav id="server-switcher" class="server-switcher" aria-label="Workspaces">
+      <div id="server-strip" class="server-strip"></div>
+      <details id="server-overflow" class="server-overflow" hidden><summary>More <span aria-hidden="true">▾</span></summary><div class="server-menu"><div class="server-menu-heading">Workspaces</div><div id="server-list"></div><p>Availability observed by the hub, not agent readiness.</p></div></details>
+    </nav>
+    <div class="workspace-actions">
       <button type="button" class="icon-button shortcut-help" aria-label="Keyboard shortcuts" data-tooltip="&lt;table class=&quot;shortcut-table&quot;&gt;&lt;caption&gt;Shortcuts&lt;/caption&gt;&lt;tbody&gt;&lt;tr&gt;&lt;th scope=&quot;row&quot;&gt;&lt;kbd&gt;Ctrl&lt;/kbd&gt; + click&lt;/th&gt;&lt;td&gt;Select and copy a tree item’s path&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th scope=&quot;row&quot;&gt;&lt;kbd&gt;←&lt;/kbd&gt; / &lt;kbd&gt;→&lt;/kbd&gt;&lt;/th&gt;&lt;td&gt;Resize sidebar when divider is focused&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th scope=&quot;row&quot;&gt;&lt;kbd&gt;Esc&lt;/kbd&gt;&lt;/th&gt;&lt;td&gt;Dismiss tooltip&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M5 7h1m3 0h1m3 0h1M5 10h1m3 0h1m3 0h1M6 13h8"/></svg></button>
       <details class="prototype-info"><summary title="Prototype information and examples" aria-label="Prototype information and examples">i</summary><div class="prototype-panel"><strong>Design prototype</strong><p>Fictional workspace data. This page does not read your checkout.</p><label class="scenario-label">Example <select id="scenario"><option value="normal">Workspace changes</option><option value="large">100-file workspace</option><option value="failed">Refresh failed</option><option value="empty">No changes</option></select></label><p>Counts and excerpts are authored separately. Diff rendering and context expansion are illustrative; production will use Pierre.</p></div></details>
     </div>
   </header>
+  <div id="switch-preview" class="switch-preview" role="status" hidden><span></span><button type="button" aria-label="Dismiss navigation preview">×</button></div>
   <div id="notice" role="status"></div>
   <main class="review">
     <aside id="sidebar">
@@ -25,7 +30,7 @@
         <div class="filter-actions"><button type="button" id="select-all-filters" class="icon-button" title="Select all types and importance levels" aria-label="Select all types and importance levels"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="m6 10 3 3 5-6"/></svg></button><button type="button" id="deselect-all-filters" class="icon-button" title="Deselect all types and importance levels" aria-label="Deselect all types and importance levels"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="m7 7 6 6m0-6-6 6"/></svg></button><button type="button" id="folder-counters" class="icon-button folder-counters-toggle" aria-label="Show folder counters" aria-pressed="false" title="Show folder counters (file and repository counters always visible)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6V4h6l2 2h8v10H2zM5 9h3m-1.5-1.5v3M11 9h4M5 13h3m3 0h4"/></svg></button></div>
       </section>
       <div class="tree-content">
-        <div class="visible-summary"><div class="changes-heading"><div class="tree-actions"><button type="button" id="collapse" class="icon-button" title="Collapse all" aria-label="Collapse all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 3 4 4 4-4M6 17l4-4 4 4M4 10h12"/></svg></button><button type="button" id="expand" class="icon-button" title="Expand all" aria-label="Expand all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 4-4 4 4M6 14l4 4 4-4M4 10h12"/></svg></button></div><h2>Changes <span id="count"></span></h2></div><div id="visible-summary"></div></div>
+        <div class="visible-summary"><div class="changes-heading"><div class="tree-actions"><button type="button" id="collapse" class="icon-button" title="Collapse all" aria-label="Collapse all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 3 4 4 4-4M6 17l4-4 4 4M4 10h12"/></svg></button><button type="button" id="expand" class="icon-button" title="Expand all" aria-label="Expand all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 4-4 4 4M6 14l4 4 4-4M4 10h12"/></svg></button></div><h2>Changes <span id="count"></span></h2><button type="button" id="refresh" class="icon-button refresh" title="Refresh workspace" aria-label="Refresh workspace"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 8a6 6 0 1 0 0 4M16 3v5h-5"/></svg></button></div><div id="visible-summary"></div></div>
         <nav id="tree" aria-label="Changed files"></nav>
       </div>
     </aside>
@@ -36,5 +41,6 @@
   <script src="fixtures.js"></script>
   <script src="icons.js"></script>
   <script src="app.js"></script>
+  <script src="switcher.js"></script>
 </body>
 </html>

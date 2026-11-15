@@ -55,22 +55,10 @@ summary:focus-visible,
 	flex-shrink: 0;
 	border-bottom: 1px solid var(--line);
 	display: flex;
-	align-items: stretch;
-}
-.sidebar-header {
-	width: var(--sidebar-width);
-	flex-shrink: 0;
-	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
+	gap: 16px;
 	padding: 0 10px;
 	background: #fafbf9;
-}
-.header-separator {
-	width: 5px;
-	flex-shrink: 0;
-	border-left: 1px solid var(--line);
 }
 .workspace-identity {
 	display: flex;
@@ -152,18 +140,11 @@ h2 {
 	display: flex;
 	align-items: center;
 	gap: 17px;
-	flex: 1;
+	flex-shrink: 0;
 	min-width: 0;
-	padding: 0 26px;
 }
 .workspace-actions .shortcut-help {
 	margin-left: auto;
-}
-#totals {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	font-size: 11px;
 }
 .added {
 	color: #27865a;
@@ -172,9 +153,142 @@ h2 {
 	color: #b36055;
 }
 .refresh {
+	margin-left: 6px;
+	flex-shrink: 0;
+}
+.server-destination[hidden],
+.server-overflow[hidden],
+.switch-preview[hidden] {
+	display: none;
+}
+.server-switcher {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+}
+.server-strip {
+	display: flex;
+	gap: 4px;
+	min-width: 0;
+}
+.server-destination,
+.server-overflow > summary {
 	display: flex;
 	align-items: center;
 	gap: 8px;
+	padding: 10px 12px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	white-space: nowrap;
+	font-size: 13px;
+	color: #64716a;
+}
+.server-destination {
+	flex-shrink: 0;
+	position: relative;
+}
+.server-destination[aria-current],
+.server-overflow.contains-current > summary {
+	background: #eaf0ea;
+	color: #263e30;
+	font-weight: 650;
+}
+.server-strip .server-destination,
+.server-overflow > summary {
+	border: 1px solid #dce3dc;
+	background: #fff;
+	border-radius: 7px;
+}
+.server-strip .server-destination:hover {
+	background: #f1f5f0;
+	border-color: #b9c9bb;
+}
+.server-strip .server-destination[aria-current],
+.server-overflow.contains-current > summary {
+	background: #e5eee3;
+	border-color: #86a38b;
+	color: #263e30;
+}
+.availability-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	flex-shrink: 0;
+	background: #6b9777;
+}
+.availability-unavailable {
+	background: #b8786d;
+}
+.availability-unknown {
+	background: transparent;
+	border: 1px solid #8b968e;
+}
+.availability-stale {
+	background: transparent;
+	border: 1px dashed #6b9777;
+}
+.server-overflow {
+	position: relative;
+	flex-shrink: 0;
+}
+.server-overflow > summary {
+	list-style: none;
+}
+.server-overflow > summary::-webkit-details-marker {
+	display: none;
+}
+.server-overflow > summary:hover,
+.server-overflow[open] > summary {
+	background: #edf2ed;
+}
+.server-menu {
+	position: fixed;
+	width: min(320px, calc(100vw - 20px));
+	padding: 8px;
+	background: #fff;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	box-shadow: 0 8px 28px #26352e1a;
+	z-index: 10;
+}
+.server-menu-heading {
+	padding: 5px 10px 8px;
+	font-size: 11px;
+	color: #78867c;
+}
+.server-menu-item {
+	width: 100%;
+	text-align: left;
+}
+.server-status {
+	margin-left: auto;
+	font-size: 10px;
+	font-weight: 400;
+	color: #7a847d;
+}
+.server-menu p {
+	margin: 8px 10px 4px;
+	font-size: 10px;
+	line-height: 1.5;
+	color: #7a847d;
+}
+.switch-preview {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 14px;
+	background: #f2f5f1;
+	border-bottom: 1px solid var(--line);
+	font-size: 12px;
+}
+.switch-preview button {
+	border: 0;
+	background: none;
+	padding: 2px 6px;
 }
 .prototype-info {
 	position: relative;
@@ -302,7 +416,7 @@ aside {
 	display: flex;
 	align-items: center;
 	gap: 7px;
-	min-width: 0;
+	flex-shrink: 0;
 }
 .filter-bar fieldset {
 	display: flex;
@@ -359,6 +473,7 @@ aside {
 	z-index: 1;
 	background: #fafbf9;
 	display: flex;
+	flex-wrap: wrap;
 	justify-content: space-between;
 	align-items: center;
 	padding: 10px 10px 10px 10px;
@@ -377,6 +492,7 @@ aside {
 	margin-left: 4px;
 }
 #visible-summary {
+	margin-left: auto;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -915,7 +1031,6 @@ body:not(.show-folder-counters) .folder-row:not(.repository-row) > .line-counts 
 @media (max-width: 900px) {
 	.workspace-actions {
 		gap: 10px;
-		padding: 0 16px;
 	}
 	.brand {
 		font-size: 14px;
@@ -923,9 +1038,6 @@ body:not(.show-folder-counters) .folder-row:not(.repository-row) > .line-counts 
 	.workspace-identity h1 {
 		max-width: 170px;
 		font-size: 20px;
-	}
-	#totals > span:first-child {
-		display: none;
 	}
 	#file-header {
 		padding: 15px 18px;

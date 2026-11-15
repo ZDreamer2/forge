@@ -22,12 +22,20 @@ The 100-file example exercises density, long paths, and coordinated repository c
 
 ## Workspace and pane organization
 
-- One compact header identifies the workspace, shows complete workspace totals, and offers explicit Refresh. Workspace identity replaces a repeated Forge text label; the F emblem remains beside it.
-- The sidebar/main divider continues through the header and follows resizing. This makes the relationship between each header area and its pane clear. Tree controls stay near their associated filters and Changes summary.
-- Header space beside workspace identity remains available for future primary navigation. The F emblem is intended to become the main-menu button later; no menu or additional screens are designed here yet.
+- One compact, full-width header identifies the workspace and reserves space for primary navigation. Workspace identity replaces a repeated Forge text label; the F emblem remains beside it. The sidebar/main divider stops below this header so navigation is independent of review-pane resizing.
+- Explicit Refresh belongs beside the Changes heading, separate from collapse/expand controls. Its accessible name and hover help identify the workspace-wide scope; it does not merely refresh the tree. Tree controls stay near their associated filters and Changes summary.
+- Workspace destinations occupy the header beside the F emblem. Show literal configured names in stable registration order, with availability separate from current selection. The selected destination replaces a duplicate workspace title; the tree retains actual workspace identity. If the current workspace is not registered, retain its identity separately rather than inventing a registration. The F emblem has no menu behavior.
 - The sidebar width is persisted in LocalStorage and restored on subsequent visits, with resizing still usable when storage is unavailable. The sidebar and main content scroll independently. Compact rows expose more context without reducing name readability. The fixed-light appearance and restrained controls support sustained reading.
 - The tree root displays the workspace name (`Bico 2` in the prototype), while its workspace-relative path remains `.` for selection identity, copying and navigation.
 - One workspace-relative file/folder hierarchy includes repository roots at their actual paths, distinguished by a repository icon rather than separate groups, counters or empty states. Repository roots follow the same filtering and expansion behavior as ordinary folders: only branches leading to matching changes appear. Ancestors needed to reach nested repositories remain visible; directory-chain compaction preserves repository and codebase boundaries. Folder summaries include matching descendants across nested repositories, counting each changed file once. Filtering may hide a selected folder without clearing its selection; direct links and browser history retain its workspace-relative identity.
+
+## Workspace navigation
+
+Provide direct access to configured workspace destinations in one horizontal row, with trailing destinations accessible through More when space is limited. Do not wrap or abbreviate names to force every destination into the row. More exposes the complete ordered list, including visible destinations, and identifies the current workspace even when its direct entry overflows. Navigation does not reorder destinations or create browser-owned favorites.
+
+Current selection must remain distinguishable independently of availability. Availability describes the hub's last observation, not agent readiness or guaranteed browser reachability. Distinguish reachable, unavailable, unknown and stale observations; expose status text on hover/focus and in the complete list. Unavailable destinations remain actionable. Real navigation uses the configured URL in the same tab, without transferring a selected review path to another workspace.
+
+The HTML example shows Bico 1–5, Eden and Admin with illustrative availability. Destination activation previews navigation while retaining the Bico 2 review fixture; it does not load another workspace. Source configuration, hub failures and live freshness remain outside this demonstration.
 
 ## Visual language
 
@@ -52,7 +60,7 @@ The filter dimensions are server-owned Type (Code, Tests, Docs, Config, Assets) 
 
 Each category name is a toggle. Categories within a dimension combine with OR; the dimensions combine with AND. All types and High/Medium/Low start enabled; None starts disabled. Adjacent select-all and deselect-all actions affect both dimensions. This gives the developer control over attention while keeping lower-priority work accessible.
 
-Workspace header file and line totals always cover all changes. The sidebar's matching/total file count retains the complete denominator. Folder line totals, including the workspace root, cover all matching descendant files regardless of expansion. The Changes-line totals are labeled Shown and cover only matching files with no collapsed ancestor, counting each file once and never including folder aggregates. They recalculate when expansion or filters change. The Shown label has a hover/focus tooltip explaining that collapsed descendants are excluded and scrolling does not affect the total. Filtered totals are never presented as the full size of the workspace change.
+Do not show permanent complete-workspace counters in the header: the default surface should focus attention on matching changes, not the volume of all changes. Select the workspace root for an on-demand overview using the folder matrix and current filters. The sidebar's matching/total file count retains the complete denominator. Folder line totals, including the workspace root, cover all matching descendant files regardless of expansion. The Changes-line totals are labeled Shown and cover only matching files with no collapsed ancestor, counting each file once and never including folder aggregates. They recalculate when expansion or filters change. The Shown label has a hover/focus tooltip explaining that collapsed descendants are excluded and scrolling does not affect the total. Filtered totals are never presented as the full size of the workspace change.
 
 Removed lines occupy the left numeric column, added lines the right. Consistent right alignment supports scanning additions and deletions independently. Zero values are blank while their column space remains; binary changes and pure renames can have no displayed line counts without ceasing to be changes.
 

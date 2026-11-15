@@ -4,8 +4,8 @@
 
 ## Layout and density
 
-- Keep the fixed-light appearance. The sidebar/main split continues through the header and shares one width value during resizing.
-- The workspace name is Bico 2 at 20px, including narrower viewport widths. The F-to-name gap is 9px.
+- Keep the fixed-light appearance. The header is one full-width surface, independent of sidebar resizing, without workspace-total counters or a pane divider. Keep the compact icon-only Refresh immediately after the Changes heading, with a small gap separating it from the heading; its help names the workspace-wide scope. Shown line totals retain their right-aligned position.
+- The header uses compact, named workspace tiles rather than a repeated Bico 2 title. Each tile has a quiet border and white surface; Bico 2 has a stronger green-gray border and tinted selected surface, without an underline. The complete-list menu keeps its simpler rows. Small status dots distinguish reachable (filled green), unavailable (filled muted red), unknown (hollow gray), and stale reachable (dashed green ring); hover/focus help supplies explicit text. More lists all seven destinations with textual status and selected background. Trailing entries overflow without reordering; if the current entry overflows, More also receives selected emphasis.
 - Use JetBrains Mono at 13px for tree names, with Consolas/system monospace fallbacks. Code excerpts use 12px.
 - Use compact 25px tree rows with minimal name/disclosure padding. Disclosure arrows sit immediately left of folder icons, inside the indentation gutter rather than a separate spaced flex column. Root icons start 19px from the sidebar edge; files and folders at the same depth share icon/name alignment. Each nesting level shifts exactly one 17px icon width to the right, including on narrower viewports. Tree-row items use a compact 3px gap, bringing names closer to their icons. Repository roots occupy ordinary rows in the workspace hierarchy, without separate group spacing or repository-owned file counts.
 - Keep line-count columns right-aligned and in the same scrolling area as the sidebar summary so scrollbar width does not shift their alignment.
