@@ -35,7 +35,27 @@ Provide direct access to configured workspace destinations in one horizontal row
 
 Current selection must remain distinguishable independently of availability. Availability describes the hub's last observation, not agent readiness or guaranteed browser reachability. Distinguish reachable, unavailable, unknown and stale observations; expose status text on hover/focus and in the complete list. Unavailable destinations remain actionable. Real navigation uses the configured URL in the same tab, without transferring a selected review path to another workspace.
 
-The HTML example shows Bico 1–5, Eden and Admin with illustrative availability. Destination activation previews navigation while retaining the Bico 2 review fixture; it does not load another workspace. Source configuration, hub failures and live freshness remain outside this demonstration.
+### Initial production integration
+
+The switcher reads its own server's selected-hub inspection on initial load, using the existing manual/offline read policy and ordinary query caching. No special cache-lifetime mechanism is required to enforce exactly one request across arbitrary remounts or cache eviction. Easy switching is the immediate goal; live availability synchronization is deferred. Do not poll, retry automatically, update on focus/reconnect or review navigation, or add switcher Refresh/Retry controls. Page reload picks up registrations, configuration changes and recovery. Workspace Refresh remains a separate workspace-wide review operation, not a hub refresh.
+
+Keep all registrations, including duplicate URLs, in central order. Current styling uses exact normalized equality with the browser page's base URL, excluding review query/fragment and normalizing the trailing slash while preserving origin/port/path distinctions. Do not infer equivalent hostnames or match workspace names. Highlight all matching registrations; More is emphasized if any matching tile overflows. If none match, retain the actual workspace identity separately, including the existing generic fallback and identity-error recovery when identity cannot load.
+
+Use compact header-local presentation for these distinct states. These are message/content distinctions, not a requirement for a state-machine framework or a separate component per state:
+
+- Local inspection loading: a quiet loading label, separate from workspace loading.
+- No selected hub: a quiet “Switcher not configured” help indicator and actual workspace identity.
+- Initially unavailable configuration: a compact warning with diagnostic details.
+- Selected hub, no learned list and no error: a quiet waiting-for-hub-list label.
+- Successful empty list: a quiet no-configured-destinations label, not a failure.
+- Hub or local inspection failure without a list: a compact warning/details, leaving review usable.
+- Hub failure with a retained list: keep all destinations actionable and show the source warning separately from each entry's recorded availability.
+
+Failure help explains page reload recovery without adding a switcher action button. The API owns source status and effective staleness. Show availability as a recorded hub observation, never as agent readiness or guaranteed browser reachability. Preserve reachable, unavailable, unknown and supplied stale distinctions in hover/focus help and complete-list status text; a hub-level failure does not make every entry unavailable. No browser clock recomputes remote freshness or turns the initial snapshot into live status.
+
+Accepted first-delivery limitations: a freshly started server may still be waiting for its first hub fetch at the time of inspection, leaving the switcher waiting until page reload. A displayed observation or stale flag can also age unchanged until reload. These are intentional scope limits, not reasons to add background synchronization.
+
+The HTML example shows Bico 1–5, Eden and Admin with illustrative availability. Destination activation previews navigation while retaining the Bico 2 review fixture; it does not load another workspace. Source configuration, hub failures and the production page-load observation policy remain outside this demonstration.
 
 ## Visual language
 
