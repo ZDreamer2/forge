@@ -2,6 +2,20 @@
 
 ## Release notes
 
+- `0.3.0`: explicit server hub hosting, selected-hub consumption and protected
+  local configuration reload, plus ordered workspace-switcher tiles with a
+  complete-list overflow menu and recorded availability. The browser reads its
+  own server's hub snapshot on initial load; reload the page to pick up hub
+  changes or recovery. Hub failures do not block workspace review. Review updates
+  include a unified header, workspace-wide Refresh beside Changes, repository
+  tree navigation, importance-aware expansion, optional folder counters,
+  authoritative folder guidance, copyable path prefixes and wrapped diffs.
+  Migration: existing workspace and guide configuration remains supported; hub
+  hosting and selection are opt-in. Configure `serverHubUrl` in the user-level
+  `zd-forge/config.yaml`, registrations in `zd-forge/server-hub.yaml`, and start
+  the chosen host with `--server-hub`; explicitly reload edited local settings
+  on each intended process. No automatic discovery, self-registration or
+  installed-server adoption occurs. See [local configuration and reload](../README.md#local-configuration-and-reload).
 - `0.2.0`: read-only workspace review UI with canonical tree navigation,
   Type/Importance filters, attributed signals and filtered-source reveal, plus
   syntax-highlighted Pierre unified/split diffs and on-demand context expansion.

@@ -12,9 +12,11 @@ Executable: `forge`. Licensed under [MIT](LICENSE).
 Read the [codebase overview](docs/overview.md) for repository orientation and routes
 to task-specific documentation.
 
-Version `0.2.0` delivers the read-only viewer and unified-guide configuration
-migration described below. Upgrade older installations using the migration notes;
-package publication and workspace adoption are separate operations.
+Version `0.3.0` adds opt-in server hubs and workspace switching, alongside review
+navigation and presentation improvements. Existing `0.2.0` workspace and guide
+configuration remains supported; older installations still need the unified-guide
+migration described below. See [local configuration and reload](#local-configuration-and-reload)
+for hub setup. Package publication and workspace adoption are separate operations.
 
 The `0.x` configuration contract is provisional. Breaking changes require a minor
 release with migration notes. Source acceptance, publication and hosting adoption
