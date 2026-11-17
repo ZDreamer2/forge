@@ -314,10 +314,10 @@ async function verifyInstalledSwitcher(browser: Browser, address: string, screen
 		await more.press("Enter");
 		await menu.waitFor();
 		await page.keyboard.press("ArrowDown");
-		assert.equal(
-			await menu.evaluate((element) => element.contains(element.ownerDocument.activeElement)),
-			true,
-			"Keyboard navigation focuses destinations",
+		// Menu focus settles asynchronously after keyboard activation.
+		await page.waitForFunction(
+			(element) => element !== null && element.contains(element.ownerDocument.activeElement),
+			await menu.elementHandle(),
 		);
 		await page.locator('header[data-workspace-header] img[alt="Forge"]').click();
 		await menu.waitFor({ state: "hidden" });
