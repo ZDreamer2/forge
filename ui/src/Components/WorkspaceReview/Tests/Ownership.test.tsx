@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { createTestSuiteLifecycle } from "@zdreamer/forge-ts-react-frontend/testing";
 import { http } from "msw";
 import { expect, it, vi } from "vitest";
-import { fileHandler } from "../../../Lib/Testing/Testing";
+import { fileHandler, unconfiguredHubHandler } from "../../../Lib/Testing/Testing";
 import { ForgeTheme } from "../../ForgeTheme/ForgeTheme";
 import { ChangesNavigator } from "../Components/ChangesNavigator/ChangesNavigator";
 import { SelectionViewer } from "../Components/SelectionViewer/SelectionViewer";
@@ -90,6 +90,8 @@ it("deduplicates codebase boundaries beside names, removes repository badges and
 	const view = () => (
 		<ForgeTheme env="test">
 			<ChangesNavigator
+				onRefresh={() => {}}
+				updating={false}
 				review={analyzeChanges(facts, undefined, filters)}
 				analysis={facts}
 				identity={identity}
@@ -143,7 +145,7 @@ it("inspects canonical transitions, filtered entries and inclusive subtrees with
 			statistics: { added: 0, removed: 0, binary: false },
 		}),
 	]);
-	suite.createHttpScenario(fileHandler(facts));
+	suite.createHttpScenario(unconfiguredHubHandler(), fileHandler(facts));
 	const review = analyzeChanges(facts, identity, initialFilters());
 	const view = (path: string, model = review) => (
 		<QueryClientProvider client={client}>
@@ -191,6 +193,8 @@ it("prunes empty and filtered repositories while retaining canonical ancestors o
 		return (
 			<ForgeTheme env="test">
 				<ChangesNavigator
+					onRefresh={() => {}}
+					updating={false}
 					review={analyzeChanges(facts, repositories, filters)}
 					analysis={facts}
 					identity={repositories}
@@ -273,6 +277,8 @@ it("retains manual collapse through new descendants and filter hide/restore with
 			<QueryClientProvider client={client}>
 				<ForgeTheme env="test">
 					<ChangesNavigator
+						onRefresh={() => {}}
+						updating={false}
 						review={analyzeChanges(facts, repositories, filters)}
 						analysis={facts}
 						identity={repositories}
@@ -323,6 +329,8 @@ it("reveals a pending address on first resolution without revealing it again on 
 			<QueryClientProvider client={client}>
 				<ForgeTheme env="test">
 					<ChangesNavigator
+						onRefresh={() => {}}
+						updating={false}
 						review={analyzeChanges(facts, undefined, filters)}
 						analysis={facts}
 						identity={undefined}
@@ -354,6 +362,7 @@ it("coordinates both public data owners while retaining filters, disclosure, sel
 		node("src/file.ts", { kind: "modified", statistics: { added: 1, removed: 0, binary: false } }),
 	]);
 	suite.createHttpScenario(
+		unconfiguredHubHandler(),
 		fileHandler(facts),
 		http.get("http://localhost/api/workspace", () => {
 			identityReads++;
@@ -405,6 +414,8 @@ it("consumes explicit same-path reveals once while preserving unrelated collapse
 			<QueryClientProvider client={client}>
 				<ForgeTheme env="test">
 					<ChangesNavigator
+						onRefresh={() => {}}
+						updating={false}
 						review={analyzeChanges(facts, undefined, filters)}
 						analysis={facts}
 						identity={undefined}
@@ -455,6 +466,8 @@ it("invalidates an unresolved reveal when a newer address supersedes its target"
 			<QueryClientProvider client={client}>
 				<ForgeTheme env="test">
 					<ChangesNavigator
+						onRefresh={() => {}}
+						updating={false}
 						review={analyzeChanges(facts, undefined, filters)}
 						analysis={facts}
 						identity={undefined}
@@ -498,7 +511,7 @@ it("owns signal disclosure and canonical source access independently of a naviga
 			signalCounts: { warning: 0, notice: 1 },
 		}),
 	]);
-	suite.createHttpScenario(fileHandler(facts));
+	suite.createHttpScenario(unconfiguredHubHandler(), fileHandler(facts));
 	function view(path: string, occurrence?: number) {
 		return (
 			<QueryClientProvider client={client}>
@@ -557,7 +570,7 @@ it("does not reopen viewer details for an obsolete unresolved inspection", async
 			signalCounts: { warning: 1, notice: 0 },
 		}),
 	]);
-	suite.createHttpScenario(fileHandler(resolved));
+	suite.createHttpScenario(unconfiguredHubHandler(), fileHandler(resolved));
 	function view(facts: WorkspaceAnalysis, path: string, occurrence: number, target: string) {
 		return (
 			<QueryClientProvider client={client}>
@@ -592,7 +605,7 @@ it("invalidates pending inspection after leaving its addressed target even when 
 			signalCounts: { notice: 0, warning: 1 },
 		}),
 	]);
-	suite.createHttpScenario(fileHandler(resolved));
+	suite.createHttpScenario(unconfiguredHubHandler(), fileHandler(resolved));
 	function view(facts: WorkspaceAnalysis, path: string) {
 		return (
 			<QueryClientProvider client={client}>
@@ -620,6 +633,7 @@ it("restores the sidebar preference across remounts without losing it to tempora
 	const user = userEvent.setup();
 	const facts = analysis([node(".")]);
 	suite.createHttpScenario(
+		unconfiguredHubHandler(),
 		http.get("http://localhost/api/workspace", () => Response.json(identity)),
 		http.get("http://localhost/api/changes/analysis", () => Response.json(facts)),
 	);
@@ -674,6 +688,7 @@ it("keeps resizing usable when storage access, reads or writes are blocked", asy
 	const user = userEvent.setup();
 	const facts = analysis([node(".")]);
 	suite.createHttpScenario(
+		unconfiguredHubHandler(),
 		http.get("http://localhost/api/workspace", () => Response.json(identity)),
 		http.get("http://localhost/api/changes/analysis", () => Response.json(facts)),
 	);

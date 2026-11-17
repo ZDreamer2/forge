@@ -1,7 +1,6 @@
 import type { AnalysisWireNode, WorkspaceAnalysis } from "@forge/api-contract";
 import { Tooltip } from "@mantine/core";
 import type { CSSProperties } from "react";
-import type { Summary } from "../../../../Internal/changeAnalysis";
 import type { SignalAnalysis } from "../../../../Internal/signalAnalysis";
 import { ChangesSummary } from "../../../ChangesSummary/ChangesSummary";
 import { SignalSummary } from "../../../SignalSummary/SignalSummary";
@@ -22,7 +21,6 @@ type Codebases = WorkspaceAnalysis["codebases"];
 export function ChangesTree({
 	projection,
 	showFolderCounters = false,
-	expansionVisibleSummary,
 	workspaceName,
 	signals,
 	onInspect,
@@ -30,13 +28,10 @@ export function ChangesTree({
 	selectedPath,
 	onToggle,
 	onSelect,
-	onExpandAll,
-	onCollapseAll,
 	codebases,
 }: {
 	projection: TreeProjection;
 	showFolderCounters?: boolean;
-	expansionVisibleSummary: Summary;
 	workspaceName: string;
 	signals?: SignalAnalysis | undefined;
 	onInspect?: ((path: string) => void) | undefined;
@@ -44,8 +39,6 @@ export function ChangesTree({
 	selectedPath?: string | undefined;
 	onToggle: (path: string) => void;
 	onSelect: (path: string, copy: boolean) => void;
-	onExpandAll: () => void;
-	onCollapseAll: () => void;
 	codebases?: Codebases | undefined;
 }) {
 	function renderRow(entry: ProjectedNode, depth: number) {
@@ -154,46 +147,13 @@ export function ChangesTree({
 		);
 	}
 	return (
-		<div className={styles.scroll} data-testid="changes-scroll">
-			<div className={styles.heading}>
-				<div className={styles.headingText}>
-					<div className={styles.actions}>
-						<button type="button" aria-label="Collapse all" onClick={onCollapseAll}>
-							⊟
-						</button>
-						<button type="button" aria-label="Expand all" onClick={onExpandAll}>
-							⊞
-						</button>
-					</div>
-					<h2>
-						Changes{" "}
-						<span>
-							{projection.visible.files} of {projection.all.files}
-						</span>
-					</h2>
-				</div>
-				<div className={styles.shown}>
-					<Tooltip
-						multiline
-						events={{ hover: true, focus: true, touch: true }}
-						classNames={{ tooltip: styles.tooltip }}
-						label="Matching files outside collapsed folders. Collapsed descendants are excluded; scrolling does not affect this total."
-					>
-						<button type="button" className={styles.shownHelp}>
-							Shown
-						</button>
-					</Tooltip>
-					<ChangesSummary summary={expansionVisibleSummary} label="Shown changes" />
-				</div>
-			</div>
-			<nav aria-label="Changed files">
-				{projection.root?.visible ? (
-					renderRow(projection.root, 0)
-				) : (
-					<p className={styles.emptyTree}>{projection.all.files ? "No changes match the filters" : "No changes"}</p>
-				)}
-			</nav>
-		</div>
+		<nav aria-label="Changed files">
+			{projection.root?.visible ? (
+				renderRow(projection.root, 0)
+			) : (
+				<p className={styles.emptyTree}>{projection.all.files ? "No changes match the filters" : "No changes"}</p>
+			)}
+		</nav>
 	);
 }
 

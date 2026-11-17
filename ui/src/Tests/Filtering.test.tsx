@@ -6,7 +6,7 @@ import { createTestSuiteLifecycle } from "@zdreamer/forge-ts-react-frontend/test
 import { http } from "msw";
 import { expect, it, vi } from "vitest";
 import App from "../App";
-import { fileHandler } from "../Lib/Testing/Testing";
+import { fileHandler, unconfiguredHubHandler } from "../Lib/Testing/Testing";
 
 vi.mock(
 	"../Components/WorkspaceReview/Components/SelectionViewer/Components/FileDiff/Internal/pierreRenderer",
@@ -155,6 +155,7 @@ function fixture(): WorkspaceAnalysis {
 }
 function start() {
 	suite.createHttpScenario(
+		unconfiguredHubHandler(),
 		fileHandler(fixture()),
 		http.get("http://localhost/api/workspace", () => Response.json(identity)),
 		http.get("http://localhost/api/changes/analysis", () => Response.json(fixture())),
@@ -177,7 +178,7 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 	start();
 	await screen.findByRole("button", { name: "Select src/high.ts" });
 	await screen.findByRole("heading", { name: identity.workspace.name });
-	totals("All workspace changes", 13, 19, 43);
+	expect(screen.getByText(/^\d+ of 13$/)).toBeInTheDocument();
 	totals("Shown changes", 10, 10, 25);
 	const user = userEvent.setup();
 	const folderCounters = screen.getByRole("button", { name: "Show folder counters" });
@@ -267,7 +268,7 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 	expect(row("tests/reset.ts")).toBeInTheDocument();
 	expect(row("tests")).toBeInTheDocument();
 	expect(row("src/normal.ts")).toBeInTheDocument();
-	totals("All workspace changes", 13, 19, 43);
+	expect(screen.getByText(/^\d+ of 13$/)).toBeInTheDocument();
 	await user.click(screen.getByRole("button", { name: "Tests" }));
 	expect(row("tests/unit/sample.ts")).toBeInTheDocument();
 
@@ -298,7 +299,7 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 	await user.click(screen.getByRole("button", { name: "Expand docs" }));
 	totals("Shown changes", 4, 4, 13);
 	expect(row("docs/hidden.md")).toBeInTheDocument();
-	totals("All workspace changes", 13, 19, 43);
+	expect(screen.getByText(/^\d+ of 13$/)).toBeInTheDocument();
 
 	// Bulk actions change only matching branches; excluded choices survive.
 	await user.click(screen.getByRole("button", { name: "Collapse docs" }));
@@ -359,5 +360,5 @@ it("reviews matching matrices, filters both dimensions and inspects metadata wit
 	expect(renamed.getByText(/Codebase: old-owner/)).toBeVisible();
 	expect(renamed.getByText(/Codebase: application/)).toBeVisible();
 	expect(renamed.getByText("Rename has no reported content change.")).toBeVisible();
-	totals("All workspace changes", 13, 19, 43);
+	expect(screen.getByText(/^\d+ of 13$/)).toBeInTheDocument();
 }, 20_000);

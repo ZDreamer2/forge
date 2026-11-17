@@ -6,7 +6,7 @@ import { createTestSuiteLifecycle } from "@zdreamer/forge-ts-react-frontend/test
 import { http } from "msw";
 import { expect, it, vi } from "vitest";
 import App from "../App";
-import { fileObservation } from "../Lib/Testing/Testing";
+import { fileObservation, unconfiguredHubHandler } from "../Lib/Testing/Testing";
 
 vi.mock(
 	"../Components/WorkspaceReview/Components/SelectionViewer/Components/FileDiff/Internal/pierreRenderer",
@@ -85,6 +85,7 @@ function observation(path: string, context: 3 | "all" = 3, facts = fixture()): W
 function serve() {
 	const reads = { workspace: 0, analysis: 0, files: [] as string[] };
 	const network = suite.createHttpScenario(
+		unconfiguredHubHandler(),
 		http.get("http://localhost/api/workspace", () => {
 			reads.workspace++;
 			return Response.json(identity);

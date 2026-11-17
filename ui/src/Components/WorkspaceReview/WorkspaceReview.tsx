@@ -1,8 +1,8 @@
 import { Button, Tooltip } from "@mantine/core";
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { ChangesNavigator } from "./Components/ChangesNavigator/ChangesNavigator";
-import { ChangesSummary } from "./Components/ChangesSummary/ChangesSummary";
 import { SelectionViewer } from "./Components/SelectionViewer/SelectionViewer";
+import { ServerSwitcher } from "./Components/ServerSwitcher/ServerSwitcher";
 import emblem from "./Internal/Assets/forge-emblem.svg";
 import { analyzeChanges, importanceOf, initialFilters, resolveSelection } from "./Internal/changeAnalysis";
 import type { PathRequest } from "./Internal/pathRequest";
@@ -122,43 +122,28 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 		})();
 	}
 
-	const root = analysis.data?.nodes["."];
 	const selectedEntry = selectedPath ? review.subjects.get(selectedPath)?.node : undefined;
 	const refresh = () =>
 		Promise.all([workspaceData.refresh(), changeSetData.refresh(selectedEntry?.kind ? selectedPath : undefined)]);
 	return (
 		<main className={styles.review} style={{ "--sidebar-width": `${width}px` } as CSSProperties}>
 			<header className={styles.header} data-workspace-header>
-				<div className={styles.identity}>
-					<img src={emblem} alt="Forge" width={34} height={36} />
-					<h1 title={workspace.data?.workspace.root}>{workspace.data?.workspace.name ?? "Workspace"}</h1>
-				</div>
-				<div className={styles.headerMain}>
-					{analysis.data && (
-						<ChangesSummary
-							summary={{ ...review.all, ...(root?.rawTotals ?? {}) }}
-							label="All workspace changes"
-							files
-						/>
-					)}
-					<Button
-						className={styles.refresh}
-						variant="default"
-						leftSection={<span aria-hidden="true">↻</span>}
-						disabled={updating}
-						onClick={() => void refresh()}
-					>
-						Refresh
+				<img className={styles.emblem} src={emblem} alt="Forge" width={34} height={36} />
+				<ServerSwitcher
+					workspaceIdentity={
+						<h1 className={styles.identity} title={workspace.data?.workspace.root}>
+							{workspace.data?.workspace.name ?? "Workspace"}
+						</h1>
+					}
+				/>
+				<Tooltip
+					label="Click a name to select or clear. Ctrl+Click selects and copies its path. Use Left/Right on the divider to resize."
+					events={{ hover: true, focus: true, touch: false }}
+				>
+					<Button className={styles.help} variant="subtle" size="compact-xs" color="gray" aria-label="Keyboard help">
+						⌨︎
 					</Button>
-					<Tooltip
-						label="Click a name to select or clear. Ctrl+Click selects and copies its path. Use Left/Right on the divider to resize."
-						events={{ hover: true, focus: true, touch: false }}
-					>
-						<Button className={styles.help} variant="subtle" size="compact-xs" color="gray" aria-label="Keyboard help">
-							⌨︎
-						</Button>
-					</Tooltip>
-				</div>
+				</Tooltip>
 			</header>
 			<div className={styles.feedback}>
 				{updating && <p role="status">{workspace.data || analysis.data ? "Updating…" : "Loading workspace…"}</p>}
@@ -202,6 +187,8 @@ export function WorkspaceReview({ selectedPath, invalidSelection, onNavigate }: 
 				signals={signals}
 				onInspect={inspect}
 				revealRequest={revealRequest}
+				onRefresh={() => void refresh()}
+				updating={updating}
 			/>
 			<hr
 				className={styles.divider}

@@ -1,65 +1,5 @@
-.scroll {
-	--tree-indent: 17px;
-	flex: 1;
-	min-height: 0;
-	overflow: auto;
-	scrollbar-gutter: stable;
-	padding-bottom: 20px;
-}
-.heading {
-	position: sticky;
-	top: 0;
-	z-index: 1;
-	background: #fafbf9;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 10px;
-	gap: 8px;
-	color: #7a847d;
-	font-size: 11px;
-}
-.headingText {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	min-width: 0;
-}
-.heading h2 {
-	margin: 0;
-	font-size: 12px;
-	white-space: nowrap;
-}
-.heading h2 span {
-	color: #8a968d;
-	font-size: 11px;
-	font-weight: 400;
-	margin-left: 4px;
-}
-.actions {
-	display: flex;
-	gap: 3px;
-	flex-shrink: 0;
-}
-.actions button {
-	display: grid;
-	place-items: center;
-	width: 24px;
-	height: 27px;
-	padding: 2px;
-	border: 0;
-	border-radius: 5px;
-	background: none;
-	color: #7c8b80;
-	font:
-		20px / 1 system-ui,
-		sans-serif;
-	cursor: pointer;
-}
-.actions button:hover {
-	background: #edf1ec;
-}
 .row {
+	--tree-indent: 17px;
 	position: relative;
 	--name-color: #45594b;
 	--quiet-name-color: #849087;
@@ -203,34 +143,7 @@
 	max-width: min(620px, calc(100vw - 16px));
 	overflow-wrap: anywhere;
 }
-.scroll button:focus-visible {
+.row button:focus-visible {
 	outline: 2px solid #267553;
 	outline-offset: 1px;
-}
-@container (max-width: 300px) {
-	.heading {
-		flex-wrap: wrap;
-	}
-	.headingText {
-		width: 100%;
-	}
-	.heading > :last-child {
-		margin-left: auto;
-	}
-}
-
-.shown {
-	--change-count-weight: 700;
-	display: flex;
-	align-items: center;
-	gap: 5px;
-	flex-shrink: 0;
-}
-.shownHelp {
-	padding: 0;
-	border: 0;
-	background: transparent;
-	color: inherit;
-	font: inherit;
-	cursor: help;
 }

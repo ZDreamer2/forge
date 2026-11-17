@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { chromium, type Locator, type Page } from "playwright";
-import type { AnalysisWireNode, WorkspaceAnalysis } from "../../server/src/components/api-contract/index.ts";
+import { type Browser, chromium, type Locator, type Page } from "playwright";
+import type {
+	AnalysisWireNode,
+	ServerHubSelection,
+	WorkspaceAnalysis,
+} from "../../server/src/components/api-contract/index.ts";
 import { verifyInstalledDiffs } from "./workspace-consumer-ui-diffs.ts";
 
 type Deps = {
@@ -195,6 +199,218 @@ async function treeGeometry(page: Page) {
 	assert.ok(disclosure && disclosure.x + disclosure.width <= app.x, "Disclosure stays in the icon's left gutter");
 }
 
+async function verifyInstalledSwitcher(browser: Browser, address: string, screenshots: string) {
+	const page = await browser.newPage({ viewport: { width: 1800, height: 800 } });
+	page.setDefaultTimeout(10_000);
+	try {
+		const observed = {
+			status: "reachable" as const,
+			checkedAt: "2026-11-16T10:00:00.000Z",
+			lastReachableAt: "2026-11-16T10:00:00.000Z",
+			error: null,
+			stale: false,
+		};
+		const names = [
+			"First destination",
+			"Second <literal>",
+			"A deliberately long workspace destination name for overflow",
+			"Unavailable",
+			"Unknown",
+			"Current workspace",
+			"Current duplicate",
+		];
+		const destination = `${address}/switcher-destination/`;
+		const snapshot: ServerHubSelection = {
+			source: { status: "selected", url: `${address}/` },
+			servers: names.map((name, index) => ({
+				id: `browser-${index}`,
+				name,
+				url: index >= 5 ? `${address}/` : index === 3 ? destination : `${address}/destination-${index}/`,
+				availability:
+					index === 3
+						? { ...observed, status: "unavailable", error: "Probe failed", stale: true }
+						: index === 4
+							? { status: "unknown", checkedAt: null, lastReachableAt: null, error: null, stale: true }
+							: observed,
+			})),
+			lastSuccessAt: observed.checkedAt,
+			error: null,
+			stale: false,
+		};
+		let reads = 0;
+		await page.route(`${address}/api/server-hub/selection`, async (route) => {
+			reads++;
+			await route.fulfill({ json: snapshot });
+		});
+		await page.route(destination, (route) =>
+			route.fulfill({
+				contentType: "text/html",
+				body: "<!doctype html><title>Destination</title><h1>Destination loaded</h1>",
+			}),
+		);
+		await page.goto(`${address}/?path=.#review`);
+		await settled(page);
+		const navigation = page.getByRole("navigation", { name: "Workspaces", exact: true });
+		const tiles = navigation.locator("a:visible");
+		const more = page.getByRole("button", { name: "More workspaces", exact: true });
+		await tiles.nth(names.length - 1).waitFor();
+		assert.deepEqual(await tiles.allTextContents(), names, "Wide strip preserves every registration in order");
+		await expectPortal(page, tiles.first(), async (tooltip) => {
+			assert.match(await tooltip.innerText(), /Reachable.*page load/s);
+			const bounds = await tooltip.boundingBox();
+			assert.ok(bounds && bounds.width <= 300, "Observation help stays bounded");
+		});
+		assert.equal(
+			await navigation.locator('a[aria-current="page"]:visible').count(),
+			2,
+			"Duplicate current URLs both match",
+		);
+		assert.equal(await more.count(), 0);
+		const wideBounds = await navigation.boundingBox();
+		assert.ok(wideBounds);
+		const separator = page.getByRole("separator", { name: "Resize changes sidebar" });
+		await separator.focus();
+		const sidebarWidth = Number(await separator.getAttribute("aria-valuenow"));
+		await separator.press("ArrowRight");
+		assert.ok(Number(await separator.getAttribute("aria-valuenow")) > sidebarWidth);
+		assert.deepEqual(
+			await navigation.boundingBox(),
+			wideBounds,
+			"Sidebar resizing leaves the full-width switcher unchanged",
+		);
+		await page.setViewportSize({ width: 360, height: 740 });
+		await more.waitFor();
+		await more.and(page.locator('[data-current="true"]')).waitFor();
+		const narrowNames = await tiles.allTextContents();
+		assert.ok(narrowNames.length < names.length);
+		assert.deepEqual(narrowNames, names.slice(0, narrowNames.length), "Overflow hides only a trailing suffix");
+		await more.click();
+		const menu = page.getByRole("menu");
+		await menu.waitFor();
+		await page.waitForFunction(
+			(element) => element !== null && element.ownerDocument.defaultView.getComputedStyle(element).opacity === "1",
+			await menu.elementHandle(),
+		);
+		const entries = menu.getByRole("menuitem");
+		assert.equal(await entries.count(), names.length, "More includes visible and overflowing destinations");
+		for (const [index, name] of names.entries()) assert.ok((await entries.nth(index).innerText()).includes(name));
+		assert.equal(await menu.locator('[aria-current="page"]').count(), 2);
+		assert.match(await entries.nth(3).innerText(), /unavailable/i);
+		assert.match(await entries.nth(3).innerText(), /stale/i);
+		assert.match(await entries.nth(4).innerText(), /unknown/i);
+		const menuBounds = await menu.boundingBox();
+		assert.ok(
+			menuBounds && menuBounds.x >= 0 && menuBounds.x + menuBounds.width <= 361,
+			"Menu stays within the narrow viewport",
+		);
+		await page.screenshot({ path: join(screenshots, "switcher-narrow-menu.png") });
+		await page.keyboard.press("Escape");
+		await menu.waitFor({ state: "hidden" });
+		assert.equal(
+			await more.evaluate((element) => element === element.ownerDocument.activeElement),
+			true,
+			"Escape returns focus to More",
+		);
+		await more.press("Enter");
+		await menu.waitFor();
+		await page.keyboard.press("ArrowDown");
+		assert.equal(
+			await menu.evaluate((element) => element.contains(element.ownerDocument.activeElement)),
+			true,
+			"Keyboard navigation focuses destinations",
+		);
+		await page.locator('header[data-workspace-header] img[alt="Forge"]').click();
+		await menu.waitFor({ state: "hidden" });
+		await page.setViewportSize({ width: 220, height: 740 });
+		await page.waitForFunction(
+			(element) => element?.querySelectorAll("a").length === 0,
+			await navigation.elementHandle(),
+		);
+		assert.equal(await tiles.count(), 0, "At a More-only width no partial tile is forced into view");
+		assert.equal(await more.isVisible(), true);
+		await page.screenshot({ path: join(screenshots, "switcher-more-only.png") });
+		await page.setViewportSize({ width: 1800, height: 800 });
+		await more.waitFor({ state: "hidden" });
+		assert.deepEqual(
+			await tiles.allTextContents(),
+			names,
+			"Widening restores the ordered tiles, including the long name",
+		);
+		assert.equal(await navigation.locator('a[aria-current="page"]:visible').count(), 2);
+		assert.equal(reads, 1, "Resizing, menu use and review interaction reuse the initial snapshot");
+		await page.screenshot({ path: join(screenshots, "switcher-wide.png") });
+		const unavailable = tiles.filter({ hasText: "Unavailable" });
+		assert.equal(await unavailable.getAttribute("href"), destination);
+		assert.equal(
+			new URL(page.url()).searchParams.get("path"),
+			".",
+			"Review selection remains present before navigation",
+		);
+		await unavailable.click();
+		await page.waitForURL(destination);
+		await page.getByRole("heading", { name: "Destination loaded", exact: true }).waitFor();
+		assert.equal(
+			page.url(),
+			destination,
+			"Unavailable destinations navigate in the same tab without the old selection or fragment",
+		);
+		// Reload with a different snapshot: unmatched identity and a retained-list
+		// warning compete with More for the same narrow header space.
+		snapshot.servers =
+			snapshot.servers?.map((server, index) => ({
+				...server,
+				url: `${address}/retained-${index}/`,
+				availability: { ...server.availability, stale: true },
+			})) ?? null;
+		snapshot.error = "Hub offline";
+		snapshot.stale = true;
+		await page.setViewportSize({ width: 320, height: 740 });
+		await page.goto(`${address}/?path=.#review`);
+		const header = page.locator("header[data-workspace-header]");
+		const warning = header.locator('[data-warning="true"]');
+		await warning.waitFor();
+		for (const width of [320, 220]) {
+			await page.setViewportSize({ width, height: 740 });
+			await more.waitFor();
+			assert.equal(await header.getByRole("heading").isVisible(), true, "Unmatched identity remains present");
+			const navBounds = await navigation.boundingBox();
+			const moreBounds = await more.boundingBox();
+			const warningBounds = await warning.boundingBox();
+			assert.ok(navBounds && moreBounds && warningBounds);
+			assert.ok(
+				moreBounds.x >= navBounds.x && moreBounds.x + moreBounds.width <= navBounds.x + navBounds.width + 0.5,
+				"More stays inside its reserved navigation width",
+			);
+			assert.ok(moreBounds.x + moreBounds.width <= warningBounds.x, "More does not overlap source feedback");
+			await expectPortal(page, warning, async (tooltip) => {
+				assert.match(await tooltip.innerText(), /Hub offline.*Reload the page/s);
+				const bounds = await tooltip.boundingBox();
+				assert.ok(bounds && bounds.width <= width - 16, "Failure help fits the narrow viewport");
+			});
+			await more.click();
+			await menu.waitFor();
+			assert.equal(
+				await menu.getByRole("menuitem").count(),
+				names.length,
+				"All retained destinations remain actionable",
+			);
+			assert.equal(await menu.locator('[aria-current="page"]').count(), 0);
+			await page.keyboard.press("Escape");
+			await menu.waitFor({ state: "hidden" });
+		}
+		await page.setViewportSize({ width: 1800, height: 800 });
+		await more.waitFor({ state: "hidden" });
+		assert.deepEqual(
+			await tiles.allTextContents(),
+			names,
+			"Retained destinations reappear beside identity and warning",
+		);
+		assert.equal(reads, 2, "Only the explicit document reload acquires the replacement snapshot");
+	} finally {
+		await page.close();
+	}
+}
+
 export async function verifyInstalledUi({ address, workspace, workspaceName, sourceState, run }: Deps) {
 	const tracked = join(workspace, "app/tracked.txt");
 	const original = readFileSync(tracked);
@@ -259,7 +475,9 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		const before = sourceState(workspace);
 		assert.equal((await page.goto(address))?.status(), 200);
 		await page.getByRole("heading", { name: workspaceName, exact: true }).waitFor();
-		await summary(page, "All workspace changes", 0, 0, 0);
+		await settled(page);
+		await page.getByRole("heading", { name: "Changes", exact: true }).waitFor();
+		await page.getByRole("complementary", { name: "Changes navigator" }).getByText("0 of 0", { exact: true }).waitFor();
 		assert.deepEqual(sourceState(workspace), before);
 		assert.equal(await page.locator("html").getAttribute("data-mantine-color-scheme"), "light");
 		assert.equal(await select(page, "not-cloned").count(), 0, "Missing repositories have no analyzed tree row");
@@ -302,7 +520,6 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		const changes = Object.values(analysis.nodes).filter((node) => node.kind);
 		const all = totals(changes);
 		const visible = totals(changes.filter((node) => node.effectiveEmphasis.value !== "hidden"));
-		await summary(page, "All workspace changes", all.files, all.removed, all.added);
 		const initiallyShown = totals(
 			changes.filter((node) => node.effectiveEmphasis.value !== "hidden" && !node.path.startsWith("app/Tests/")),
 		);
@@ -310,7 +527,10 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.getByRole("button", { name: "Expand app/Tests", exact: true }).waitFor();
 		assert.equal(await select(page, "app/Tests/low/only.test.ts").count(), 0, "Low matching branches start collapsed");
 		await summary(page, ". visible subtree", visible.files, visible.removed, visible.added);
-		await page.getByRole("heading", { name: `Changes ${visible.files} of ${all.files}`, exact: true }).waitFor();
+		await page
+			.getByRole("complementary", { name: "Changes navigator" })
+			.getByText(`${visible.files} of ${all.files}`, { exact: true })
+			.waitFor();
 		await expectPortal(page, page.getByRole("button", { name: "Shown", exact: true }), async (tooltip) => {
 			await tooltip
 				.getByText(
@@ -322,7 +542,6 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.getByRole("button", { name: "Collapse all", exact: true }).click();
 		await summary(page, "Shown changes", 0, 0, 0);
 		await summary(page, ". visible subtree", visible.files, visible.removed, visible.added);
-		await summary(page, "All workspace changes", all.files, all.removed, all.added);
 		await page.getByRole("button", { name: "Expand .", exact: true }).click();
 		await page.getByRole("button", { name: "Expand app", exact: true }).waitFor();
 		await page.getByRole("button", { name: "Expand all", exact: true }).click();
@@ -348,7 +567,6 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		assert.equal(await select(page, "app/tests/check.test.ts").count(), 0);
 		assert.equal(await select(page, "app/tests").count(), 0, "Last matching Tests descendant prunes its ancestor");
 		await select(page, "app/tracked.txt").waitFor();
-		await summary(page, "All workspace changes", all.files, all.removed, all.added);
 		await page.getByRole("button", { name: "Tests", exact: true }).click();
 		await select(page, "app/tests/check.test.ts").waitFor();
 		assert.equal(analysis.nodes["app/tests/check.test.ts"]?.effectiveEmphasis.value, "deemphasized");
@@ -809,17 +1027,18 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		await page.mouse.move(bounds.x + 50, bounds.y + 100);
 		await page.mouse.up();
 		assert.ok(Number(await separator.getAttribute("aria-valuenow")) > initialWidth);
-		const header = await page.locator("header[data-workspace-header] > :first-child").boundingBox();
+		const header = await page.locator("header[data-workspace-header]").boundingBox();
 		assert.ok(header);
+		assert.equal(header.x, 0);
+		assert.equal(header.width, 1100, "Unified header spans the viewport independently of the body divider");
 		const bodyDivider = await separator.boundingBox();
-		assert.ok(bodyDivider);
-		assert.ok(Math.abs(header.x + header.width - bodyDivider.x) < 3, "Header identity ends at the body divider");
+		assert.ok(bodyDivider && bodyDivider.y >= header.y + header.height, "Body divider starts below the header");
 		const sharedWidth = await page
 			.locator("main")
 			.evaluate((element) =>
 				element.ownerDocument.defaultView.getComputedStyle(element).getPropertyValue("--sidebar-width"),
 			);
-		assert.ok(Math.abs(bodyDivider.x - Number.parseFloat(sharedWidth)) < 3, "Header and body use one sidebar width");
+		assert.ok(Math.abs(bodyDivider.x - Number.parseFloat(sharedWidth)) < 3, "Body divider follows the sidebar width");
 
 		const preferredWidth = Number(await separator.getAttribute("aria-valuenow"));
 		assert.equal(await page.evaluate(() => localStorage.getItem("forge-sidebar-width")), String(preferredWidth));
@@ -967,7 +1186,6 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		assert.equal(await folderCount.isVisible(), true);
 		await page.evaluate(() => Reflect.deleteProperty(localStorage, "setItem"));
 
-		await expectNoTooltip(page, page.getByLabel(/^All workspace changes:/));
 		await expectNoTooltip(page, page.getByLabel(/^Shown changes:/));
 		await expectNoTooltip(page, row(page, ".").getByLabel(/^\. visible subtree:/));
 		await expectNoTooltip(page, row(page, "app/tracked.txt").getByLabel(/^app\/tracked.txt visible subtree:/));
@@ -1046,7 +1264,7 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		moved = true;
 		await refresh.click();
 		await page.getByRole("alert").filter({ hasText: "Change summary is stale." }).waitFor();
-		await summary(page, "All workspace changes", all.files, all.removed, all.added);
+		await summary(page, ". visible subtree", visible.files, visible.removed, visible.added);
 		await signalDetails(page).getByText("Tracked source warning", { exact: true }).waitFor();
 		assert.equal(new URL(page.url()).searchParams.get("path"), "app/tracked.txt");
 		renameSync(suspended, nested);
@@ -1105,7 +1323,11 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 		assert.ok(apiRequests.includes("/api/workspace") && apiRequests.includes("/api/changes/analysis"));
 		assert.ok(
 			apiRequests.every(
-				(path) => path === "/api/workspace" || path === "/api/changes/analysis" || path === "/api/changes/file",
+				(path) =>
+					path === "/api/workspace" ||
+					path === "/api/changes/analysis" ||
+					path === "/api/changes/file" ||
+					path === "/api/server-hub/selection",
 			),
 			apiRequests.join(", "),
 		);
@@ -1129,8 +1351,10 @@ export async function verifyInstalledUi({ address, workspace, workspaceName, sou
 			[],
 		);
 
+		await verifyInstalledSwitcher(browser, address, screenshots);
+
 		console.log(
-			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, retained help portals, name/counter tooltip absence, matching folder matrix/zero/empty/overflow states, authoritative guide context/order/tooltips and root navigation, deduplicated adjacent codebase badges, copyable native-selectable path prefixes, larger bold file counters, bold Shown totals, muted aggregate counters, persisted folder-counter toggle with reserved space and blocked-storage fallback, compact tree geometry, local assets and persisted/blocked-storage resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
+			`Installed Chromium navigator: real guide policies, importance defaults, expansion-visible Shown totals/help, filters/counts, mixed direct/descendant signals, hidden source navigation/reveal, located rename messages, bounded signal details, repository placeholders, ownership/rename/transition, encoded direct loads/history, fresh/stale recovery, retained help portals, name/counter tooltip absence, matching folder matrix/zero/empty/overflow states, authoritative guide context/order/tooltips and root navigation, deduplicated adjacent codebase badges, copyable native-selectable path prefixes, larger bold file counters, bold Shown totals, muted aggregate counters, persisted folder-counter toggle with reserved space and blocked-storage fallback, compact tree geometry, page-load workspace switching, responsive ordered tile/More overflow and restoration, duplicate current destinations, menu keyboard/focus dismissal, same-tab unavailable destination navigation, full-width header independence, local assets and persisted/blocked-storage resize/scroll/narrow layout passed. Screenshots: ${screenshots}`,
 		);
 	} finally {
 		try {

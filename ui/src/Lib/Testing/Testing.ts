@@ -1,4 +1,4 @@
-import type { AnalysisWireNode, WorkspaceAnalysis, WorkspaceFileDiff } from "@forge/api-contract";
+import type { AnalysisWireNode, ServerHubSelection, WorkspaceAnalysis, WorkspaceFileDiff } from "@forge/api-contract";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { http } from "msw";
 
@@ -72,4 +72,18 @@ export function rendererBoundary() {
 			cleanUp() {},
 		}),
 	};
+}
+
+/** Unrelated review scenarios explicitly opt out of configured destinations. */
+export function unconfiguredHubHandler() {
+	return http.get("http://localhost/api/server-hub/selection", () => {
+		const selection: ServerHubSelection = {
+			source: { status: "unconfigured", url: null },
+			servers: null,
+			lastSuccessAt: null,
+			error: null,
+			stale: false,
+		};
+		return Response.json(selection);
+	});
 }

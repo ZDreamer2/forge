@@ -6,7 +6,7 @@ import { createTestSuiteLifecycle } from "@zdreamer/forge-ts-react-frontend/test
 import { http } from "msw";
 import { expect, it, vi } from "vitest";
 import App from "../App";
-import { fileHandler } from "../Lib/Testing/Testing";
+import { fileHandler, unconfiguredHubHandler } from "../Lib/Testing/Testing";
 
 vi.mock(
 	"../Components/WorkspaceReview/Components/SelectionViewer/Components/FileDiff/Internal/pierreRenderer",
@@ -118,6 +118,7 @@ function fixture(): WorkspaceAnalysis {
 }
 function serve(facts = fixture()) {
 	return suite.createHttpScenario(
+		unconfiguredHubHandler(),
 		fileHandler(facts),
 		http.get("http://localhost/api/workspace", () => Response.json(identity)),
 		http.get("http://localhost/api/changes/analysis", () => Response.json(facts)),
@@ -295,7 +296,7 @@ it("removes vanished messages, resets a surviving subject and clears a disappear
 	};
 	network.use(http.get("http://localhost/api/changes/analysis", () => Response.json(empty)));
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await screen.findByRole("img", { name: /All workspace changes: 0 changed files/ });
+	await screen.findByText(/^\d+ of 0$/);
 	expect(within(screen.getByRole("navigation", { name: "Changed files" })).getByText("No changes")).toBeInTheDocument();
 	expect(selectedPath()).toBe("nested");
 	expect(screen.queryByRole("region", { name: "Signal details" })).not.toBeInTheDocument();

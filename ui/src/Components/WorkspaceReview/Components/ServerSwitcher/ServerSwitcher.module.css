@@ -1,0 +1,141 @@
+.root {
+	--more-width: 52px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex: 1;
+	min-width: 0;
+}
+.identity {
+	min-width: 0;
+	max-width: 30%;
+	flex-shrink: 1;
+}
+.navigation {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	flex: 1;
+}
+.navigation[data-populated="true"] {
+	/* Retained-list warnings and unmatched identity must leave room for More. */
+	min-width: var(--more-width);
+}
+.tile {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	flex: 0 0 auto;
+	border: 1px solid #d7dcd8;
+	border-radius: 5px;
+	padding: 5px 9px;
+	background: white;
+	color: #4c5750;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 18px;
+	text-decoration: none;
+	white-space: pre;
+}
+.tile:hover {
+	background: #f3f6f3;
+}
+.tile[data-current="true"],
+.more[data-current="true"],
+.menuItem[data-current="true"] {
+	border-color: #7d9784;
+	background: #e8f0e9;
+	color: #324e3b;
+}
+.tile:focus-visible,
+.feedback:focus-visible {
+	outline: 2px solid #708b78;
+	outline-offset: 2px;
+}
+.dot {
+	width: 8px;
+	height: 8px;
+	flex: 0 0 8px;
+	border: 1px solid #89928c;
+	border-radius: 50%;
+}
+.dot[data-status="reachable"] {
+	border-color: #588464;
+	background: #588464;
+}
+.dot[data-status="unavailable"] {
+	border-color: #ad7169;
+	background: #ad7169;
+}
+.dot[data-stale="true"] {
+	border-style: dashed;
+	background: transparent;
+	outline: 1px solid #fff;
+	outline-offset: -2px;
+}
+.measurement {
+	position: absolute;
+	visibility: hidden;
+	pointer-events: none;
+	height: 0;
+	overflow: hidden;
+}
+.strip {
+	display: flex;
+	gap: 4px;
+	width: max-content;
+}
+.more,
+.moreMeasure {
+	width: var(--more-width);
+	flex: 0 0 auto;
+	font-size: 12px;
+	font-weight: 600;
+}
+.more {
+	height: 30px;
+	padding: 0 10px;
+}
+.moreMeasure {
+	display: inline-block;
+	padding: 0 11px;
+}
+.menu {
+	max-width: calc(100vw - 16px);
+	max-height: min(70vh, 480px);
+	overflow: auto;
+}
+.menuItem {
+	border: 1px solid transparent;
+}
+.menuName {
+	display: block;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.status {
+	display: block;
+	font-size: 11px;
+	color: #68746b;
+}
+.feedback {
+	flex-shrink: 1;
+	min-width: 0;
+	max-width: 190px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	color: #7b827d;
+}
+.feedback[data-warning="true"] {
+	color: #906c29;
+}
+
+.tooltip {
+	width: 300px;
+	max-width: calc(100vw - 16px);
+	overflow-wrap: anywhere;
+}

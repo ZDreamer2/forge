@@ -6,6 +6,7 @@ import { createTestSuiteLifecycle } from "@zdreamer/forge-ts-react-frontend/test
 import { http } from "msw";
 import { expect, it, vi } from "vitest";
 import App from "../App";
+import { unconfiguredHubHandler } from "../Lib/Testing/Testing";
 
 const suite = createTestSuiteLifecycle({
 	browser: { documentAttributes: ["data-mantine-color-scheme"] },
@@ -60,10 +61,8 @@ function analysis(empty = false): WorkspaceAnalysis {
 function start() {
 	return render(<App queryClient={suite.createQueryClient()} env="test" />);
 }
-function workspaceSummary(files: number, removed = 0, added = 0) {
-	return screen.findByRole("img", {
-		name: `All workspace changes: ${files} changed files, ${removed} removed lines, ${added} added lines`,
-	});
+function workspaceSummary(files: number) {
+	return screen.findByText(new RegExp(`^\\d+ of ${files}$`));
 }
 const identityHandler = () => http.get("http://localhost/api/workspace", () => Response.json(identity));
 const analysisHandler = (empty = false) =>
@@ -71,7 +70,7 @@ const analysisHandler = (empty = false) =>
 
 it("distinguishes unknown from empty changes, then refreshes literal identity and canonical entries", async () => {
 	const user = userEvent.setup();
-	const network = suite.createHttpScenario(identityHandler());
+	const network = suite.createHttpScenario(unconfiguredHubHandler(), identityHandler());
 	const pending = network.deferResponse();
 	network.use(http.get("http://localhost/api/changes/analysis", ({ request }) => pending.handle(request)));
 	start();
@@ -81,7 +80,7 @@ it("distinguishes unknown from empty changes, then refreshes literal identity an
 	expect(repositories.getByRole("button", { name: "Select <script>repository</script>" })).toBeInTheDocument();
 	expect(repositories.getByText("Available · changes unknown")).toBeInTheDocument();
 	expect(repositories.getByText("Missing at startup")).toBeInTheDocument();
-	expect(screen.queryByRole("img", { name: /All workspace changes:/ })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "Expand all" })).not.toBeInTheDocument();
 	expect(document.querySelector("script, img[onerror]")).toBeNull();
 
 	await act(async () => pending.release(Response.json(analysis(true))));
@@ -94,12 +93,15 @@ it("distinguishes unknown from empty changes, then refreshes literal identity an
 
 	network.use(analysisHandler());
 	await user.click(screen.getByRole("button", { name: "Refresh" }));
-	await workspaceSummary(3, 7, 20);
+	await workspaceSummary(3);
 	const navigator = within(screen.getByRole("complementary", { name: "Changes navigator" }));
 	expect(navigator.getByRole("button", { name: "Select src/mode" })).toBeInTheDocument();
 	expect(navigator.getByRole("button", { name: "Select src/new-name" })).toBeInTheDocument();
 	expect(navigator.queryByRole("button", { name: "Select src/hidden" })).not.toBeInTheDocument();
 	expect(screen.getByTitle(identity.workspace.root)).toHaveTextContent(identity.workspace.name);
+	await user.click(navigator.getByRole("button", { name: "Select ." }));
+	expect(screen.getByRole("table", { name: "Matching changes by type and importance" })).toBeInTheDocument();
+	expect(screen.getByText("2 of 3 files")).toBeInTheDocument();
 	expect(document.querySelector("script, img[onerror]")).toBeNull();
 });
 
@@ -108,6 +110,7 @@ it("recovers malformed analysis and failed identity independently without invent
 	const report = vi.spyOn(console, "error");
 	try {
 		const network = suite.createHttpScenario(
+			unconfiguredHubHandler(),
 			http.get("http://localhost/api/workspace", () => new Response("unavailable", { status: 503 })),
 			http.get(
 				"http://localhost/api/changes/analysis",
@@ -119,20 +122,22 @@ it("recovers malformed analysis and failed identity independently without invent
 		await screen.findByRole("button", { name: "Retry changes" });
 		expect(screen.getByText(/Could not load workspace identity/)).toBeVisible();
 		expect(screen.getByText(/Could not load change summary/)).toBeVisible();
-		expect(screen.queryByRole("img", { name: /All workspace changes:/ })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Expand all" })).not.toBeInTheDocument();
 		expect(screen.queryByText("No changed entries.")).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
+		expect(screen.getByRole("heading", { name: "Changes" })).toBeInTheDocument();
 
 		// Analysis can recover while workspace identity is still unavailable.
 		network.use(analysisHandler());
 		await user.click(screen.getByRole("button", { name: "Retry changes" }));
-		await workspaceSummary(3, 7, 20);
+		await workspaceSummary(3);
 		expect(screen.getByRole("alert")).toHaveTextContent("Could not load workspace identity.");
 		expect(screen.queryByRole("button", { name: "Retry changes" })).not.toBeInTheDocument();
 
 		network.use(identityHandler());
 		await user.click(screen.getByRole("button", { name: "Retry workspace" }));
 		await screen.findByRole("heading", { name: identity.workspace.name });
-		await workspaceSummary(3, 7, 20);
+		await workspaceSummary(3);
 		expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 		expect(report).not.toHaveBeenCalled();
 	} finally {
@@ -144,6 +149,7 @@ it("retains observations through online and offline Refresh failures and accepts
 	const user = userEvent.setup();
 	const requests: string[] = [];
 	const network = suite.createHttpScenario(
+		unconfiguredHubHandler(),
 		http.get("http://localhost/api/workspace", ({ request }) => {
 			requests.push(new URL(request.url).pathname);
 			return Response.json(identity);
@@ -184,7 +190,7 @@ it("retains observations through online and offline Refresh failures and accepts
 	await waitFor(() => expect(recovered.request).toBeDefined());
 	await workspaceSummary(0);
 	await act(async () => recovered.release(Response.json(analysis())));
-	await workspaceSummary(3, 7, 20);
+	await workspaceSummary(3);
 	expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 	expect(screen.getByRole("button", { name: "Select src/mode" })).toBeInTheDocument();
 	await waitFor(() => expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled());
@@ -202,10 +208,10 @@ it("retains observations through online and offline Refresh failures and accepts
 		await waitFor(() => expect(failed.request).toBeDefined());
 		expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
 		expect(screen.getByRole("status")).toHaveTextContent("Updating");
-		await workspaceSummary(3, 7, 20);
+		await workspaceSummary(3);
 		await act(async () => failed.release(new Response("failed", { status: 500 })));
 		expect(await screen.findByRole("alert")).toHaveTextContent("Change summary is stale.");
-		await workspaceSummary(3, 7, 20);
+		await workspaceSummary(3);
 		expect(screen.getByRole("button", { name: "Select src/mode" })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
 
@@ -218,7 +224,7 @@ it("retains observations through online and offline Refresh failures and accepts
 		);
 		await user.click(screen.getByRole("button", { name: "Retry changes" }));
 		await waitFor(() => expect(retry.request).toBeDefined());
-		await workspaceSummary(3, 7, 20);
+		await workspaceSummary(3);
 		await act(async () => retry.release(Response.json(analysis(true))));
 		await workspaceSummary(0);
 		expect(screen.queryByRole("button", { name: "Select src/mode" })).not.toBeInTheDocument();
@@ -233,6 +239,7 @@ it("retains observations through online and offline Refresh failures and accepts
 it("does not refresh on focus, reconnect or cached remount", async () => {
 	const seen = vi.fn();
 	const network = suite.createHttpScenario(
+		unconfiguredHubHandler(),
 		http.get("http://localhost/api/workspace", () => {
 			seen();
 			return Response.json(identity);
@@ -244,7 +251,7 @@ it("does not refresh on focus, reconnect or cached remount", async () => {
 	);
 	const queryClient = suite.createQueryClient();
 	const mounted = render(<App queryClient={queryClient} env="test" />);
-	await workspaceSummary(3, 7, 20);
+	await workspaceSummary(3);
 	await screen.findByRole("heading", { name: identity.workspace.name });
 	// The HTTP owner reports late handler failures at teardown, so an automatic
 	// request cannot escape detection merely by arriving after the count assertion.
@@ -264,12 +271,12 @@ it("does not refresh on focus, reconnect or cached remount", async () => {
 	});
 	mounted.unmount();
 	render(<App queryClient={queryClient} env="test" />);
-	await workspaceSummary(3, 7, 20);
+	await workspaceSummary(3);
 	expect(seen).toHaveBeenCalledTimes(2);
 });
 
 it("cancels pending reads when the last rendered consumer unmounts", async () => {
-	const network = suite.createHttpScenario();
+	const network = suite.createHttpScenario(unconfiguredHubHandler());
 	const workspace = network.deferResponse();
 	const changes = network.deferResponse();
 	network.use(

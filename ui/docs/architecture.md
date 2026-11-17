@@ -21,16 +21,22 @@ URL is the only record of selected path.
 | WorkspaceReview | Composes panes; owns filters, cross-pane selection/copy actions, layout with persisted sidebar preference and coordinated explicit Refresh |
 | Owned WorkspaceData | Workspace identity and repository-context reads, independent failure/retry and freshness |
 | Owned ChangeSetData | Comparison analysis and selected short/complete patch reads, cancellation, freshness and coordinated Refresh |
+| ServerSwitcher | Configured destination navigation, responsive overflow and header-local hub feedback; owned ServerHubData reads the selected-hub inspection |
 | ChangesNavigator | Controlled filters, hierarchy presentation, private tree projection and expansion/reveal lifecycle |
 | SelectionViewer | Canonical selected-entry metadata, folder Context and Type-by-Importance matrix, path-prefix controls, signal details/disclosure and no-selection orientation, independently of navigator rows |
-| ChangesSummary | Shared informational file and line counters used by header, navigator and viewer |
+| ChangesSummary | Shared informational file and line counters used by navigator and viewer |
 | SignalSummary | Shared warning/notice indicators and complete informational tooltip lists |
 
 ## Data and derived state
 
 The DataLibs use the same QueryClient and manual/offline policy. They own endpoint
-and query definitions; the review composes their public refresh operations rather
-than maintaining another cache or refresh controller. Data access stays local to
+and query definitions. The review coordinates WorkspaceData and ChangeSetData
+refresh operations rather than maintaining another cache or refresh controller.
+ServerHubData belongs to ServerSwitcher and reads one initial same-origin hub
+snapshot through ordinary query caching. Review navigation and Refresh do not
+refresh that snapshot; page reload picks up hub changes and recovery. The
+[viewer specification](../prototype/UiSpec.md#initial-production-integration) owns
+its status presentation and accepted snapshot limitations. Data access stays local to
 this feature; external consumers enter through the feature's public interfaces.
 
 Shared pure review analysis derives canonical selection subjects and count scopes
